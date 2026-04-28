@@ -76,6 +76,7 @@ describe("LootDisplayFrameMixin", function()
 		local stubConfigureTestArea = stub(frame, "ConfigureTestArea")
 		local stubCreateTab = stub(frame, "CreateTab")
 		stub(frame, "UpdateOverlayFrameDepth")
+		stub(frame, "CreateScrollWheelTarget")
 
 		frame:Load(ns.Frames.MAIN)
 
@@ -1195,6 +1196,7 @@ describe("LootDisplayFrameMixin", function()
 			stub(frame, "ConfigureTestArea")
 			stub(frame, "CreateTab")
 			stub(frame, "UpdateOverlayFrameDepth")
+			stub(frame, "CreateScrollWheelTarget")
 
 			frame:Load(ns.Frames.MAIN)
 
@@ -1214,6 +1216,7 @@ describe("LootDisplayFrameMixin", function()
 			stub(frame, "ConfigureTestArea")
 			stub(frame, "CreateTab")
 			stub(frame, "UpdateOverlayFrameDepth")
+			stub(frame, "CreateScrollWheelTarget")
 
 			frame:Load(ns.Frames.MAIN)
 

@@ -156,10 +156,16 @@ function LootDisplay:OnEnable()
 end
 
 function LootDisplay:OnPlayerCombatChange()
+	local inCombat = UnitAffectingCombat("player")
 	for _, frame in pairs(lootFrames) do
 		if frame then
 			frame:UpdateTabVisibility()
-			frame:SetCombatClickThrough(UnitAffectingCombat("player"))
+			frame:SetCombatClickThrough(inCombat)
+			-- Clear any in-progress scroll sequence on combat entry to avoid
+			-- accidentally activating history while the player is fighting.
+			if inCombat and frame.wheelState then
+				G_RLF.HistoryService:ResetWheelState(frame.wheelState)
+			end
 		end
 	end
 end
@@ -432,6 +438,11 @@ function LootDisplay:OnLootReady(_, element)
 	for id, frame in pairs(lootFrames) do
 		if frame and frame:IsFeatureEnabled(element) and frame:PassesPerFrameFilters(element) then
 			frame._testAcceptCount = (frame._testAcceptCount or 0) + 1
+			-- New loot resets any in-progress scroll sequence to avoid accidental
+			-- history activation while new items are arriving.
+			if frame.wheelState then
+				G_RLF.HistoryService:ResetWheelState(frame.wheelState)
+			end
 			processRow(element, id)
 		end
 	end

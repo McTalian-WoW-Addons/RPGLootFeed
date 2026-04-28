@@ -245,6 +245,220 @@ G_RLF.options.args.general = {
 					end,
 					order = 7,
 				},
+				enableScrollWheelActivation = {
+					type = "toggle",
+					name = G_RLF.L["Enable Scroll Wheel History Activation"],
+					desc = G_RLF.L["EnableScrollWheelActivationDesc"],
+					width = "double",
+					disabled = function()
+						return not G_RLF.db.global.lootHistory.enabled
+					end,
+					get = function()
+						return G_RLF.db.global.lootHistory.enableScrollWheelActivation
+					end,
+					set = function(info, value)
+						G_RLF.db.global.lootHistory.enableScrollWheelActivation = value
+					end,
+					order = 8,
+				},
+				scrollWheelDoubleScrollMode = {
+					type = "toggle",
+					name = G_RLF.L["Double Scroll Required"],
+					desc = G_RLF.L["DoubleScrollRequiredDesc"],
+					width = "double",
+					disabled = function()
+						return not G_RLF.db.global.lootHistory.enabled
+							or not G_RLF.db.global.lootHistory.enableScrollWheelActivation
+					end,
+					get = function()
+						return G_RLF.db.global.lootHistory.scrollWheelDoubleScrollMode
+					end,
+					set = function(info, value)
+						G_RLF.db.global.lootHistory.scrollWheelDoubleScrollMode = value
+					end,
+					order = 9,
+				},
+				scrollWheelDoubleScrollThreshold = {
+					type = "select",
+					name = G_RLF.L["Scroll Window (ms)"],
+					desc = G_RLF.L["ScrollWindowDesc"],
+					disabled = function()
+						return not G_RLF.db.global.lootHistory.enabled
+							or not G_RLF.db.global.lootHistory.enableScrollWheelActivation
+							or not G_RLF.db.global.lootHistory.scrollWheelDoubleScrollMode
+					end,
+					values = {
+						[500] = "500 ms",
+						[1000] = "1000 ms",
+						[1500] = "1500 ms",
+						[2000] = "2000 ms",
+						[3000] = "3000 ms",
+					},
+					sorting = { 500, 1000, 1500, 2000, 3000 },
+					get = function()
+						return G_RLF.db.global.lootHistory.scrollWheelDoubleScrollThreshold
+					end,
+					set = function(info, value)
+						G_RLF.db.global.lootHistory.scrollWheelDoubleScrollThreshold = value
+					end,
+					order = 10,
+				},
+				scrollWheelTargetWidth = {
+					type = "range",
+					name = G_RLF.L["Scroll Wheel Target Width"],
+					desc = G_RLF.L["ScrollWheelTargetWidthDesc"],
+					disabled = function()
+						return not G_RLF.db.global.lootHistory.enabled
+							or not G_RLF.db.global.lootHistory.enableScrollWheelActivation
+					end,
+					min = 0,
+					max = 1000,
+					step = 1,
+					get = function()
+						return G_RLF.db.global.lootHistory.scrollWheelTargetWidth
+					end,
+					set = function(info, value)
+						G_RLF.db.global.lootHistory.scrollWheelTargetWidth = value
+						---@type RLF_LootDisplayFrame
+						local frame = G_RLF.RLF_MainLootFrame
+						if frame then
+							frame:UpdateScrollWheelTarget()
+						end
+					end,
+					order = 11,
+				},
+				scrollWheelTargetHeight = {
+					type = "range",
+					name = G_RLF.L["Scroll Wheel Target Height"],
+					desc = G_RLF.L["ScrollWheelTargetHeightDesc"],
+					disabled = function()
+						return not G_RLF.db.global.lootHistory.enabled
+							or not G_RLF.db.global.lootHistory.enableScrollWheelActivation
+					end,
+					min = 0,
+					max = 1000,
+					step = 1,
+					get = function()
+						return G_RLF.db.global.lootHistory.scrollWheelTargetHeight
+					end,
+					set = function(info, value)
+						G_RLF.db.global.lootHistory.scrollWheelTargetHeight = value
+						---@type RLF_LootDisplayFrame
+						local frame = G_RLF.RLF_MainLootFrame
+						if frame then
+							frame:UpdateScrollWheelTarget()
+						end
+					end,
+					order = 12,
+				},
+				showScrollTargetBorderOnHover = {
+					type = "toggle",
+					name = G_RLF.L["Show Border on Hover"],
+					desc = G_RLF.L["ShowScrollTargetBorderOnHoverDesc"],
+					width = "double",
+					disabled = function()
+						return not G_RLF.db.global.lootHistory.enabled
+							or not G_RLF.db.global.lootHistory.enableScrollWheelActivation
+					end,
+					get = function()
+						return G_RLF.db.global.lootHistory.showScrollTargetBorderOnHover
+					end,
+					set = function(info, value)
+						G_RLF.db.global.lootHistory.showScrollTargetBorderOnHover = value
+					end,
+					order = 13,
+				},
+				scrollWheelTargetAnchor = {
+					type = "select",
+					name = G_RLF.L["Scroll Wheel Target Anchor"],
+					desc = G_RLF.L["ScrollWheelTargetAnchorDesc"],
+					disabled = function()
+						return not G_RLF.db.global.lootHistory.enabled
+							or not G_RLF.db.global.lootHistory.enableScrollWheelActivation
+					end,
+					values = {
+						["CENTER"] = "Center",
+						["TOP"] = "Top",
+						["BOTTOM"] = "Bottom",
+						["LEFT"] = "Left",
+						["RIGHT"] = "Right",
+						["TOPLEFT"] = "Top Left",
+						["TOPRIGHT"] = "Top Right",
+						["BOTTOMLEFT"] = "Bottom Left",
+						["BOTTOMRIGHT"] = "Bottom Right",
+					},
+					sorting = {
+						"CENTER",
+						"TOP",
+						"BOTTOM",
+						"LEFT",
+						"RIGHT",
+						"TOPLEFT",
+						"TOPRIGHT",
+						"BOTTOMLEFT",
+						"BOTTOMRIGHT",
+					},
+					get = function()
+						return G_RLF.db.global.lootHistory.scrollWheelTargetAnchor
+					end,
+					set = function(info, value)
+						G_RLF.db.global.lootHistory.scrollWheelTargetAnchor = value
+						---@type RLF_LootDisplayFrame
+						local frame = G_RLF.RLF_MainLootFrame
+						if frame then
+							frame:UpdateScrollWheelTarget()
+						end
+					end,
+					order = 14,
+				},
+				scrollWheelTargetXOffset = {
+					type = "range",
+					name = G_RLF.L["Scroll Wheel Target X Offset"],
+					desc = G_RLF.L["ScrollWheelTargetXOffsetDesc"],
+					disabled = function()
+						return not G_RLF.db.global.lootHistory.enabled
+							or not G_RLF.db.global.lootHistory.enableScrollWheelActivation
+					end,
+					min = -1000,
+					max = 1000,
+					step = 1,
+					get = function()
+						return G_RLF.db.global.lootHistory.scrollWheelTargetXOffset
+					end,
+					set = function(info, value)
+						G_RLF.db.global.lootHistory.scrollWheelTargetXOffset = value
+						---@type RLF_LootDisplayFrame
+						local frame = G_RLF.RLF_MainLootFrame
+						if frame then
+							frame:UpdateScrollWheelTarget()
+						end
+					end,
+					order = 15,
+				},
+				scrollWheelTargetYOffset = {
+					type = "range",
+					name = G_RLF.L["Scroll Wheel Target Y Offset"],
+					desc = G_RLF.L["ScrollWheelTargetYOffsetDesc"],
+					disabled = function()
+						return not G_RLF.db.global.lootHistory.enabled
+							or not G_RLF.db.global.lootHistory.enableScrollWheelActivation
+					end,
+					min = -1000,
+					max = 1000,
+					step = 1,
+					get = function()
+						return G_RLF.db.global.lootHistory.scrollWheelTargetYOffset
+					end,
+					set = function(info, value)
+						G_RLF.db.global.lootHistory.scrollWheelTargetYOffset = value
+						---@type RLF_LootDisplayFrame
+						local frame = G_RLF.RLF_MainLootFrame
+						if frame then
+							frame:UpdateScrollWheelTarget()
+						end
+					end,
+					order = 16,
+				},
 			},
 		},
 		tooltipOptions = {
