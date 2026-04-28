@@ -24,6 +24,19 @@ G_RLF.defaults.global.lootHistory = {
 	tabFreePosition = false,
 	tabXOffset = 0,
 	tabYOffset = 0,
+	-- Scroll-wheel activation (issue #399)
+	enableScrollWheelActivation = false,
+	scrollWheelDoubleScrollMode = true,
+	scrollWheelDoubleScrollThreshold = 500,
+	-- 0 = auto-size to match loot frame dimensions; positive value overrides in pixels.
+	scrollWheelTargetWidth = 0,
+	scrollWheelTargetHeight = 0,
+	-- Positioning: anchor point and pixel offsets relative to the main loot frame.
+	scrollWheelTargetAnchor = "CENTER",
+	scrollWheelTargetXOffset = 0,
+	scrollWheelTargetYOffset = 0,
+	-- Show a cyan border around the scroll-wheel detection area on hover (useful for positioning)
+	showScrollTargetBorderOnHover = false,
 }
 ---@class RLF_ConfigTooltips
 G_RLF.defaults.global.tooltips = {
