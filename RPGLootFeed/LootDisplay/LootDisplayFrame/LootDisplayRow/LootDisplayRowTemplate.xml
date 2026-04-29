@@ -8,9 +8,10 @@
     <Include file="RowScriptedEffects.xml"/>
     <Include file="RowIcon.xml"/>
     <Include file="RowUnitPortrait.xml"/>
+    <Include file="RowTimerBar.xml"/>
     <Script file="LootDisplayRow.lua" />
     <Frame name="LootDisplayRowTemplate" virtual="true"
-        mixin="LootDisplayRowMixin,RLF_RowAnimationMixin,RLF_RowScriptedEffectsMixin"
-        inherits="BackdropTemplate,RLF_RowBackdropTemplate,RLF_RowTextTemplate,RLF_RowUnitPortraitTemplate,RLF_RowIconTemplate,RLF_RowTooltipTemplate">
+        mixin="LootDisplayRowMixin,RLF_RowAnimationMixin,RLF_RowTimerBarMixin,RLF_RowScriptedEffectsMixin"
+        inherits="BackdropTemplate,RLF_RowBackdropTemplate,RLF_RowTextTemplate,RLF_RowUnitPortraitTemplate,RLF_RowIconTemplate,RLF_RowTooltipTemplate,RLF_RowTimerBarTemplate">
     </Frame>
 </Ui>

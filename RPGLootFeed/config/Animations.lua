@@ -295,6 +295,123 @@ function G_RLF.BuildAnimationsArgs(id, order)
 					},
 				},
 			},
+			timerBarAnimations = {
+				type = "group",
+				name = G_RLF.L["Fade Out Timer Bar"],
+				desc = G_RLF.L["FadeOutTimerBarDesc"],
+				inline = true,
+				order = 6,
+				args = {
+					enabled = {
+						type = "toggle",
+						name = G_RLF.L["Enable Timer Bar"],
+						desc = G_RLF.L["EnableTimerBarDesc"],
+						get = function()
+							return G_RLF.DbAccessor:Animations(id).timerBar.enabled
+						end,
+						set = function(info, value)
+							G_RLF.DbAccessor:Animations(id).timerBar.enabled = value
+							G_RLF.LootDisplay:UpdateRowStyles(id)
+						end,
+						order = 1,
+					},
+					height = {
+						type = "range",
+						name = G_RLF.L["Timer Bar Height"],
+						desc = G_RLF.L["TimerBarHeightDesc"],
+						min = 1,
+						max = 10,
+						step = 1,
+						disabled = function()
+							return not G_RLF.DbAccessor:Animations(id).timerBar.enabled
+						end,
+						get = function()
+							return G_RLF.DbAccessor:Animations(id).timerBar.height
+						end,
+						set = function(info, value)
+							G_RLF.DbAccessor:Animations(id).timerBar.height = value
+							G_RLF.LootDisplay:UpdateRowStyles(id)
+						end,
+						order = 2,
+					},
+					yOffset = {
+						type = "range",
+						name = G_RLF.L["Timer Bar Y Offset"],
+						desc = G_RLF.L["TimerBarYOffsetDesc"],
+						min = -10,
+						max = 10,
+						step = 1,
+						disabled = function()
+							return not G_RLF.DbAccessor:Animations(id).timerBar.enabled
+						end,
+						get = function()
+							return G_RLF.DbAccessor:Animations(id).timerBar.yOffset
+						end,
+						set = function(info, value)
+							G_RLF.DbAccessor:Animations(id).timerBar.yOffset = value
+							G_RLF.LootDisplay:UpdateRowStyles(id)
+						end,
+						order = 3,
+					},
+					color = {
+						type = "color",
+						name = G_RLF.L["Timer Bar Color"],
+						desc = G_RLF.L["TimerBarColorDesc"],
+						hasAlpha = false,
+						disabled = function()
+							return not G_RLF.DbAccessor:Animations(id).timerBar.enabled
+						end,
+						get = function()
+							local color = G_RLF.DbAccessor:Animations(id).timerBar.color
+							return color[1], color[2], color[3]
+						end,
+						set = function(info, r, g, b)
+							G_RLF.DbAccessor:Animations(id).timerBar.color = { r, g, b }
+							G_RLF.LootDisplay:UpdateRowStyles(id)
+						end,
+						order = 4,
+					},
+					alpha = {
+						type = "range",
+						name = G_RLF.L["Timer Bar Alpha"],
+						desc = G_RLF.L["TimerBarAlphaDesc"],
+						min = 0,
+						max = 1,
+						step = 0.05,
+						disabled = function()
+							return not G_RLF.DbAccessor:Animations(id).timerBar.enabled
+						end,
+						get = function()
+							return G_RLF.DbAccessor:Animations(id).timerBar.alpha
+						end,
+						set = function(info, value)
+							G_RLF.DbAccessor:Animations(id).timerBar.alpha = value
+							G_RLF.LootDisplay:UpdateRowStyles(id)
+						end,
+						order = 5,
+					},
+					drainDirection = {
+						type = "select",
+						name = G_RLF.L["Drain Direction"],
+						desc = G_RLF.L["DrainDirectionDesc"],
+						values = {
+							["REVERSE"] = G_RLF.L["Right to Left"],
+							["NORMAL"] = G_RLF.L["Left to Right"],
+						},
+						disabled = function()
+							return not G_RLF.DbAccessor:Animations(id).timerBar.enabled
+						end,
+						get = function()
+							return G_RLF.DbAccessor:Animations(id).timerBar.drainDirection
+						end,
+						set = function(info, value)
+							G_RLF.DbAccessor:Animations(id).timerBar.drainDirection = value
+							G_RLF.LootDisplay:UpdateRowStyles(id)
+						end,
+						order = 6,
+					},
+				},
+			},
 		},
 	}
 end

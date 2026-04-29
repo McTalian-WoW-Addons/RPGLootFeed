@@ -1,0 +1,23 @@
+<Ui xmlns="http://www.blizzard.com/wow/ui/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.blizzard.com/wow/ui/ ..\FrameXML\UI.xsd">
+	<Script file="RowTimerBarMixin.lua"/>
+	<Frame name="RLF_RowTimerBarTemplate" virtual="true" mixin="RLF_RowTimerBarMixin">
+		<Frames>
+			<!-- Timer bar StatusBar docked at the bottom of the row -->
+			<!-- By default appears as a thin grey bar that drains from right to left -->
+			<StatusBar parentKey="TimerBar">
+				<Anchors>
+					<Anchor point="BOTTOMLEFT" relativePoint="BOTTOMLEFT" />
+					<Anchor point="BOTTOMRIGHT" relativePoint="BOTTOMRIGHT" />
+				</Anchors>
+				<BarTexture file="Interface/Buttons/WHITE8x8"/>
+				<Layers>
+					<Layer level="BACKGROUND">
+						<Texture setAllPoints="true" file="Interface/Buttons/WHITE8x8">
+							<Color r="0.5" g="0.5" b="0.5" a="0.7" />
+						</Texture>
+					</Layer>
+				</Layers>
+			</StatusBar>
+		</Frames>
+	</Frame>
+</Ui>

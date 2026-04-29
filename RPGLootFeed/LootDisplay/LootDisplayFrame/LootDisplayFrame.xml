@@ -1,5 +1,6 @@
 ﻿<Ui xsi:schemaLocation="http://www.blizzard.com/wow/ui/ ..\FrameXML\UI.xsd">
 	<Script file="LootDisplayFrame.lua"/>
+	<Script file="TimerBarCoordinator.lua"/>
     <Frame name="RLF_LootDisplayFrameTemplate" virtual="true" mixin="LootDisplayFrameMixin" clampedToScreen="true" clipChildren="true">
         <Layers>
             <!-- Background layer for bounding box -->
