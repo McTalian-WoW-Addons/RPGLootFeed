@@ -61,6 +61,14 @@ end
 -- L["ScrollWindowDesc"] = "Time window in milliseconds within which two scroll events must occur to trigger history activation."
 -- L["Show Border on Hover"] = "Show Border on Hover"
 -- L["ShowScrollTargetBorderOnHoverDesc"] = "When enabled, hovering over the scroll-wheel detection area will show a cyan border around it. Useful for verifying its position and size."
+-- L["Timer Bar Alpha"] = "Timer Bar Alpha"
+-- L["Timer Bar Color"] = "Timer Bar Color"
+-- L["Timer Bar Height"] = "Timer Bar Height"
+-- L["Timer Bar Y Offset"] = "Timer Bar Y Offset"
+-- L["TimerBarAlphaDesc"] = "Transparency of the timer bar (0 = invisible, 1 = fully opaque)."
+-- L["TimerBarColorDesc"] = "Color of the timer bar fill."
+-- L["TimerBarHeightDesc"] = "Height of the timer bar in pixels."
+-- L["TimerBarYOffsetDesc"] = "Vertical offset of the timer bar in pixels. Use a positive value to move it above the row border."
 --#endregion
 
 --#region 1.33.0
