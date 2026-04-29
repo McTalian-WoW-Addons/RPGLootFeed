@@ -303,6 +303,7 @@ describe("RLF_RowAnimationMixin shift animation", function()
 			row.HighlightAnimation = nil
 			row.ElementFadeInAnimation = nil
 			stub(row, "StopScriptedEffects")
+			stub(row, "ResetTimerBar")
 		end)
 
 		it("stops ShiftAnimation when present", function()
@@ -388,6 +389,8 @@ describe("RLF_RowAnimationMixin shift animation", function()
 			end
 			stub(r, "GetParent").returns(mockParent)
 			stub(r, "PinPosition")
+			stub(r, "StartTimerBar")
+			stub(r, "StopTimerBar")
 			-- isMouseOverSelfOrChildren calls these; return false/empty so OnLeave proceeds.
 			stub(r, "IsMouseOver").returns(false)
 			r.GetChildren = function()

@@ -73,6 +73,9 @@ function RLF_RowAnimationMixin:StopAllAnimations()
 
 	-- Stop scripted effects
 	self:StopScriptedEffects()
+
+	-- Stop timer bar
+	self:ResetTimerBar()
 end
 
 function RLF_RowAnimationMixin:StyleElementFadeIn()
@@ -815,6 +818,7 @@ function RLF_RowAnimationMixin:SetUpHoverEffect()
 			if self.ExitAnimation then
 				self.ExitAnimation:Stop()
 			end
+			self:StopTimerBar()
 		end
 		self.hasMouseOver = true
 		if animationsDb.hover.enabled then
@@ -887,6 +891,7 @@ function RLF_RowAnimationMixin:SetUpHoverEffect()
 			if self.ExitAnimation then
 				self.ExitAnimation:Play()
 			end
+			self:StartTimerBar()
 		end
 	end)
 end
@@ -914,6 +919,7 @@ function RLF_RowAnimationMixin:ResetFadeOut()
 			end
 			self.ExitAnimation:Play()
 		end
+		self:StartTimerBar()
 	end)
 end
 

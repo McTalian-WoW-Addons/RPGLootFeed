@@ -104,6 +104,7 @@ function LootDisplayRowMixin:Init()
 	self:StyleEnterAnimation()
 	self:StyleElementFadeIn()
 	self:StyleHighlightBorder()
+	self:StyleTimerBar()
 	RunNextFrame(function()
 		self:SetUpHoverEffect()
 	end)
@@ -243,6 +244,7 @@ function LootDisplayRowMixin:SetClickThrough(enabled)
 			end
 			if not self.isHistoryMode then
 				self.ExitAnimation:Play()
+				self:StartTimerBar()
 			end
 			GameTooltip:Hide()
 		end
@@ -520,6 +522,7 @@ function LootDisplayRowMixin:UpdateQuantity(element)
 	if not self.isPinned and self.ExitAnimation:IsPlaying() then
 		self.ExitAnimation:Stop()
 		self.ExitAnimation:Play()
+		self:StartTimerBar()
 	end
 
 	self:LogRow(self.logFn, text, false)

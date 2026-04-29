@@ -133,6 +133,17 @@ G_RLF.defaults = {
 						duration = 0.2,
 						loop = false,
 					},
+					reposition = {
+						duration = 0.2,
+					},
+					timerBar = {
+						enabled = false,
+						height = 2,
+						yOffset = 0,
+						color = { 0.5, 0.5, 0.5 },
+						alpha = 0.7,
+						drainDirection = "REVERSE",
+					},
 				},
 				features = {
 					itemLoot = {
@@ -393,6 +404,14 @@ G_RLF.defaults = {
 					},
 					reposition = {
 						duration = 0.2,
+					},
+					timerBar = {
+						enabled = false,
+						height = 2,
+						yOffset = 0,
+						color = { 0.5, 0.5, 0.5 },
+						alpha = 0.7,
+						drainDirection = "REVERSE",
 					},
 				},
 				features = {

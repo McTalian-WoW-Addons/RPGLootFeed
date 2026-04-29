@@ -48,6 +48,7 @@ function RLF_RowTooltipMixin:SetupTooltip(isHistoryFrame)
 	self.ClickableButton:SetScript("OnEnter", function()
 		if not isHistoryFrame then
 			self.ExitAnimation:Stop()
+			self:StopTimerBar()
 			self.HighlightAnimation:Stop()
 			self:ResetHighlightBorder()
 			-- Propagate pin to row (ClickableButton sits on top and intercepts OnEnter)
@@ -172,6 +173,7 @@ function RLF_RowTooltipMixin:SetupTooltip(isHistoryFrame)
 		self.Icon:SetScript("OnEnter", function()
 			if not isHistoryFrame then
 				self.ExitAnimation:Stop()
+				self:StopTimerBar()
 				self.HighlightAnimation:Stop()
 				self:ResetHighlightBorder()
 				-- Propagate pin to row
@@ -195,6 +197,7 @@ function RLF_RowTooltipMixin:SetupTooltip(isHistoryFrame)
 						frame:ReleasePin(self)
 					end
 					self.ExitAnimation:Play()
+					self:StartTimerBar()
 				end
 			end
 			hideTooltip()

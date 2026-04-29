@@ -697,6 +697,7 @@ describe("LootDisplayRowMixin", function()
 			stub(r.Icon, "EnableMouse")
 			-- Make ExitAnimation.Play a spy so we can assert on it
 			r.ExitAnimation.Play = spy.new(function() end)
+			stub(r, "StartTimerBar")
 			return r
 		end
 

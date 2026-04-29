@@ -115,6 +115,7 @@ describe("RLF_RowTooltipMixin", function()
 					row.ExitAnimation.Stop = function() end
 					row.HighlightAnimation.Stop = function() end
 					row.ResetHighlightBorder = function() end
+					row.StopTimerBar = function() end
 					row.ClickableButton.RegisterEvent = function() end
 					capturedCallbacks["OnEnter"]()
 
