@@ -41,6 +41,7 @@ G_RLF.hiddenCurrencies = {
 	[3388] = true, -- https://wowhead.com/currency=3388/renown-the-singularity
 	[3387] = true, -- https://wowhead.com/currency=3387/preyseekers-journey
 	[3386] = true, -- https://wowhead.com/currency=3386/renown-prey
+	[3385] = true, -- https://wowhead.com/currency=3385/luminous-dust
 	[3375] = true, -- https://wowhead.com/currency=3375/dnt-moth-hunt-tracking-currency
 	[3372] = true, -- https://wowhead.com/currency=3372/bronze
 	[3371] = true, -- https://wowhead.com/currency=3371/renown-silvermoon-court
