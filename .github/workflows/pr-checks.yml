@@ -17,7 +17,7 @@ jobs:
       actions: write
       pull-requests: write
       checks: write
-    uses: McTalian-WoW-Addons/wow-build-tools/.github/workflows/pr-checks.yml@v1-beta
+    uses: McTalian-WoW-Addons/wow-build-tools/.github/workflows/pr-checks.yml@nvm-to-volta
     with:
       addon-name: RPGLootFeed
       rockspec-name: rpglootfeed-1-1.rockspec
