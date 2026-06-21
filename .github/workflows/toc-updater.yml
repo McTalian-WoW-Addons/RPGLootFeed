@@ -12,7 +12,7 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
-    uses: McTalian-WoW-Addons/wow-build-tools/.github/workflows/toc-updater.yml@v1-beta
+    uses: McTalian-WoW-Addons/wow-build-tools/.github/workflows/toc-updater.yml@v1
     with:
       addon-name: RPGLootFeed
       pr-body: |
