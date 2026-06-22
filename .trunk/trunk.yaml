@@ -10,7 +10,7 @@ plugins:
       ref: v1.10.2
       uri: https://github.com/trunk-io/plugins
     - id: wbt-configs
-      ref: v0.1.1
+      ref: v0.1.2
       uri: https://github.com/McTalian-WoW-Addons/wow-addon-trunk-configs
 tools:
   enabled:
@@ -24,16 +24,6 @@ tools:
 # This is the section where you manage your linters. (https://docs.trunk.io/check/configuration)
 lint:
   ignore:
-    - linters: [markdownlint]
-      paths:
-        - .github/docs/**
-        - .github/instructions/**
-        - .github/prompts/**
-        - .github/parked-sessions/**
-        - .github/*.md
-    - linters: [stylua]
-      paths:
-        - "**/locale/*"
     - linters: [no-invalid-prints]
       paths:
         - "*_spec/**"
