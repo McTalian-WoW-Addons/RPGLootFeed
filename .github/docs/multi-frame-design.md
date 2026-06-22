@@ -188,7 +188,7 @@ All phases are complete.
 | 1     | DB schema + migration v8             | Copies all settings into `frames[1].*`. `DbAccessor:Feature()` added.         |
 | 2     | Per-frame broker + unified message   | `RLF_NEW_PARTY_LOOT` collapsed into `RLF_NEW_LOOT`. Each frame owns a broker. |
 | 3     | Feature configs → per-frame builders | All 9 `*Config.lua` export `Build*Args(frameId, order)`.                      |
-| 4a    | Global group consolidation           | General, Blizzard UI, About under single `⚙ Global` group.                   |
+| 4a    | Global group consolidation           | General, Blizzard UI, About under single `⚙ Global` group.                    |
 | 4b    | Per-frame groups                     | Appearance + Loot Feeds tree structure per frame.                             |
 | 4c    | Root select + frame management       | Dropdown navigation, "+ New Frame" / "Manage Frames" root groups.             |
 | 5     | Feature module lifecycle             | `OnInitialize` uses `IsFeatureNeededByAnyFrame()`.                            |

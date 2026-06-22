@@ -135,7 +135,7 @@ Self-contained HTML output (all CSS/JS inlined, no external deps).
 | ---------------------------- | ----------------------------------------------------------------------------------------- |
 | `group` (non-inline)         | `<fieldset>` + `<legend>` (gold header)                                                   |
 | `group` (inline / guiInline) | `<fieldset class="opt-group-inline">` (dashed border)                                     |
-| `toggle`                     | ✔ / □ symbol + label                                                                     |
+| `toggle`                     | ✔ / □ symbol + label                                                                      |
 | `range`                      | `<input type="range">` disabled, with current value display                               |
 | `select`                     | `<select>` disabled, options from `values`; respects `sorting`; `dialogControl` annotated |
 | `multiselect`                | Flex group of disabled checkboxes per key                                                 |

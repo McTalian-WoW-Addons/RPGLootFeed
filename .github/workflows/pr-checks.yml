@@ -17,6 +17,7 @@ jobs:
       actions: write
       pull-requests: write
       checks: write
+    # trunk-ignore(pinact/unpinned-action)
     uses: McTalian-WoW-Addons/wow-build-tools/.github/workflows/pr-checks.yml@v1
     with:
       addon-name: RPGLootFeed

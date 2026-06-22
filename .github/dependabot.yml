@@ -5,6 +5,11 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    groups:
+      wow-build-tools:
+        patterns:
+          - McTalian/wow-build-tools*
+          - McTalian-WoW-Addons/wow-build-tools*
 
   - package-ecosystem: uv
     directory: /
