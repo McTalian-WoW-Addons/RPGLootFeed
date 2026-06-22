@@ -11,6 +11,7 @@ jobs:
   package-and-release:
     permissions:
       contents: write
+    # trunk-ignore(pinact/unpinned-action)
     uses: McTalian-WoW-Addons/wow-build-tools/.github/workflows/package-and-distribute.yml@v1
     with:
       addon-name: RPGLootFeed
