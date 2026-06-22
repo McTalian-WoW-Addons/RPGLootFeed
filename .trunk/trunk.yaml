@@ -30,6 +30,16 @@ tools:
 # This is the section where you manage your linters. (https://docs.trunk.io/check/configuration)
 lint:
   ignore:
+    - linters: [markdownlint]
+      paths:
+        - .github/docs/**
+        - .github/instructions/**
+        - .github/prompts/**
+        - .github/parked-sessions/**
+        - .github/*.md
+    - linters: [stylua]
+      paths:
+        - "**/locale/*"
     - linters: [no-invalid-prints]
       paths:
         - "*_spec/**"
