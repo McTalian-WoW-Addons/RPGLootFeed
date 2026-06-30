@@ -3,4 +3,4 @@ name = "RPGLootFeed"
 version = "1.0.0"
 readme = "README.md"
 requires-python = ">=3.13"
-dependencies = ["playwright>=1.60.0"]
+dependencies = ["playwright>=1.61.0"]
