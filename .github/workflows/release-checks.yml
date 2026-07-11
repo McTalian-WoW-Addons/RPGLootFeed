@@ -1,0 +1,23 @@
+# Release Checks
+#
+# Wrapper workflow that calls the shared release-checks.yml.
+
+name: Release Checks
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: release-checks-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  release-checks:
+    # trunk-ignore(pinact/unpinned-action)
+    uses: McTalian-WoW-Addons/wow-build-tools/.github/workflows/release-checks.yml@v1
+    secrets: inherit
