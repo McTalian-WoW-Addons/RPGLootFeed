@@ -20,4 +20,6 @@ jobs:
   release-checks:
     # trunk-ignore(pinact/parse-error)
     uses: McTalian-WoW-Addons/wow-build-tools/.github/workflows/release-checks.yml@fix-release-checks
+    with:
+      wbt-ref: fix-release-checks
     secrets: inherit
