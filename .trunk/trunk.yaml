@@ -10,17 +10,17 @@ plugins:
       ref: v1.10.2
       uri: https://github.com/trunk-io/plugins
     - id: wbt-configs
-      ref: v0.1.2
+      ref: v0.2.1
       uri: https://github.com/McTalian-WoW-Addons/wow-addon-trunk-configs
 tools:
   enabled:
-    - uv@0.11.23
+    - uv@0.11.28
   definitions:
     - name: uv
       runtime: python
       package: uv
       shims: [uv]
-      known_good_version: 0.10.9
+      known_good_version: 0.11.28
 # This is the section where you manage your linters. (https://docs.trunk.io/check/configuration)
 lint:
   ignore:
@@ -47,9 +47,3 @@ actions:
     - trunk-fmt-pre-commit
     - trunk-upgrade-available
     - organize-translations
-  definitions:
-    - id: organize-translations
-      triggers:
-        - git_hooks: [pre-commit]
-
-      run: uv run --project ../wow-build-tools/scripts/i18n ../wow-build-tools/scripts/i18n/organize_translations.py --locale-dir RPGLootFeed/locale
