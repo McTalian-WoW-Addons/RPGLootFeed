@@ -1,6 +1,13 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": [
-    "config:recommended"
+  "extends": ["config:best-practices"],
+  "packageRules": [
+    {
+      "description": "Ignore WBT action pins",
+      "matchDatasources": ["github-actions"],
+      "matchPackageNames": ["McTalian-WoW-Addons/wow-build-tools"],
+      "matchUpdateTypes": ["pin"],
+      "enabled": false
+    }
   ]
 }
