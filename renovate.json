@@ -1,0 +1,29 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:best-practices",
+    ":dependencyDashboard",
+    ":semanticCommits"
+  ],
+  "schedule": ["* 0-6 * * 1"],
+  "timezone": "America/Denver",
+  "lockFileMaintenance": {
+    "enabled": true,
+    "automerge": true
+  },
+  "packageRules": [
+    {
+      "description": "Ignore WBT action pins",
+      "matchDatasources": ["github-actions"],
+      "matchPackageNames": ["McTalian-WoW-Addons/wow-build-tools"],
+      "matchUpdateTypes": ["pin"],
+      "enabled": false
+    }
+  ],
+  "vulnerabilityAlerts": {
+    "automerge": true,
+    "automergeType": "pr",
+    "automergeStrategy": "squash"
+  },
+  "prConcurrentLimit": 3
+}
