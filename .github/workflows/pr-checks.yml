@@ -18,7 +18,7 @@ jobs:
       pull-requests: write
       checks: write
     # trunk-ignore(pinact/unpinned-action)
-    uses: McTalian-WoW-Addons/wow-build-tools/.github/workflows/pr-checks.yml@v1
+    uses: McTalian-WoW-Addons/wow-build-tools/.github/workflows/pr-checks.yml@7e264696b71fe78dcb2948c824f82ba18257e687 # v1
     with:
       addon-name: RPGLootFeed
       rockspec-name: rpglootfeed-1-1.rockspec

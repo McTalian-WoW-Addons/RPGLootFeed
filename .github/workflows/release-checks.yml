@@ -19,5 +19,5 @@ concurrency:
 jobs:
   release-checks:
     # trunk-ignore(pinact/unpinned-action)
-    uses: McTalian-WoW-Addons/wow-build-tools/.github/workflows/release-checks.yml@v1
+    uses: McTalian-WoW-Addons/wow-build-tools/.github/workflows/release-checks.yml@7e264696b71fe78dcb2948c824f82ba18257e687 # v1
     secrets: inherit

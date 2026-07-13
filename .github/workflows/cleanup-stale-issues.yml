@@ -12,4 +12,4 @@ jobs:
       issues: write
       pull-requests: write
     # trunk-ignore(pinact/unpinned-action)
-    uses: McTalian-WoW-Addons/wow-build-tools/.github/workflows/cleanup-stale-issues.yml@v1
+    uses: McTalian-WoW-Addons/wow-build-tools/.github/workflows/cleanup-stale-issues.yml@7e264696b71fe78dcb2948c824f82ba18257e687 # v1
