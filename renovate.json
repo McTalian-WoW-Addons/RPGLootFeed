@@ -14,7 +14,7 @@
   "packageRules": [
     {
       "description": "Ignore WBT action pins",
-      "matchDatasources": ["github-tags", "github-digest"],
+      "matchDatasources": ["github-tags", "github-digest", "github-releases"],
       "matchPackageNames": ["McTalian-WoW-Addons/wow-build-tools"],
       "matchUpdateTypes": ["pin"],
       "enabled": false
