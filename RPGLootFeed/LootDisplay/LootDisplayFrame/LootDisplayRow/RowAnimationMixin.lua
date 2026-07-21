@@ -707,7 +707,7 @@ end
 
 function RLF_RowAnimationMixin:HandlerOnRightClick()
 	self:SetScript("OnMouseUp", function(_, button)
-		if button == "RightButton" and not self.isHistoryMode then
+		if button == "RightButton" and not self.isHistoryMode and not self._isLootRollRow then
 			if not self.ExitAnimation then
 				return
 			end
