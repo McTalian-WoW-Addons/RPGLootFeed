@@ -806,7 +806,7 @@ function RLF_RowAnimationMixin:SetUpHoverEffect()
 		-- highlight animation setting.  Also stop the exit animation here so
 		-- hovering anywhere on the row (not just the ClickableButton) pauses
 		-- the fade-out countdown.
-		if not self.isHistoryMode then
+		if not self.isHistoryMode and not self._isLootRollRow then
 			if self.ExitAnimation then
 				self.ExitAnimation:Stop()
 			end
@@ -836,7 +836,7 @@ function RLF_RowAnimationMixin:SetUpHoverEffect()
 		-- Pin the row so it doesn't shift while hovered.
 		-- History rows are parented to historyContent (a plain Frame with no
 		-- vertDir or ReleasePin method), so skip pinning entirely for them.
-		if not self.isHistoryMode then
+		if not self.isHistoryMode and not self._isLootRollRow then
 			local frame = self:GetParent() --[[@as RLF_LootDisplayFrame]]
 			if frame then
 				self:PinPosition(frame)
@@ -881,14 +881,14 @@ function RLF_RowAnimationMixin:SetUpHoverEffect()
 		-- Release the pin first so isPinned is false before the exit animation
 		-- resumes. Prevents ExitAnimation:Play() from firing while pinned.
 		-- History rows skip this: historyContent has no ReleasePin method.
-		if not self.isHistoryMode then
+		if not self.isHistoryMode and not self._isLootRollRow then
 			local frame = self:GetParent() --[[@as RLF_LootDisplayFrame]]
 			if frame then
 				frame:ReleasePin(self)
 			end
 		end
 		-- Resume the exit animation now that mouse has truly left.
-		if not self.isHistoryMode then
+		if not self.isHistoryMode and not self._isLootRollRow then
 			if self.ExitAnimation then
 				self.ExitAnimation:Play()
 			end
@@ -944,7 +944,7 @@ function RLF_RowAnimationMixin:ForceMouseLeave()
 			frame:ReleasePin(self)
 		end
 	end
-	if not self.isHistoryMode then
+	if not self.isHistoryMode and not self._isLootRollRow then
 		if self.ExitAnimation then
 			self.ExitAnimation:Play()
 		end

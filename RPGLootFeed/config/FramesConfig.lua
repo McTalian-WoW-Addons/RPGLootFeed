@@ -110,6 +110,7 @@ local function buildFrameGroup(id)
 					profession = G_RLF.BuildProfessionArgs(id, 8),
 					travelPoints = G_RLF.BuildTravelPointsArgs(id, 9),
 					transmog = G_RLF.BuildTransmogArgs(id, 10),
+					lootRolls = G_RLF.BuildLootRollsArgs(id, 11),
 				},
 			},
 		},

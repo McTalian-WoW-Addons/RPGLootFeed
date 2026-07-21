@@ -24,6 +24,8 @@ end
 -- L["DoubleScrollRequiredDesc"] = "Require two scroll events within the time window to activate/deactivate history, reducing accidental triggers."
 -- L["Enable Scroll Wheel History Activation"] = "Enable Scroll Wheel History Activation"
 -- L["EnableScrollWheelActivationDesc"] = "When enabled, scrolling down on the loot frame will activate loot history. Scroll up at the top to deactivate."
+-- L["Roll Button Size"] = "Roll Button Size"
+-- L["RollButtonSizeDesc"] = "Size of the roll action buttons (Need, Greed, Pass) in pixels."
 -- L["Scroll Wheel Target Anchor"] = "Scroll Wheel Target Anchor"
 -- L["Scroll Wheel Target Height"] = "Scroll Wheel Target Height"
 -- L["Scroll Wheel Target Width"] = "Scroll Wheel Target Width"

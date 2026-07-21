@@ -10,8 +10,9 @@
     <Include file="RowUnitPortrait.xml"/>
     <Include file="RowTimerBar.xml"/>
     <Script file="LootDisplayRow.lua" />
+    <Script file="LootRollRowMixin.lua" />
     <Frame name="LootDisplayRowTemplate" virtual="true"
-        mixin="LootDisplayRowMixin,RLF_RowAnimationMixin,RLF_RowTimerBarMixin,RLF_RowScriptedEffectsMixin"
+        mixin="LootDisplayRowMixin,RLF_RowAnimationMixin,RLF_RowTimerBarMixin,RLF_RowScriptedEffectsMixin,RLF_LootRollRowMixin"
         inherits="BackdropTemplate,RLF_RowBackdropTemplate,RLF_RowTextTemplate,RLF_RowUnitPortraitTemplate,RLF_RowIconTemplate,RLF_RowTooltipTemplate,RLF_RowTimerBarTemplate">
     </Frame>
 </Ui>
