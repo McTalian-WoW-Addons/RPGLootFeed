@@ -103,6 +103,7 @@ G_RLF.FeatureModule = {
 	Profession = "Professions",
 	TravelPoints = "TravelPoints",
 	Transmog = "Transmog",
+	LootRolls = "LootRolls",
 }
 
 ---@enum G_RLF.BlizzModule

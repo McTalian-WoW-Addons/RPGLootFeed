@@ -339,4 +339,6 @@ G_RLF.WoWAPI.PartyLoot = {
 	end,
 }
 
+G_RLF.WoWAPI.LootRolls = {}
+
 return G_RLF.WoWAPI
