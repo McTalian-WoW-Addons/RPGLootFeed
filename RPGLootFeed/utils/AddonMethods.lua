@@ -59,6 +59,32 @@ function G_RLF:IsMoPClassic()
 	return WOW_PROJECT_ID == WOW_PROJECT_MISTS_CLASSIC
 end
 
+--- Check if mouse cursor is truly over a frame considering z-order.
+--- Uses GetMouseFoci() on Retail (Dragonflight+) for accurate z-order check.
+--- Falls back to IsMouseOver() on Classic where GetMouseFoci is unavailable.
+--- @param frame Frame
+--- @return boolean
+function G_RLF:MouseIsOverFrame(frame)
+	if GetMouseFoci then
+		local foci = GetMouseFoci()
+		for i = 1, #foci do
+			local focus = foci[i]
+			if focus == frame then
+				return true
+			end
+			local parent = focus:GetParent()
+			while parent do
+				if parent == frame then
+					return true
+				end
+				parent = parent:GetParent()
+			end
+		end
+		return false
+	end
+	return frame:IsMouseOver()
+end
+
 function G_RLF:SendMessage(...)
 	local args = { ... }
 	RunNextFrame(function()

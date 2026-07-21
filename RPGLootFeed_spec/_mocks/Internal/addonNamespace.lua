@@ -158,6 +158,12 @@ function addonNamespaceMocks:unitLoadedAfter(loadSection)
 		addonNamespaceMocks.GetWrapChars = stub(ns, "GetWrapChars", function(_, _wrapChar)
 			return "(", ")"
 		end)
+		-- Delegates to frame:IsMouseOver() so tests that set up IsMouseOver
+		-- mocks continue to work. In-game this uses GetMouseFoci (Retail) with
+		-- IsMouseOver fallback (Classic).
+		addonNamespaceMocks.MouseIsOverFrame = stub(ns, "MouseIsOverFrame", function(_, frame)
+			return frame:IsMouseOver()
+		end)
 	end
 	if loadSection >= addonNamespaceMocks.LoadSections.UtilsAlphaHelpers then
 		addonNamespaceMocks.dump = stub(ns, "dump")

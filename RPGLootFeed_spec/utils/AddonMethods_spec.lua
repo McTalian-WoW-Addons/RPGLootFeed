@@ -397,6 +397,74 @@ describe("AddonMethods", function()
 			end)
 		end)
 
+		describe("MouseIsOverFrame", function()
+			it("returns true when frame is in GetMouseFoci list", function()
+				local frame = {
+					IsMouseOver = function()
+						return false
+					end,
+				}
+				_G.GetMouseFoci = function()
+					return { frame }
+				end
+				local result = ns:MouseIsOverFrame(frame)
+				assert.is_true(result)
+				_G.GetMouseFoci = nil
+			end)
+
+			it("returns true when child of frame is in GetMouseFoci list", function()
+				local parent = {}
+				local child = {
+					GetParent = function()
+						return parent
+					end,
+				}
+				_G.GetMouseFoci = function()
+					return { child }
+				end
+				local result = ns:MouseIsOverFrame(parent)
+				assert.is_true(result)
+				_G.GetMouseFoci = nil
+			end)
+
+			it("returns false when frame not in GetMouseFoci list", function()
+				local frame = {
+					IsMouseOver = function()
+						return false
+					end,
+				}
+				local other = { GetParent = function() end }
+				_G.GetMouseFoci = function()
+					return { other }
+				end
+				local result = ns:MouseIsOverFrame(frame)
+				assert.is_false(result)
+				_G.GetMouseFoci = nil
+			end)
+
+			it("falls back to IsMouseOver when GetMouseFoci is nil (Classic)", function()
+				_G.GetMouseFoci = nil
+				local overSpy = spy.new(function()
+					return true
+				end)
+				local frame = { IsMouseOver = overSpy }
+				local result = ns:MouseIsOverFrame(frame)
+				assert.is_true(result)
+				assert.spy(overSpy).was.called(1)
+			end)
+
+			it("returns false from IsMouseOver fallback when mouse not over frame", function()
+				_G.GetMouseFoci = nil
+				local frame = {
+					IsMouseOver = function()
+						return false
+					end,
+				}
+				local result = ns:MouseIsOverFrame(frame)
+				assert.is_false(result)
+			end)
+		end)
+
 		describe("CompareWithVersion", function()
 			describe("major versions", function()
 				it("handles when my major version is older than the compared version", function()

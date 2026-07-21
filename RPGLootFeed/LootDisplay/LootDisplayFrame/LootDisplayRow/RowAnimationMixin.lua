@@ -740,19 +740,11 @@ function RLF_RowAnimationMixin:UpdateFadeoutDelay()
 	self:StyleExitAnimation()
 end
 
--- Utility function to check if the mouse is over the parent or any of its children
+-- Utility function to check if the mouse is over the parent or any of its children.
+-- Delegates to G_RLF:MouseIsOverFrame for z-order-aware check via GetMouseFoci
+-- (Retail Dragonflight+) with IsMouseOver() fallback on Classic.
 local function isMouseOverSelfOrChildren(frame)
-	if frame:IsMouseOver() then
-		return true
-	end
-
-	for _, child in ipairs({ frame:GetChildren() }) do
-		if child:IsMouseOver() then
-			return true
-		end
-	end
-
-	return false
+	return G_RLF:MouseIsOverFrame(frame)
 end
 
 function RLF_RowAnimationMixin:SetUpHoverEffect()
@@ -821,6 +813,12 @@ function RLF_RowAnimationMixin:SetUpHoverEffect()
 			self:StopTimerBar()
 		end
 		self.hasMouseOver = true
+		-- Install OnUpdate watcher to catch frames that open on top of the row
+		-- and intercept the mouse before OnLeave can fire.
+		-- Only on Retail (GetMouseFoci exists); Classic falls back to OnLeave.
+		if GetMouseFoci then
+			self:SetScript("OnUpdate", self.HoverWatchUpdate)
+		end
 		if animationsDb.hover.enabled then
 			-- Stop fade-out if it's playing
 			if self.HighlightFadeOut:IsPlaying() then
@@ -862,6 +860,9 @@ function RLF_RowAnimationMixin:SetUpHoverEffect()
 		if overSelfOrChildren or not self.hasMouseOver then
 			return
 		end
+		-- Normal OnLeave path: clear the OnUpdate watcher since we're handling
+		-- the leave cleanup here.
+		self:SetScript("OnUpdate", nil)
 		self.hasMouseOver = false
 		---@type RLF_ConfigAnimations
 		local animationsDb = G_RLF.DbAccessor:Animations(self.frameType)
@@ -894,6 +895,61 @@ function RLF_RowAnimationMixin:SetUpHoverEffect()
 			self:StartTimerBar()
 		end
 	end)
+end
+
+-- OnUpdate watcher installed by OnEnter to catch cases where another frame
+-- opens on top of the loot row and intercepts the mouse before OnLeave fires.
+-- Delegates to G_RLF:MouseIsOverFrame for z-order-aware check via GetMouseFoci
+-- (Retail Dragonflight+) with IsMouseOver() fallback on Classic.
+function RLF_RowAnimationMixin:HoverWatchUpdate()
+	if G_RLF:MouseIsOverFrame(self) then
+		return -- still over us or a child
+	end
+	-- Not in foci list — another frame has intercepted the mouse
+	self:SetScript("OnUpdate", nil)
+	self:ForceMouseLeave()
+end
+
+-- Cleanup handler called when mouse truly leaves the row (either via normal
+-- OnLeave or via HoverWatchUpdate interception detection).  Duplicates the
+-- cleanup logic from the OnLeave closure below so the OnUpdate watcher can
+-- trigger it without relying on OnLeave to fire.
+function RLF_RowAnimationMixin:ForceMouseLeave()
+	if not self.hasMouseOver then
+		return
+	end
+	G_RLF:LogDebug(
+		"[PIN] Row:ForceMouseLeave key=" .. tostring(self.key) .. " hasMouseOver=" .. tostring(self.hasMouseOver),
+		addonName
+	)
+	self.hasMouseOver = false
+	---@type RLF_ConfigAnimations
+	local animationsDb = G_RLF.DbAccessor:Animations(self.frameType)
+	if animationsDb.hover.enabled then
+		if self.HighlightFadeIn:IsPlaying() then
+			self.HighlightFadeIn:Stop()
+		end
+		self.HighlightFadeOut:Play()
+	end
+	GameTooltip:Hide()
+	if self.ClickableButton then
+		self.ClickableButton:UnregisterEvent("MODIFIER_STATE_CHANGED")
+	end
+	if self.Icon then
+		self.Icon:UnregisterEvent("MODIFIER_STATE_CHANGED")
+	end
+	if not self.isHistoryMode then
+		local frame = self:GetParent() --[[@as RLF_LootDisplayFrame]]
+		if frame then
+			frame:ReleasePin(self)
+		end
+	end
+	if not self.isHistoryMode then
+		if self.ExitAnimation then
+			self.ExitAnimation:Play()
+		end
+		self:StartTimerBar()
+	end
 end
 
 function RLF_RowAnimationMixin:HighlightIcon()

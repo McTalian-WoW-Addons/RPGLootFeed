@@ -522,4 +522,119 @@ describe("RLF_RowAnimationMixin shift animation", function()
 			assert.stub(row.HighlightFadeOut.Play).was_not.called()
 		end)
 	end)
+
+	-- ── ForceMouseLeave ───────────────────────────────────────────────────
+
+	describe("ForceMouseLeave", function()
+		before_each(function()
+			_G.GameTooltip = {
+				Hide = spy.new(function() end),
+			}
+			stub(ns.DbAccessor, "Animations").returns({
+				hover = { enabled = true, alpha = 0.3, baseDuration = 0.15 },
+				reposition = { duration = 0.2 },
+			})
+			row.StartTimerBar = function() end
+			stub(row, "StartTimerBar")
+			row.ExitAnimation = { Play = function() end }
+			stub(row.ExitAnimation, "Play")
+			row.HighlightFadeIn = {
+				IsPlaying = function()
+					return false
+				end,
+				Stop = function() end,
+			}
+			stub(row.HighlightFadeIn, "IsPlaying").returns(false)
+			stub(row.HighlightFadeIn, "Stop")
+			row.HighlightFadeOut = { Play = function() end }
+			stub(row.HighlightFadeOut, "Play")
+		end)
+
+		it("returns early when hasMouseOver is false", function()
+			row.hasMouseOver = false
+			row:ForceMouseLeave()
+			assert.spy(_G.GameTooltip.Hide).was_not.called()
+		end)
+
+		it("calls GameTooltip:Hide unconditionally", function()
+			row.hasMouseOver = true
+			row:ForceMouseLeave()
+			assert.spy(_G.GameTooltip.Hide).was.called(1)
+		end)
+
+		it("unregisters MODIFIER_STATE_CHANGED on ClickableButton and Icon", function()
+			row.hasMouseOver = true
+			local cbSpy = spy.new(function() end)
+			local iconSpy = spy.new(function() end)
+			row.ClickableButton.UnregisterEvent = cbSpy
+			row.Icon.UnregisterEvent = iconSpy
+			row:ForceMouseLeave()
+			assert.spy(cbSpy).was.called_with(row.ClickableButton, "MODIFIER_STATE_CHANGED")
+			assert.spy(iconSpy).was.called_with(row.Icon, "MODIFIER_STATE_CHANGED")
+		end)
+
+		it("releases pin and plays ExitAnimation when not in history mode", function()
+			row.hasMouseOver = true
+			row.isHistoryMode = false
+			local mockParent = { ReleasePin = spy.new(function() end) }
+			row.GetParent = function()
+				return mockParent
+			end
+
+			row:ForceMouseLeave()
+
+			assert.spy(mockParent.ReleasePin).was.called_with(mockParent, row)
+			assert.spy(row.ExitAnimation.Play).was.called(1)
+		end)
+
+		it("skips pin release and exit animation in history mode", function()
+			row.hasMouseOver = true
+			row.isHistoryMode = true
+			local mockParent = { ReleasePin = spy.new(function() end) }
+			row.GetParent = function()
+				return mockParent
+			end
+
+			row:ForceMouseLeave()
+
+			assert.spy(mockParent.ReleasePin).was_not.called()
+			assert.spy(row.ExitAnimation.Play).was_not.called()
+		end)
+	end)
+
+	-- ── HoverWatchUpdate ──────────────────────────────────────────────────
+
+	describe("HoverWatchUpdate", function()
+		before_each(function()
+			row.SetScript = function() end
+			stub(row, "SetScript")
+		end)
+
+		it("calls ForceMouseLeave when G_RLF:MouseIsOverFrame returns false", function()
+			stub(ns, "MouseIsOverFrame").returns(false)
+
+			local forceCalled = false
+			row.ForceMouseLeave = function()
+				forceCalled = true
+			end
+
+			row:HoverWatchUpdate()
+
+			assert.is_true(forceCalled)
+			assert.stub(row.SetScript).was.called_with(row, "OnUpdate", nil)
+		end)
+
+		it("returns early without cleanup when still over the row", function()
+			stub(ns, "MouseIsOverFrame").returns(true)
+
+			local forceCalled = false
+			row.ForceMouseLeave = function()
+				forceCalled = true
+			end
+
+			row:HoverWatchUpdate()
+
+			assert.is_false(forceCalled)
+		end)
+	end)
 end)
