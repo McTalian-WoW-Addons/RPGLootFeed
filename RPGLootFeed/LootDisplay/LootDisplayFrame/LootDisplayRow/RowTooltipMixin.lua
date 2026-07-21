@@ -46,7 +46,7 @@ function RLF_RowTooltipMixin:SetupTooltip(isHistoryFrame)
 
 	-- OnEnter: Show tooltip or listen for Shift changes
 	self.ClickableButton:SetScript("OnEnter", function()
-		if not isHistoryFrame then
+		if not isHistoryFrame and not self._isLootRollRow then
 			self.ExitAnimation:Stop()
 			self:StopTimerBar()
 			self.HighlightAnimation:Stop()
@@ -65,7 +65,7 @@ function RLF_RowTooltipMixin:SetupTooltip(isHistoryFrame)
 
 	-- OnLeave: Hide tooltip and stop listening for Shift changes
 	self.ClickableButton:SetScript("OnLeave", function()
-		if not isHistoryFrame then
+		if not isHistoryFrame and not self._isLootRollRow then
 			-- Only restart exit animation and release pin if mouse has truly left
 			-- the row, not merely moved from button to another part of the row.
 			-- Uses z-order-aware check via G_RLF:MouseIsOverFrame (GetMouseFoci)
@@ -173,7 +173,7 @@ function RLF_RowTooltipMixin:SetupTooltip(isHistoryFrame)
 
 	if self.Icon then
 		self.Icon:SetScript("OnEnter", function()
-			if not isHistoryFrame then
+			if not isHistoryFrame and not self._isLootRollRow then
 				self.ExitAnimation:Stop()
 				self:StopTimerBar()
 				self.HighlightAnimation:Stop()
@@ -188,7 +188,7 @@ function RLF_RowTooltipMixin:SetupTooltip(isHistoryFrame)
 			self.Icon:RegisterEvent("MODIFIER_STATE_CHANGED")
 		end)
 		self.Icon:SetScript("OnLeave", function()
-			if not isHistoryFrame then
+			if not isHistoryFrame and not self._isLootRollRow then
 				-- Only restart exit animation and release pin if mouse has truly left
 				-- the row, not merely moved from icon to another part of the row.
 				-- Uses z-order-aware check via G_RLF:MouseIsOverFrame (GetMouseFoci)

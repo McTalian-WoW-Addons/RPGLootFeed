@@ -175,6 +175,7 @@ local featureDbKeyMap = {
 	[G_RLF.FeatureModule.Profession] = "profession",
 	[G_RLF.FeatureModule.TravelPoints] = "travelPoints",
 	[G_RLF.FeatureModule.Transmog] = "transmog",
+	[G_RLF.FeatureModule.LootRolls] = "lootRolls",
 }
 
 local function testModuleRegistration()

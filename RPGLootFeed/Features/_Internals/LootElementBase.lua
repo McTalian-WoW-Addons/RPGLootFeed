@@ -216,6 +216,17 @@ function G_RLF.LootElementBase:fromPayload(payload)
 	element.filterItemQuality = payload.filterItemQuality
 	element.filterCurrencyId = payload.filterCurrencyId
 
+	-- ── LootRolls-specific fields ──────────────────────────────────────────────
+	-- Used directly by the row mixin; nil for non-roll types
+	element.rollID = payload.rollID
+	element.rollDuration = payload.rollDuration
+	-- Eligibility overrides used by sample rows (avoids GetLootRollItemInfo call)
+	element.canNeed = payload.canNeed
+	element.canGreed = payload.canGreed
+	element.canTransmog = payload.canTransmog
+	element.reasonNeed = payload.reasonNeed
+	element.reasonGreed = payload.reasonGreed
+
 	-- ── Backwards compatibility: keep itemCount for modules not yet migrated ──
 	element.itemCount = payload.itemCount
 

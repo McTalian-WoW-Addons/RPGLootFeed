@@ -31,6 +31,22 @@ function G_RLF.BuildLootRollsArgs(frameId, order)
 				end,
 				order = 1,
 			},
+			rollButtonSize = {
+				type = "range",
+				name = G_RLF.L["Roll Button Size"],
+				desc = G_RLF.L["RollButtonSizeDesc"],
+				min = 12,
+				max = 32,
+				step = 1,
+				get = function()
+					return fc().buttonSize
+				end,
+				set = function(_, value)
+					fc().buttonSize = value
+					G_RLF.LootDisplay:RefreshSampleRowsIfShown()
+				end,
+				order = 2,
+			},
 		},
 	}
 end

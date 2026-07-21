@@ -29,6 +29,7 @@ local featureKeyForType = {
 	[G_RLF.FeatureModule.Profession] = "profession",
 	[G_RLF.FeatureModule.TravelPoints] = "travelPoints",
 	[G_RLF.FeatureModule.Transmog] = "transmog",
+	[G_RLF.FeatureModule.LootRolls] = "lootRolls",
 }
 
 --- Check whether this frame should display the given loot element based on

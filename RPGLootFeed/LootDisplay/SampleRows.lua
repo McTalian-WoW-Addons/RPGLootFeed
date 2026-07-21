@@ -424,6 +424,36 @@ function LootDisplay:CreateSampleRows(frame)
 			}):Show()
 		end
 	end
+
+	-- ── LootRolls ───────────────────────────────────────────────────────────────
+	if features.lootRolls and features.lootRolls.enabled then
+		local lootRollsModule = G_RLF.RLF:GetModule(FeatureModule.LootRolls)
+		if lootRollsModule and lootRollsModule:IsEnabled() then
+			LootElementBase:fromPayload({
+				key = "sample_loot_roll",
+				type = FeatureModule.LootRolls,
+				isLink = true,
+				icon = sampleItemIcon,
+				quality = ItemQualEnum.Rare,
+				quantity = 1,
+				textFn = function(_, truncatedLink)
+					return truncatedLink or SAMPLE_ITEM_LINK
+				end,
+				rollID = nil,
+				rollDuration = 60,
+				canNeed = true,
+				canGreed = true,
+				canTransmog = false,
+				reasonNeed = nil,
+				reasonGreed = nil,
+				isSampleRow = true,
+				sampleTooltipText = G_RLF.L["Loot Rolls Config"],
+				IsEnabled = function()
+					return true
+				end,
+			}):Show()
+		end
+	end
 end
 
 return {}

@@ -590,6 +590,16 @@ G_RLF.defaults = {
 						enableBlizzardTransmogSound = true,
 						enableIcon = true,
 					},
+					lootRolls = {
+						enabled = false,
+						backgroundOverride = {
+							enabled = false,
+							gradientStart = { 0.1, 0.1, 0.1, 0.8 },
+							gradientEnd = { 0.1, 0.1, 0.1, 0 },
+							textureColor = { 0, 0, 0, 1 },
+						},
+						buttonSize = 18,
+					},
 				},
 			},
 		},

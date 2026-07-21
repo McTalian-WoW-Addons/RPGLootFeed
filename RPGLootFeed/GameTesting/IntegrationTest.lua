@@ -176,6 +176,35 @@ local function runPartyLootIntegrationTest()
 	return 1
 end
 
+--- Exercises the LootRolls fromPayload → Show pipeline directly.
+local function runLootRollsIntegrationTest()
+	local LootElementBase = G_RLF.LootElementBase
+	local ok, icon = pcall(function()
+		return GetItemIcon(14344)
+	end)
+	LootElementBase:fromPayload({
+		key = "it_loot_roll_test",
+		type = G_RLF.FeatureModule.LootRolls,
+		isLink = true,
+		icon = ok and icon or nil,
+		quality = G_RLF.ItemQualEnum.Rare,
+		quantity = 1,
+		textFn = function(_, truncatedLink)
+			return truncatedLink or "|cff0070dd|Hitem:14344::::::::60:::::|h[Large Brilliant Shard]|h|r"
+		end,
+		rollID = nil,
+		rollDuration = 60,
+		canNeed = true,
+		canGreed = true,
+		canTransmog = false,
+		isSampleRow = false,
+		IsEnabled = function()
+			return true
+		end,
+	}):Show()
+	return 1
+end
+
 --- Exercises the Currency BuildPayload → fromPayload → Show pipeline directly.
 local function runCurrencyIntegrationTest()
 	local module = G_RLF.RLF:GetModule(G_RLF.FeatureModule.Currency) --[[@as RLF_Currency]]
@@ -393,6 +422,10 @@ function TestMode:IntegrationTest()
 	local transmogModule = G_RLF.RLF:GetModule(G_RLF.FeatureModule.Transmog) --[[@as RLF_Transmog]]
 	if transmogModule:IsEnabled() then
 		newRowsExpected = newRowsExpected + runTransmogIntegrationTest()
+	end
+	local lootRollsModule = G_RLF.RLF:GetModule(G_RLF.FeatureModule.LootRolls) --[[@as RLF_LootRolls]]
+	if lootRollsModule:IsEnabled() then
+		newRowsExpected = newRowsExpected + runLootRollsIntegrationTest()
 	end
 
 	-- ── Phase 2: wait for phase-1 OnLootReady calls, then run routing ──────

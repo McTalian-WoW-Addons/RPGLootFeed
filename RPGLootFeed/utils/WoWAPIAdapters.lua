@@ -312,6 +312,28 @@ G_RLF.WoWAPI.PartyLoot = {
 	end,
 }
 
-G_RLF.WoWAPI.LootRolls = {}
+G_RLF.WoWAPI.LootRolls = {
+	GetLootRollItemInfo = function(rollID)
+		return GetLootRollItemInfo(rollID)
+	end,
+	GetLootRollItemLink = function(rollID)
+		return GetLootRollItemLink(rollID)
+	end,
+	GetLootRollTimeLeft = function(rollID)
+		return GetLootRollTimeLeft(rollID)
+	end,
+	GetActiveLootRollIDs = function()
+		return GetActiveLootRollIDs()
+	end,
+	RollOnLoot = function(rollID, rollType)
+		return RollOnLoot(rollID, rollType)
+	end,
+	GetLootRollDuration = function(rollID)
+		return C_Loot.GetLootRollDuration(rollID)
+	end,
+	GetItemInfoInstant = function(itemLink)
+		return C_Item.GetItemInfoInstant(itemLink)
+	end,
+}
 
 return G_RLF.WoWAPI

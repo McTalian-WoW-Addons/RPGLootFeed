@@ -212,6 +212,7 @@ function LootDisplayRowMixin:Reset()
 	self.ClickableButton:SetScript("OnLeave", nil)
 	self.ClickableButton:SetScript("OnMouseUp", nil)
 	self.ClickableButton:SetScript("OnEvent", nil)
+	self:CleanupLootRoll()
 end
 
 --- Enable or disable mouse interaction on this row and its interactive children.
@@ -412,6 +413,7 @@ function LootDisplayRowMixin:BootstrapFromElement(element)
 		self:UpdateItemCount()
 	end)
 	self:LogRow(self.logFn, text, true)
+	self:PostBootstrapFromElement(element)
 end
 
 function LootDisplayRowMixin:LogRow(logFn, text, new)
