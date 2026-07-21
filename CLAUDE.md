@@ -68,3 +68,20 @@ Blizzard's UI source is checked out locally at `~/code/wow-ui-source` (branch pe
 - **Never hardcode a FileDataID without checking it ships to every flavor**: `uv run .scripts/wago_lookup.py presence <fdid>`. Each client carries a different asset subset — e.g. `236681` (the default reputation icon) is missing from TBC Anniversary, which predates achievements and ships no `Achievement_*` icons. Guard non-universal assets with `G_RLF:IsRetail()` / `G_RLF:IsClassic()`.
 - **After a patch drops**, `uv run .scripts/wago_lookup.py audit` lists major faction texture kits missing from `majorFactionTextureKitIconMap`. Some factions never ship an icon file at all and are atlas-only.
 - `/api/casc/{fdid}` ignores its `product` parameter and will happily report Retail-only assets as present on Classic — only the `/api/files` listfile is authoritative. Always include a known-absent control in any presence check.
+
+## Hover safety pattern (intercept detection)
+
+Frame opens on top of loot row → mouse never exits rect → OnLeave never fires. Fix:
+
+1. `G_RLF:MouseIsOverFrame(frame)` — z-order check using `GetMouseFoci()` (Retail). Returns false when another frame covers target.
+2. `HoverWatchUpdate` — OnUpdate watcher installed by OnEnter. Each frame checks `G_RLF:MouseIsOverFrame(self)`. On false → `ForceMouseLeave()`.
+3. `ForceMouseLeave` — catch-all cleanup. Resets hasMouseOver, releases pin, resumes exit anim, hides GameTooltip, unregisters MODIFIER_STATE_CHANGED.
+4. OnLeave clears OnUpdate (normal path).
+5. Classic (no GetMouseFoci) skips OnUpdate install — falls back to OnLeave only.
+
+## Frame IDs
+
+```lua
+G_RLF.Frames.MAIN = 1          -- always present, cannot delete
+-- Additional frames created dynamically. IDs increment monotonically, never reused.
+```
