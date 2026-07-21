@@ -59,6 +59,7 @@ G_RLF.mainFeatureOrder = {
 	Profession = 7,
 	TravelPoints = 8,
 	Transmog = 9,
+	LootRolls = 10,
 }
 
 return Features

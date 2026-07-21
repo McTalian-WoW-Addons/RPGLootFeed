@@ -247,6 +247,7 @@ function addonNamespaceMocks:unitLoadedAfter(loadSection)
 			Profession = 7,
 			TravelPoints = 8,
 			Transmog = 9,
+			LootRolls = 10,
 		}
 	end
 	if loadSection >= addonNamespaceMocks.LoadSections.ConfigFeaturePartyLoot then

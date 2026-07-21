@@ -37,6 +37,9 @@ L["TimerBarAlphaDesc"] = "Transparency of the timer bar (0 = invisible, 1 = full
 L["TimerBarColorDesc"] = "Color of the timer bar fill."
 L["TimerBarHeightDesc"] = "Height of the timer bar in pixels."
 L["TimerBarYOffsetDesc"] = "Vertical offset of the timer bar in pixels. Use a positive value to move it above the row border."
+L["Enable Loot Rolls in Feed"] = "Enable Loot Rolls in Feed"
+L["EnableLootRollsDesc"] = "Enable loot rolls in the loot feed"
+L["Loot Rolls Config"] = "Loot Rolls Config"
 --#endregion
 
 --#region 1.33.0

@@ -93,7 +93,7 @@ local featureKeyToModule = {
 }
 
 --- Check whether at least one frame has the given feature enabled.
---- @param featureKey string  One of: itemLoot, partyLoot, currency, money, experience, reputation, profession, travelPoints, transmog
+--- @param featureKey string  One of: itemLoot, partyLoot, currency, money, experience, reputation, profession, travelPoints, transmog, lootRolls
 --- @return boolean
 function DbAccessor:IsFeatureNeededByAnyFrame(featureKey)
 	local frames = G_RLF.db.global.frames
@@ -110,7 +110,7 @@ end
 
 --- Enable or disable a feature module based on whether any frame needs it.
 --- Call this from config enable toggles after changing a per-frame feature flag.
---- @param featureKey string  One of: itemLoot, partyLoot, currency, money, experience, reputation, profession, travelPoints, transmog
+--- @param featureKey string  One of: itemLoot, partyLoot, currency, money, experience, reputation, profession, travelPoints, transmog, lootRolls
 function DbAccessor:UpdateFeatureModuleState(featureKey)
 	local moduleName = featureKeyToModule[featureKey]
 	if not moduleName then
