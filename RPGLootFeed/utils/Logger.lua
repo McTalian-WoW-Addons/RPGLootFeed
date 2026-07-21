@@ -58,6 +58,7 @@ local Profession = G_RLF.FeatureModule.Profession
 local PartyLoot = G_RLF.FeatureModule.PartyLoot
 local TravelPoints = G_RLF.FeatureModule.TravelPoints
 local Transmog = G_RLF.FeatureModule.Transmog
+local LootRolls = G_RLF.FeatureModule.LootRolls
 local eventType = {
 	[ItemLoot] = true,
 	[Currency] = true,
@@ -68,6 +69,7 @@ local eventType = {
 	[PartyLoot] = true,
 	[TravelPoints] = true,
 	[Transmog] = true,
+	[LootRolls] = true,
 }
 local function OnEventTypeChange(_, _, k, v)
 	eventType[k] = v
@@ -198,6 +200,7 @@ function Logger:createFilterBarComponents()
 				[PartyLoot] = PartyLoot,
 				[TravelPoints] = TravelPoints,
 				[Transmog] = Transmog,
+				[LootRolls] = LootRolls,
 			})
 			fB.logTypes:SetCallback("OnValueChanged", OnEventTypeChange)
 			for k, v in pairs(eventType) do
@@ -285,6 +288,7 @@ local function getType(logEntry)
 		[PartyLoot] = "|cFF00FFFF[PRTY]|r", -- Cyan for party loot
 		[TravelPoints] = "|cFF8A2BE2[TRVL]|r", -- BlueViolet for travel points
 		[Transmog] = "|cFFFF69B4[TMOG]|r", -- Pink for transmog
+		[LootRolls] = "|cFFFF8C00[ROLL]|r", -- Orange for loot rolls
 	}
 
 	-- Return an empty string for "General" and the corresponding value for others

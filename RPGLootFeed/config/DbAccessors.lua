@@ -90,6 +90,7 @@ local featureKeyToModule = {
 	profession = "Professions",
 	travelPoints = "TravelPoints",
 	transmog = "Transmog",
+	lootRolls = "LootRolls",
 }
 
 --- Check whether at least one frame has the given feature enabled.
