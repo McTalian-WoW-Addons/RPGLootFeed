@@ -74,6 +74,19 @@ function RLF_LootRollRowMixin:_CreateRollButton(label, id, enabled, reason)
 	ht:SetBlendMode("ADD")
 	btn:SetHighlightTexture(ht)
 
+	-- Fallback for buttons without atlas (e.g. Disenchant in Classic)
+	if not atlasInfo then
+		btn:SetBackdrop({
+			bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+			insets = { left = 1, right = 1, top = 1, bottom = 1 },
+		})
+		btn:SetBackdropColor(0.2, 0.2, 0.2, 0.9)
+		local txt = btn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+		txt:SetText(label)
+		txt:SetPoint("CENTER")
+		txt:SetTextColor(1, 1, 1)
+	end
+
 	-- Tooltip — matches Blizzard's LootRollButtonTemplate OnEnter/OnLeave
 	btn:SetScript("OnEnter", function()
 		GameTooltip:SetOwner(btn, "ANCHOR_RIGHT")
@@ -244,16 +257,20 @@ function RLF_LootRollRowMixin:PostBootstrapFromElement(element)
 	-- Fetch eligibility: element provides its own for sample rows; real rows call API
 	local canNeed, canGreed, canTransmog
 	local reasonNeed, reasonGreed
+	local canDisenchant, reasonDisenchant
 	if element.canNeed ~= nil then
 		canNeed = element.canNeed
 		canGreed = element.canGreed
 		canTransmog = element.canTransmog
 		reasonNeed = element.reasonNeed
 		reasonGreed = element.reasonGreed
+		canDisenchant = nil
+		reasonDisenchant = nil
 	elseif element.rollID then
-		local _, _, _, _, _, cn, cg, _, rn, rg, _, _, ct = GetLootRollItemInfo(element.rollID)
+		local _, _, _, _, _, cn, cg, cd, rn, rg, rd, _, ct = GetLootRollItemInfo(element.rollID)
 		canNeed, canGreed, canTransmog = cn, cg, ct
 		reasonNeed, reasonGreed = rn, rg
+		canDisenchant, reasonDisenchant = cd, rd
 	else
 		-- No eligibility data and no rollID — nothing to show
 		return
@@ -286,6 +303,14 @@ function RLF_LootRollRowMixin:PostBootstrapFromElement(element)
 			hasRealRoll and reasonGreed or nil
 		)
 		table.insert(self._rollButtons, greedBtn)
+	end
+
+	-- Disenchant button (Classic only: no DE atlas, use text label)
+	if not G_RLF:IsRetail() and canDisenchant then
+		local deEnabled = hasRealRoll and canDisenchant or false
+		local deReason = hasRealRoll and reasonDisenchant or nil
+		local deBtn = self:_CreateRollButton(DISENCHANT, LOOT_ROLL_TYPE_DISENCHANT, deEnabled, deReason)
+		table.insert(self._rollButtons, deBtn)
 	end
 
 	-- Pass button (shown disabled for sample/test rows)
