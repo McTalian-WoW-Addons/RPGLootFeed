@@ -105,11 +105,12 @@ end
 
 -- ── Event Handlers ───────────────────────────────────────────────────────────
 
+---@param eventName string
 ---@param rollID number
 ---@param rollTime number  Duration in seconds
 ---@param lootHandle number|nil
-function LootRolls:START_LOOT_ROLL(rollID, rollTime, lootHandle)
-	LogDebug("START_LOOT_ROLL", addonName, rollID, rollTime, lootHandle)
+function LootRolls:START_LOOT_ROLL(eventName, rollID, rollTime, lootHandle)
+	LogDebug(eventName, G_RLF.LogEventSource.WOWEVENT, self.moduleName, rollID, nil, rollTime)
 
 	-- Fetch item info via adapter
 	local texture, name, count, quality = self._adapter.GetLootRollItemInfo(rollID)
@@ -168,15 +169,16 @@ function LootRolls:START_LOOT_ROLL(rollID, rollTime, lootHandle)
 	element:Show(name, quality)
 end
 
+---@param eventName string
 ---@param rollID number
-function LootRolls:CANCEL_LOOT_ROLL(rollID)
-	LogDebug("CANCEL_LOOT_ROLL", addonName, rollID)
+function LootRolls:CANCEL_LOOT_ROLL(eventName, rollID)
+	LogDebug(eventName, G_RLF.LogEventSource.WOWEVENT, self.moduleName, rollID)
 	self:ReleaseRollRows(rollID)
 	self:_UntrackRoll(rollID)
 end
 
-function LootRolls:CANCEL_ALL_LOOT_ROLLS()
-	LogDebug("CANCEL_ALL_LOOT_ROLLS", addonName)
+function LootRolls:CANCEL_ALL_LOOT_ROLLS(eventName)
+	LogDebug(eventName, G_RLF.LogEventSource.WOWEVENT, self.moduleName)
 	if not self._activeRolls then
 		return
 	end
@@ -192,20 +194,22 @@ function LootRolls:CANCEL_ALL_LOOT_ROLLS()
 	self._lootHandleMap = {}
 end
 
+---@param eventName string
 ---@param rollID number
 ---@param roll number
 ---@param isWinning boolean
-function LootRolls:MAIN_SPEC_NEED_ROLL(rollID, roll, isWinning)
-	LogDebug("MAIN_SPEC_NEED_ROLL", addonName, rollID, roll, isWinning)
+function LootRolls:MAIN_SPEC_NEED_ROLL(eventName, rollID, roll, isWinning)
+	LogDebug(eventName, G_RLF.LogEventSource.WOWEVENT, self.moduleName, rollID, nil, roll, isWinning)
 	local rows = self:FindRollRows(rollID)
 	for _, entry in ipairs(rows) do
 		entry.row:OnMainSpecNeedRoll(roll, isWinning)
 	end
 end
 
+---@param eventName string
 ---@param lootHandle number
-function LootRolls:LOOT_ROLLS_COMPLETE(lootHandle)
-	LogDebug("LOOT_ROLLS_COMPLETE", addonName, lootHandle)
+function LootRolls:LOOT_ROLLS_COMPLETE(eventName, lootHandle)
+	LogDebug(eventName, G_RLF.LogEventSource.WOWEVENT, self.moduleName, nil, nil, lootHandle)
 	if not self._lootHandleMap then
 		return
 	end
@@ -364,13 +368,14 @@ end
 
 -- ── Additional Event Handlers ────────────────────────────────────────────────
 
+---@param eventName string
 ---@param itemLink string
 ---@param quantity number
 ---@param rollType number
 ---@param roll number
 ---@param upgraded boolean
-function LootRolls:LOOT_ITEM_ROLL_WON(itemLink, quantity, rollType, roll, upgraded)
-	LogDebug("LOOT_ITEM_ROLL_WON", addonName, itemLink, rollType, roll)
+function LootRolls:LOOT_ITEM_ROLL_WON(eventName, itemLink, quantity, rollType, roll, upgraded)
+	LogDebug(eventName, G_RLF.LogEventSource.WOWEVENT, self.moduleName, nil, nil, rollType)
 	if not self._activeRolls then
 		return
 	end
@@ -391,14 +396,18 @@ function LootRolls:LOOT_ITEM_ROLL_WON(itemLink, quantity, rollType, roll, upgrad
 	end
 end
 
+---@param eventName string
 ---@param encounterID number
 ---@param lootListID number
-function LootRolls:LOOT_HISTORY_UPDATE_DROP(encounterID, lootListID)
+function LootRolls:LOOT_HISTORY_UPDATE_DROP(eventName, encounterID, lootListID)
+	LogDebug(eventName, G_RLF.LogEventSource.WOWEVENT, self.moduleName, encounterID, nil, lootListID)
 	self:HandleHistoryDropUpdate(encounterID, lootListID)
 end
 
+---@param eventName string
 ---@param encounterID number
-function LootRolls:LOOT_HISTORY_UPDATE_ENCOUNTER(encounterID)
+function LootRolls:LOOT_HISTORY_UPDATE_ENCOUNTER(eventName, encounterID)
+	LogDebug(eventName, G_RLF.LogEventSource.WOWEVENT, self.moduleName, encounterID)
 	-- Full re-poll for this encounter to catch any unmatched drops
 	if not self._historyMatchMap or not self._historyMatchMap[encounterID] then
 		return
