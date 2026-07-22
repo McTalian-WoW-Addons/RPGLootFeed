@@ -836,7 +836,9 @@ function RLF_RowAnimationMixin:SetUpHoverEffect()
 		-- Pin the row so it doesn't shift while hovered.
 		-- History rows are parented to historyContent (a plain Frame with no
 		-- vertDir or ReleasePin method), so skip pinning entirely for them.
-		if not self.isHistoryMode and not self._isLootRollRow then
+		-- Roll rows also pin so hovering roll buttons doesn't cause a shuffle
+		-- while the player is about to click (timer bar is NOT affected by pin).
+		if not self.isHistoryMode then
 			local frame = self:GetParent() --[[@as RLF_LootDisplayFrame]]
 			if frame then
 				self:PinPosition(frame)
@@ -881,7 +883,7 @@ function RLF_RowAnimationMixin:SetUpHoverEffect()
 		-- Release the pin first so isPinned is false before the exit animation
 		-- resumes. Prevents ExitAnimation:Play() from firing while pinned.
 		-- History rows skip this: historyContent has no ReleasePin method.
-		if not self.isHistoryMode and not self._isLootRollRow then
+		if not self.isHistoryMode then
 			local frame = self:GetParent() --[[@as RLF_LootDisplayFrame]]
 			if frame then
 				frame:ReleasePin(self)
