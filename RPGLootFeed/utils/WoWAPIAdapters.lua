@@ -334,6 +334,25 @@ G_RLF.WoWAPI.LootRolls = {
 	GetItemInfoInstant = function(itemLink)
 		return C_Item.GetItemInfoInstant(itemLink)
 	end,
+	-- C_LootHistory wrappers (may not exist on Classic)
+	GetAllEncounterInfos = function()
+		if C_LootHistory and C_LootHistory.GetAllEncounterInfos then
+			return C_LootHistory.GetAllEncounterInfos()
+		end
+		return nil
+	end,
+	GetSortedDropsForEncounter = function(encounterID)
+		if C_LootHistory and C_LootHistory.GetSortedDropsForEncounter then
+			return C_LootHistory.GetSortedDropsForEncounter(encounterID)
+		end
+		return nil
+	end,
+	GetSortedInfoForDrop = function(encounterID, lootListID)
+		if C_LootHistory and C_LootHistory.GetSortedInfoForDrop then
+			return C_LootHistory.GetSortedInfoForDrop(encounterID, lootListID)
+		end
+		return nil
+	end,
 }
 
 return G_RLF.WoWAPI

@@ -27,10 +27,14 @@ local LootRolls = FeatureBase:new(FeatureModule.LootRolls, "AceEvent-3.0", "AceB
 
 LootRolls._adapter = G_RLF.WoWAPI.LootRolls
 
--- rollID → { key, lootHandle } — tracks active roll rows across all frames
+-- rollID → { key, lootHandle, itemLink, itemID } — tracks active roll rows
 LootRolls._activeRolls = nil
 -- lootHandle → { [rollID] = true } — groups rollIDs by lootHandle for LOOT_ROLLS_COMPLETE
 LootRolls._lootHandleMap = nil
+-- encounterID → { lootListID → rollID } — matched loot history drops for live updates
+LootRolls._historyMatchMap = nil
+-- Periodic poll ticker for loot history coalescing
+LootRolls._pollTicker = nil
 
 local KEY_PREFIX = "LootRoll_"
 
@@ -66,7 +70,7 @@ function LootRolls:ReleaseRollRows(rollID)
 	end
 end
 
---- Clean up an active roll from tracking tables.
+--- Clean up an active roll from all tracking tables.
 ---@param rollID number
 function LootRolls:_UntrackRoll(rollID)
 	if self._activeRolls then
@@ -79,6 +83,23 @@ function LootRolls:_UntrackRoll(rollID)
 				self._lootHandleMap[handle] = nil
 			end
 		end
+	end
+	if self._historyMatchMap then
+		for encID, dropMap in pairs(self._historyMatchMap) do
+			for lootListID, rid in pairs(dropMap) do
+				if rid == rollID then
+					dropMap[lootListID] = nil
+				end
+			end
+			if not next(dropMap) then
+				self._historyMatchMap[encID] = nil
+			end
+		end
+	end
+	-- Stop poll ticker if no more active rolls
+	if self._activeRolls and not next(self._activeRolls) and self._pollTicker then
+		self._pollTicker:Cancel()
+		self._pollTicker = nil
 	end
 end
 
@@ -119,14 +140,17 @@ function LootRolls:START_LOOT_ROLL(rollID, rollTime, lootHandle)
 			return LootRolls:IsEnabled()
 		end,
 	}
-	payload.filterItemId = self._adapter.GetItemInfoInstant(itemLink)
+	local itemID = self._adapter.GetItemInfoInstant(itemLink)
+	payload.filterItemId = itemID
 	payload.filterItemQuality = quality
+	-- Pass itemLink to the mixin for loot history matching
+	payload.itemLink = itemLink
 
 	-- Track the active roll
 	if not self._activeRolls then
 		self._activeRolls = {}
 	end
-	self._activeRolls[rollID] = { key = payload.key, lootHandle = lootHandle }
+	self._activeRolls[rollID] = { key = payload.key, lootHandle = lootHandle, itemLink = itemLink, itemID = itemID }
 
 	-- Track lootHandle grouping
 	if lootHandle then
@@ -200,6 +224,189 @@ function LootRolls:LOOT_ROLLS_COMPLETE(lootHandle)
 	end
 end
 
+-- ── Loot History Polling ─────────────────────────────────────────────────────
+
+--- Find all loot history drops matching the itemID. Returns list of {encounterID, lootListID, dropInfo}.
+---@param itemLink string
+---@return table
+function LootRolls:_FindMatchingHistoryDrops(itemLink)
+	local itemID = self._adapter.GetItemInfoInstant(itemLink)
+	if not itemID then
+		return {}
+	end
+
+	local encounters = self._adapter.GetAllEncounterInfos()
+	if not encounters then
+		return {}
+	end
+
+	local matches = {}
+	for _, encInfo in ipairs(encounters) do
+		local drops = self._adapter.GetSortedDropsForEncounter(encInfo.encounterID)
+		if drops then
+			for _, dropInfo in ipairs(drops) do
+				local dropItemID = self._adapter.GetItemInfoInstant(dropInfo.itemHyperlink)
+				if dropItemID == itemID then
+					table.insert(matches, {
+						encounterID = encInfo.encounterID,
+						lootListID = dropInfo.lootListID,
+						dropInfo = dropInfo,
+					})
+				end
+			end
+		end
+	end
+	return matches
+end
+
+--- Check if a specific encounterID + lootListID pair is already claimed in historyMatchMap.
+---@param encounterID number
+---@param lootListID number
+---@return boolean
+function LootRolls:_IsDropClaimed(encounterID, lootListID)
+	if not self._historyMatchMap then
+		return false
+	end
+	local encMap = self._historyMatchMap[encounterID]
+	if not encMap then
+		return false
+	end
+	return encMap[lootListID] ~= nil
+end
+
+--- Poll loot history for all active rolls and push updates to rows.
+function LootRolls:PollLootHistory()
+	if not self._activeRolls or not next(self._activeRolls) then
+		return
+	end
+	if not self._adapter.GetAllEncounterInfos then
+		return
+	end
+
+	for rollID, info in pairs(self._activeRolls) do
+		-- Skip already-matched rolls (live updates via LOOT_HISTORY_UPDATE_DROP)
+		local alreadyMatched = false
+		if self._historyMatchMap then
+			for _, dropMap in pairs(self._historyMatchMap) do
+				for _, rid in pairs(dropMap) do
+					if rid == rollID then
+						alreadyMatched = true
+						break
+					end
+				end
+				if alreadyMatched then
+					break
+				end
+			end
+		end
+		if not alreadyMatched then
+			local matches = self:_FindMatchingHistoryDrops(info.itemLink)
+			-- Pick the first unclaimed drop (handles duplicate items from same boss)
+			local claimed
+			for _, match in ipairs(matches) do
+				if not self:_IsDropClaimed(match.encounterID, match.lootListID) then
+					claimed = match
+					break
+				end
+			end
+			if claimed then
+				-- Store match for live updates
+				if not self._historyMatchMap then
+					self._historyMatchMap = {}
+				end
+				if not self._historyMatchMap[claimed.encounterID] then
+					self._historyMatchMap[claimed.encounterID] = {}
+				end
+				self._historyMatchMap[claimed.encounterID][claimed.lootListID] = rollID
+
+				-- Push results to row
+				local rows = self:FindRollRows(rollID)
+				for _, entry in ipairs(rows) do
+					entry.row:SetRollResults(claimed.dropInfo)
+				end
+			end
+		end
+	end
+end
+
+--- Update a specific drop when LOOT_HISTORY_UPDATE_DROP fires.
+---@param encounterID number
+---@param lootListID number
+function LootRolls:HandleHistoryDropUpdate(encounterID, lootListID)
+	if not self._historyMatchMap then
+		return
+	end
+	local encMap = self._historyMatchMap[encounterID]
+	if not encMap then
+		return
+	end
+	local rollID = encMap[lootListID]
+	if not rollID then
+		return
+	end
+
+	local dropInfo = self._adapter.GetSortedInfoForDrop(encounterID, lootListID)
+	if not dropInfo then
+		return
+	end
+
+	local rows = self:FindRollRows(rollID)
+	for _, entry in ipairs(rows) do
+		entry.row:SetRollResults(dropInfo)
+		-- If there's a winner and the local player won, also update result text
+		if dropInfo.winner and dropInfo.winner.isSelf then
+			local rollType = dropInfo.winner.state
+			local roll = dropInfo.winner.roll
+			entry.row:OnRollWon(rollType, roll, false)
+		end
+	end
+end
+
+-- ── Additional Event Handlers ────────────────────────────────────────────────
+
+---@param itemLink string
+---@param quantity number
+---@param rollType number
+---@param roll number
+---@param upgraded boolean
+function LootRolls:LOOT_ITEM_ROLL_WON(itemLink, quantity, rollType, roll, upgraded)
+	LogDebug("LOOT_ITEM_ROLL_WON", addonName, itemLink, rollType, roll)
+	if not self._activeRolls then
+		return
+	end
+
+	-- Find matching roll by itemID comparison
+	local wonItemID = self._adapter.GetItemInfoInstant(itemLink)
+	if not wonItemID then
+		return
+	end
+
+	for rollID, info in pairs(self._activeRolls) do
+		if info.itemID == wonItemID then
+			local rows = self:FindRollRows(rollID)
+			for _, entry in ipairs(rows) do
+				entry.row:OnRollWon(rollType, roll, upgraded)
+			end
+		end
+	end
+end
+
+---@param encounterID number
+---@param lootListID number
+function LootRolls:LOOT_HISTORY_UPDATE_DROP(encounterID, lootListID)
+	self:HandleHistoryDropUpdate(encounterID, lootListID)
+end
+
+---@param encounterID number
+function LootRolls:LOOT_HISTORY_UPDATE_ENCOUNTER(encounterID)
+	-- Full re-poll for this encounter to catch any unmatched drops
+	if not self._historyMatchMap or not self._historyMatchMap[encounterID] then
+		return
+	end
+	-- Trigger a full poll on next tick
+	self:PollLootHistory()
+end
+
 -- ── Module Lifecycle ─────────────────────────────────────────────────────────
 
 function LootRolls:OnInitialize()
@@ -217,6 +424,15 @@ function LootRolls:OnDisable()
 	self:UnregisterEvent("CANCEL_ALL_LOOT_ROLLS")
 	self:UnregisterEvent("MAIN_SPEC_NEED_ROLL")
 	self:UnregisterEvent("LOOT_ROLLS_COMPLETE")
+	self:UnregisterEvent("LOOT_ITEM_ROLL_WON")
+	self:UnregisterEvent("LOOT_HISTORY_UPDATE_DROP")
+	self:UnregisterEvent("LOOT_HISTORY_UPDATE_ENCOUNTER")
+
+	-- Stop poll ticker
+	if self._pollTicker then
+		self._pollTicker:Cancel()
+		self._pollTicker = nil
+	end
 
 	-- Release any active roll rows
 	self:CANCEL_ALL_LOOT_ROLLS()
@@ -230,6 +446,16 @@ function LootRolls:OnEnable()
 	self:RegisterEvent("CANCEL_ALL_LOOT_ROLLS")
 	self:RegisterEvent("MAIN_SPEC_NEED_ROLL")
 	self:RegisterEvent("LOOT_ROLLS_COMPLETE")
+	self:RegisterEvent("LOOT_ITEM_ROLL_WON")
+	self:RegisterEvent("LOOT_HISTORY_UPDATE_DROP")
+	self:RegisterEvent("LOOT_HISTORY_UPDATE_ENCOUNTER")
+
+	-- Start periodic poll for loot history coalescing (1s interval)
+	if not self._pollTicker then
+		self._pollTicker = C_Timer.NewTicker(1, function()
+			self:PollLootHistory()
+		end)
+	end
 
 	-- Replay any active rolls that exist from before (UI reload, etc.)
 	C_Timer.After(0, function()

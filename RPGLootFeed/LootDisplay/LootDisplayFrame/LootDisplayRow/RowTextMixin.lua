@@ -249,77 +249,83 @@ function RLF_RowTextMixin:StyleText()
 		self.cachedUnitText = self.unit
 		self.cachedPaddingText = padding
 
-		local anchor = "LEFT"
-		local iconAnchor = "RIGHT"
-		local xOffset = spacing
-		if not iconOnLeft then
-			anchor = "RIGHT"
-			iconAnchor = "LEFT"
-			xOffset = xOffset * -1
-		end
-		-- PrimaryLineLayout owns the anchor to Icon; its children (PrimaryText,
-		-- AmountText, ItemCountText) are positioned by Layout(). The spacing is
-		-- user-configurable via rowTextSpacing (0 = auto = iconSize/4).
-		-- childLayoutDirection reverses child order for right-align (icon on right)
-		-- without changing layoutIndex values.
-		self.PrimaryLineLayout.spacing = spacing
-		self.SecondaryLineLayout.spacing = spacing
-		if iconOnLeft then
-			self.PrimaryLineLayout.childLayoutDirection = nil
-			self.SecondaryLineLayout.childLayoutDirection = nil
-		else
-			self.PrimaryLineLayout.childLayoutDirection = "rightToLeft"
-			self.SecondaryLineLayout.childLayoutDirection = "rightToLeft"
-		end
-		self.PrimaryLineLayout:ClearAllPoints()
-		self.PrimaryText:SetJustifyH(anchor)
-		if self.icon then
-			local partyConfig = G_RLF.DbAccessor:Feature(self.frameType, "partyLoot") or {}
-			if self.unit and partyConfig.enablePartyAvatar then
-				self.PrimaryLineLayout:SetPoint(anchor, self.UnitPortrait, iconAnchor, xOffset, 0)
-			else
-				self.PrimaryLineLayout:SetPoint(anchor, self.Icon, iconAnchor, xOffset, 0)
-			end
-		else
-			self.PrimaryLineLayout:SetPoint(anchor, self.Icon, anchor, 0, 0)
-		end
-
-		if enabledSecondaryRowText and self.secondaryText ~= nil and self.secondaryText ~= "" then
-			self.SecondaryLineLayout:ClearAllPoints()
-			self.SecondaryText:SetJustifyH(anchor)
-			if self.icon then
-				if self.unit then
-					local partyConfig = G_RLF.DbAccessor:Feature(self.frameType, "partyLoot") or {}
-					if partyConfig.enablePartyAvatar then
-						self.SecondaryLineLayout:SetPoint(anchor, self.UnitPortrait, iconAnchor, xOffset, 0)
-					else
-						self.SecondaryLineLayout:SetPoint(anchor, self.Icon, iconAnchor, xOffset, 0)
-					end
-					if self.elementSecondaryTextColor then
-						self.SecondaryText:SetTextColor(
-							self.elementSecondaryTextColor.r,
-							self.elementSecondaryTextColor.g,
-							self.elementSecondaryTextColor.b,
-							1
-						)
-					end
-				else
-					self.SecondaryLineLayout:SetPoint(anchor, self.Icon, iconAnchor, xOffset, 0)
-				end
-			else
-				self.SecondaryLineLayout:SetPoint(anchor, self.Icon, anchor, 0, 0)
-			end
-			-- Vertical split: PrimaryLineLayout takes the top slot;
-			-- SecondaryLineLayout takes the bottom slot.
-			self.PrimaryLineLayout:SetPoint("BOTTOM", self, "CENTER", 0, padding)
-			self.SecondaryLineLayout:SetPoint("TOP", self, "CENTER", 0, -padding)
-			self.SecondaryLineLayout:SetShown(true)
-		end
+		self:_LayoutRowLines(textAlignment, iconOnLeft, padding, spacing)
 	end
 	-- Keep coin display denomination FontStrings in sync with the main font
 	-- pipeline so that a font-settings change is reflected on both sides.
 	self:StyleCoinDisplay()
 	self:StyleSecondaryCoinDisplay()
+end
+
+--- Position both primary and secondary line layouts anchored to the icon.
+--- Extracted from StyleText() so it can also be called externally (e.g. from
+--- LootRollRowMixin after setting secondaryText).
+---@param textAlignment string
+---@param iconOnLeft boolean
+---@param padding number
+---@param spacing number
+function RLF_RowTextMixin:_LayoutRowLines(textAlignment, iconOnLeft, padding, spacing)
+	local anchor = "LEFT"
+	local iconAnchor = "RIGHT"
+	local xOffset = spacing
+	if not iconOnLeft then
+		anchor = "RIGHT"
+		iconAnchor = "LEFT"
+		xOffset = xOffset * -1
+	end
+	self.PrimaryLineLayout.spacing = spacing
+	self.SecondaryLineLayout.spacing = spacing
+	if iconOnLeft then
+		self.PrimaryLineLayout.childLayoutDirection = nil
+		self.SecondaryLineLayout.childLayoutDirection = nil
+	else
+		self.PrimaryLineLayout.childLayoutDirection = "rightToLeft"
+		self.SecondaryLineLayout.childLayoutDirection = "rightToLeft"
+	end
+	self.PrimaryLineLayout:ClearAllPoints()
+	self.PrimaryText:SetJustifyH(anchor)
+	if self.icon then
+		local partyConfig = G_RLF.DbAccessor:Feature(self.frameType, "partyLoot") or {}
+		if self.unit and partyConfig.enablePartyAvatar then
+			self.PrimaryLineLayout:SetPoint(anchor, self.UnitPortrait, iconAnchor, xOffset, 0)
+		else
+			self.PrimaryLineLayout:SetPoint(anchor, self.Icon, iconAnchor, xOffset, 0)
+		end
+	else
+		self.PrimaryLineLayout:SetPoint(anchor, self.Icon, anchor, 0, 0)
+	end
+
+	if self.secondaryText ~= nil and self.secondaryText ~= "" then
+		self.SecondaryLineLayout:ClearAllPoints()
+		self.SecondaryText:SetJustifyH(anchor)
+		if self.icon then
+			if self.unit then
+				local partyConfig = G_RLF.DbAccessor:Feature(self.frameType, "partyLoot") or {}
+				if partyConfig.enablePartyAvatar then
+					self.SecondaryLineLayout:SetPoint(anchor, self.UnitPortrait, iconAnchor, xOffset, 0)
+				else
+					self.SecondaryLineLayout:SetPoint(anchor, self.Icon, iconAnchor, xOffset, 0)
+				end
+				if self.elementSecondaryTextColor then
+					self.SecondaryText:SetTextColor(
+						self.elementSecondaryTextColor.r,
+						self.elementSecondaryTextColor.g,
+						self.elementSecondaryTextColor.b,
+						1
+					)
+				end
+			else
+				self.SecondaryLineLayout:SetPoint(anchor, self.Icon, iconAnchor, xOffset, 0)
+			end
+		else
+			self.SecondaryLineLayout:SetPoint(anchor, self.Icon, anchor, 0, 0)
+		end
+		-- Vertical split: PrimaryLineLayout takes the top slot;
+		-- SecondaryLineLayout takes the bottom slot.
+		self.PrimaryLineLayout:SetPoint("BOTTOM", self, "CENTER", 0, padding)
+		self.SecondaryLineLayout:SetPoint("TOP", self, "CENTER", 0, -padding)
+		self.SecondaryLineLayout:SetShown(true)
+	end
 end
 
 function RLF_RowTextMixin:CreateTopLeftText()

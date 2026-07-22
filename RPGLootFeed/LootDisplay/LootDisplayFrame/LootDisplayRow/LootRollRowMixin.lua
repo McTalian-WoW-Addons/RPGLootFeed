@@ -135,23 +135,6 @@ function RLF_LootRollRowMixin:_LayoutRollButtons()
 	end
 end
 
---- Position the roll result text in place of the buttons.
-function RLF_LootRollRowMixin:_LayoutRollResultText()
-	if not self._rollResultText then
-		return
-	end
-
-	local primaryTextEnd = self.PrimaryText:GetRight() or 60
-	local rowWidth = self:GetWidth() or 256
-	local maxX = rowWidth - PADDING_RIGHT
-
-	self._rollResultText:ClearAllPoints()
-	self._rollResultText:SetPoint("LEFT", self, "LEFT", primaryTextEnd + 8, 0)
-	self._rollResultText:SetPoint("RIGHT", self, "RIGHT", -(PADDING_RIGHT + 4), 0)
-	self._rollResultText:SetJustifyH("RIGHT")
-	self._rollResultText:Show()
-end
-
 --- Update the timer bar from GetLootRollTimeLeft (or static display for samples).
 function RLF_LootRollRowMixin:_UpdateRollTimer()
 	if not self.rollID then
@@ -186,27 +169,17 @@ end
 ---@param isWinning boolean  Whether this is currently the winning roll
 function RLF_LootRollRowMixin:OnMainSpecNeedRoll(roll, isWinning)
 	if self._rolled then
-		-- Update existing result text with roll value
-		if self._rollResultText then
-			local color = isWinning and GREEN_FONT_COLOR or RED_FONT_COLOR
-			self._rollResultText:SetFormattedText(
-				"%sNeed %s%d|r",
-				color:GetHex() or "",
-				color.r < 0.5 and "" or "",
-				roll
-			)
-		end
+		local color = isWinning and "ff00ff00" or "ffb0b0b0"
+		self.ItemCountText:SetFormattedText("|c%sNeed (%d)|r", color, roll)
+		self.ItemCountText:Show()
 	end
 end
 
---- Handle LOOT_ITEM_ROLL_WON — update row to show win state.
+--- Handle LOOT_ITEM_ROLL_WON — update row to show win state in ItemCountText.
 ---@param rollType number
 ---@param roll number
-function RLF_LootRollRowMixin:OnRollWon(rollType, roll)
-	if not self._rollResultText then
-		self._rollResultText = self:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-	end
-
+---@param isUpgraded? boolean
+function RLF_LootRollRowMixin:OnRollWon(rollType, roll, isUpgraded)
 	local rollTypeNames = {
 		[1] = NEED,
 		[2] = GREED,
@@ -214,12 +187,279 @@ function RLF_LootRollRowMixin:OnRollWon(rollType, roll)
 		[4] = TRANSMOGRIFICATION,
 	}
 	local typeName = rollTypeNames[rollType] or ""
-	self._rollResultText:SetFormattedText("|cff00ff00%s Won! (%d)|r", typeName, roll)
-	self._rollResultText:Show()
-	self:_LayoutRollResultText()
+	local upgradeText = isUpgraded and " (Upgraded!)" or ""
+	self.ItemCountText:SetFormattedText("|cff00ff00%s Won! (%d)%s|r", typeName, roll, upgradeText)
+	self.ItemCountText:Show()
+end
+
+---@class RLF_RollTooltipIcons
+local ROLL_TOOLTIP_ICONS = {
+	-- Need Main Spec (0) and Need Off Spec (1) both use the dice icon
+	[0] = "|TInterface\\Buttons\\UI-GroupLoot-Dice-Up:16:16|t",
+	[1] = "|TInterface\\Buttons\\UI-GroupLoot-Dice-Up:16:16|t",
+	-- Transmog (atlas from group loot toast)
+	[2] = "|A:lootroll-toast-icon-transmog-up:16:16|a",
+	-- Greed
+	[3] = "|TInterface\\Buttons\\UI-GroupLoot-Coin-Up:16:16|t",
+	-- Pass
+	[5] = "|TInterface\\Buttons\\UI-GroupLoot-Pass-Up:16:16|t",
+}
+
+--- Build grouped roll tooltip lines: sections for Waiting, Need, Greed, Transmog, Pass.
+--- Each section shows a header with count, then player lines sorted by roll value descending.
+---@param dropInfo table
+---@param lines table  Output: list of {text, r, g, b} tuples
+function RLF_LootRollRowMixin:_BuildRollTooltipLines(dropInfo, lines)
+	-- Group players by state
+	local groups = {
+		waiting = {}, -- state 4
+		need = {}, -- states 0, 1
+		greed = {}, -- state 3
+		transmog = {}, -- state 2
+		pass = {}, -- state 5
+	}
+	local order = { "waiting", "need", "greed", "transmog", "pass" }
+	local sectionLabels = {
+		waiting = LOOT_HISTORY_WAITING_ON,
+		need = NEED,
+		greed = GREED,
+		transmog = TRANSMOGRIFICATION,
+		pass = PASS,
+	}
+	local sectionColors = {
+		waiting = { 1, 1, 0.5 },
+		need = { 1, 1, 1 },
+		greed = { 1, 1, 1 },
+		transmog = { 1, 1, 1 },
+		pass = { 0.7, 0.7, 0.7 },
+	}
+
+	for _, ri in ipairs(dropInfo.rollInfos) do
+		local classColor = RAID_CLASS_COLORS[ri.playerClass]
+		local r, g, b = 1, 1, 1
+		if classColor then
+			r, g, b = classColor.r, classColor.g, classColor.b
+		end
+		if ri.isSelf then
+			r, g, b = 0.3, 1, 0.3
+		end
+
+		local playerData = {
+			name = ri.playerName,
+			classColor = classColor,
+			r = r,
+			g = g,
+			b = b,
+			roll = ri.roll,
+			isWinner = ri.isWinner,
+			isSelf = ri.isSelf,
+			state = ri.state,
+		}
+
+		if ri.state == 4 then
+			table.insert(groups.waiting, playerData)
+		elseif ri.state == 0 or ri.state == 1 then
+			playerData.spec = ri.state == 0 and "MainSpec" or "OffSpec"
+			table.insert(groups.need, playerData)
+		elseif ri.state == 3 then
+			table.insert(groups.greed, playerData)
+		elseif ri.state == 2 then
+			table.insert(groups.transmog, playerData)
+		elseif ri.state == 5 then
+			table.insert(groups.pass, playerData)
+		end
+	end
+
+	-- Sort sections with rolls by value descending (nil = no roll, sorts last)
+	local function sortByRoll(a, b)
+		if a.roll and b.roll then
+			return a.roll > b.roll
+		end
+		if a.roll then
+			return true
+		end
+		if b.roll then
+			return false
+		end
+		return a.name < b.name
+	end
+	table.sort(groups.need, sortByRoll)
+	table.sort(groups.greed, sortByRoll)
+	table.sort(groups.transmog, sortByRoll)
+
+	-- Build lines per section
+	for _, section in ipairs(order) do
+		local players = groups[section]
+		if #players > 0 then
+			local hdr = sectionLabels[section]
+			local hc = sectionColors[section]
+			table.insert(lines, { format("%s (%d)", hdr, #players), hc[1], hc[2], hc[3] })
+			for _, p in ipairs(players) do
+				local iconTex = ROLL_TOOLTIP_ICONS[p.state] or ""
+				local winnerMark = p.isWinner and " |cff00ff00<-- Winner|r" or ""
+				local selfMark = p.isSelf and " *" or ""
+				if p.roll then
+					local specStr = p.spec and format(", %s", p.spec) or ""
+					table.insert(lines, {
+						format("  %s%s (%d%s)%s%s", iconTex, p.name, p.roll, specStr, winnerMark, selfMark),
+						p.r,
+						p.g,
+						p.b,
+					})
+				else
+					table.insert(lines, { format("  %s%s%s", iconTex, p.name, selfMark), p.r, p.g, p.b })
+				end
+			end
+		end
+	end
+end
+
+--- Show a tooltip with detailed per-player roll info in grouped sections.
+function RLF_LootRollRowMixin:_ShowRollTooltip()
+	local dropInfo = self._rollDropInfo
+	if not dropInfo or not dropInfo.rollInfos then
+		return
+	end
+
+	local lines = {}
+	self:_BuildRollTooltipLines(dropInfo, lines)
+	if #lines == 0 then
+		return
+	end
+
+	GameTooltip:SetOwner(self.SecondaryText, "ANCHOR_RIGHT")
+	GameTooltip:AddLine(LOOT_ROLLS, 1, 1, 1)
+	GameTooltip:AddLine(" ")
+	for _, line in ipairs(lines) do
+		GameTooltip:AddLine(line[1], line[2], line[3], line[4])
+	end
+	GameTooltip:Show()
+end
+
+function RLF_LootRollRowMixin:_HideRollTooltip()
+	GameTooltip:Hide()
+end
+
+--- Append grouped roll info lines to the existing item tooltip.
+function RLF_LootRollRowMixin:_AppendRollTooltipToItem()
+	local dropInfo = self._rollDropInfo
+	if not dropInfo or not dropInfo.rollInfos then
+		return
+	end
+
+	local lines = {}
+	self:_BuildRollTooltipLines(dropInfo, lines)
+	if #lines == 0 then
+		return
+	end
+
+	GameTooltip:AddLine(" ")
+	GameTooltip:AddLine(LOOT_ROLLS, 1, 1, 1)
+	GameTooltip:AddLine(" ")
+	for _, line in ipairs(lines) do
+		GameTooltip:AddLine(line[1], line[2], line[3], line[4])
+	end
+	GameTooltip:Show()
+end
+
+--- Setup tooltip on the secondary text for detailed roll info.
+function RLF_LootRollRowMixin:_SetupRollTooltip()
+	self.SecondaryText:SetScript("OnEnter", function()
+		self:_ShowRollTooltip()
+	end)
+	self.SecondaryText:SetScript("OnLeave", function()
+		self:_HideRollTooltip()
+	end)
+end
+
+--- Update the row's display with per-player roll results from loot history.
+--- Secondary text shows "Waiting on N player(s)" while unresolved.
+--- Primary text shows winner, all passed, or current leader when player has rolled.
+---@param dropInfo table EncounterLootDropInfo from C_LootHistory
+function RLF_LootRollRowMixin:SetRollResults(dropInfo)
+	if not dropInfo or not dropInfo.rollInfos then
+		return
+	end
+
+	-- Store for tooltip access
+	self._rollDropInfo = dropInfo
+
+	-- Count states
+	local waitingCount = 0
+	local allPassed = true
+	for _, ri in ipairs(dropInfo.rollInfos) do
+		if ri.state == 4 then -- NoRoll
+			waitingCount = waitingCount + 1
+		end
+		if ri.state ~= 5 and ri.state ~= 4 then -- Not Pass and not NoRoll
+			allPassed = false
+		end
+	end
+
+	-- Secondary text: waiting count with tooltip, or blank.
+	-- Only shown on the secondary line when the user has enabled secondary row text.
+	-- When disabled, the waiting info is still available via hover tooltip.
+	--
+	-- NOTE: StyleText() skips anchoring SecondaryLineLayout when secondaryText is nil
+	-- (which it always is during BootstrapFromElement — UpdateSecondaryText clears it).
+	-- Call _LayoutRowLines() directly to anchor both lines with the vertical split.
+	local stylingDb = G_RLF.DbAccessor:Styling(self.frameType)
+	if waitingCount > 0 and stylingDb.enabledSecondaryRowText then
+		self.secondaryText = format("Waiting on %d player(s)", waitingCount)
+		self.SecondaryText:SetText(self.secondaryText)
+		self.SecondaryText:Show()
+		local sizingDb = G_RLF.DbAccessor:Sizing(self.frameType)
+		local spacing = (stylingDb.rowTextSpacing or 0) == 0 and (sizingDb.iconSize / 4) or stylingDb.rowTextSpacing
+		self:_LayoutRowLines(
+			stylingDb.textAlignment,
+			stylingDb.textAlignment ~= G_RLF.TextAlignment.RIGHT,
+			sizingDb.padding,
+			spacing
+		)
+		self.SecondaryLineLayout:Show()
+		self:LayoutSecondaryLine()
+		self:_SetupRollTooltip()
+	else
+		self.secondaryText = nil
+		self.SecondaryText:Hide()
+		self.SecondaryLineLayout:Hide()
+	end
+
+	-- ItemCountText: show winner, all passed, or current leader on the primary line
+	if dropInfo.winner then
+		local classColor = RAID_CLASS_COLORS[dropInfo.winner.playerClass]
+		local rollTypeStr = ""
+		if dropInfo.winner.state == 0 or dropInfo.winner.state == 1 then
+			rollTypeStr = NEED
+		elseif dropInfo.winner.state == 2 then
+			rollTypeStr = TRANSMOGRIFICATION
+		elseif dropInfo.winner.state == 3 then
+			rollTypeStr = GREED
+		end
+
+		if dropInfo.winner.isSelf then
+			self.ItemCountText:SetFormattedText("|cff00ff00You won! (%s, %d)|r", rollTypeStr, dropInfo.winner.roll)
+		else
+			local name = classColor and classColor:WrapTextInColorCode(dropInfo.winner.playerName)
+				or dropInfo.winner.playerName
+			self.ItemCountText:SetFormattedText("%s won (%s, %d)", name, rollTypeStr, dropInfo.winner.roll)
+		end
+		self.ItemCountText:Show()
+	elseif allPassed then
+		self.ItemCountText:SetFormattedText("|cffb0b0b0%s|r", LOOT_HISTORY_ALL_PASSED)
+		self.ItemCountText:Show()
+	elseif self._rolled and dropInfo.currentLeader then
+		-- Only show leader text if the player has already rolled
+		local classColor = RAID_CLASS_COLORS[dropInfo.currentLeader.playerClass]
+		local name = classColor and classColor:WrapTextInColorCode(dropInfo.currentLeader.playerName)
+			or dropInfo.currentLeader.playerName
+		self.ItemCountText:SetFormattedText("%s leads (%d)", name, dropInfo.currentLeader.roll)
+		self.ItemCountText:Show()
+	end
 end
 
 --- Called after the player clicks a roll button.
+--- Shows roll selection in ItemCountText (primary line, right of item link).
 ---@param label string
 ---@param id number
 function RLF_LootRollRowMixin:OnRollCast(label, id)
@@ -230,18 +470,13 @@ function RLF_LootRollRowMixin:OnRollCast(label, id)
 		btn:Hide()
 	end
 
-	-- Show result text
-	if not self._rollResultText then
-		self._rollResultText = self:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-	end
-
+	-- Show roll selection in ItemCountText on the primary line
 	if id == LOOT_ROLL_TYPE_PASS then
-		self._rollResultText:SetText(PASS)
+		self.ItemCountText:SetFormattedText("|cffb0b0b0%s|r", PASS)
 	else
-		self._rollResultText:SetText(label)
+		self.ItemCountText:SetText(label)
 	end
-	self._rollResultText:Show()
-	self:_LayoutRollResultText()
+	self.ItemCountText:Show()
 end
 
 ---@param element RLF_BaseLootElement
@@ -347,6 +582,29 @@ function RLF_LootRollRowMixin:PostBootstrapFromElement(element)
 	self._rollTimerFrame:SetScript("OnUpdate", function()
 		self:_UpdateRollTimer()
 	end)
+
+	-- Phase 2 enrichment: mock drop info for sample/test rows to showcase the feature
+	if element.mockDropInfo then
+		self:SetRollResults(element.mockDropInfo)
+	end
+
+	-- Hook the ClickableButton tooltip to append roll info after the item tooltip
+	if self.ClickableButton then
+		local origOnEnter = self.ClickableButton:GetScript("OnEnter")
+		local origOnLeave = self.ClickableButton:GetScript("OnLeave")
+		self.ClickableButton:SetScript("OnEnter", function()
+			if origOnEnter then
+				origOnEnter()
+			end
+			-- Append roll info lines after item tooltip
+			if self._rollDropInfo then
+				self:_AppendRollTooltipToItem()
+			end
+		end)
+		if origOnLeave then
+			self.ClickableButton:SetScript("OnLeave", origOnLeave)
+		end
+	end
 end
 
 --- Cleanup all loot roll state (called from Reset).
@@ -365,11 +623,14 @@ function RLF_LootRollRowMixin:CleanupLootRoll()
 		self._rollButtons = nil
 	end
 
-	-- Destroy result text
-	if self._rollResultText then
-		self._rollResultText:Hide()
-		self._rollResultText:SetText(nil)
-	end
+	-- Reset roll status text on primary line
+	self.ItemCountText:SetText(nil)
+	self.ItemCountText:Hide()
+
+	-- Clear loot history data and tooltip hooks
+	self._rollDropInfo = nil
+	self.SecondaryText:SetScript("OnEnter", nil)
+	self.SecondaryText:SetScript("OnLeave", nil)
 
 	-- Stop timer frame
 	if self._rollTimerFrame then

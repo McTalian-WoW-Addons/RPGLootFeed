@@ -201,6 +201,42 @@ local function runLootRollsIntegrationTest()
 		IsEnabled = function()
 			return true
 		end,
+		mockDropInfo = {
+			lootListID = 1,
+			itemHyperlink = "|cff0070dd|Hitem:14344::::::::60:::::|h[Large Brilliant Shard]|h|r",
+			rollInfos = {
+				{
+					playerName = "TestWar",
+					playerClass = "WARRIOR",
+					state = 0,
+					roll = 87,
+					isWinner = false,
+					isSelf = false,
+				},
+				{
+					playerName = "TestMage",
+					playerClass = "MAGE",
+					state = 3,
+					roll = nil,
+					isWinner = false,
+					isSelf = false,
+				},
+				{
+					playerName = "TestPriest",
+					playerClass = "PRIEST",
+					state = 5,
+					roll = nil,
+					isWinner = false,
+					isSelf = false,
+				},
+				{ playerName = "You", playerClass = "HUNTER", state = 4, roll = nil, isWinner = false, isSelf = true },
+			},
+			currentLeader = { playerName = "TestWar", playerClass = "WARRIOR", roll = 87 },
+			winner = nil,
+			allPassed = false,
+			startTime = 0,
+			duration = 60,
+		},
 	}):Show()
 	return 1
 end

@@ -220,12 +220,14 @@ function G_RLF.LootElementBase:fromPayload(payload)
 	-- Used directly by the row mixin; nil for non-roll types
 	element.rollID = payload.rollID
 	element.rollDuration = payload.rollDuration
+	element.itemLink = payload.itemLink
 	-- Eligibility overrides used by sample rows (avoids GetLootRollItemInfo call)
 	element.canNeed = payload.canNeed
 	element.canGreed = payload.canGreed
 	element.canTransmog = payload.canTransmog
 	element.reasonNeed = payload.reasonNeed
 	element.reasonGreed = payload.reasonGreed
+	element.mockDropInfo = payload.mockDropInfo
 
 	-- ── Backwards compatibility: keep itemCount for modules not yet migrated ──
 	element.itemCount = payload.itemCount

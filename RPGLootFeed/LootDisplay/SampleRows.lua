@@ -451,6 +451,49 @@ function LootDisplay:CreateSampleRows(frame)
 				IsEnabled = function()
 					return true
 				end,
+				mockDropInfo = {
+					lootListID = 1,
+					itemHyperlink = SAMPLE_ITEM_LINK,
+					rollInfos = {
+						{
+							playerName = "PlayerA",
+							playerClass = "WARRIOR",
+							state = 0,
+							roll = 87,
+							isWinner = false,
+							isSelf = false,
+						},
+						{
+							playerName = "PlayerB",
+							playerClass = "MAGE",
+							state = 3,
+							roll = nil,
+							isWinner = false,
+							isSelf = false,
+						},
+						{
+							playerName = "PlayerC",
+							playerClass = "PRIEST",
+							state = 5,
+							roll = nil,
+							isWinner = false,
+							isSelf = false,
+						},
+						{
+							playerName = "You",
+							playerClass = "HUNTER",
+							state = 4,
+							roll = nil,
+							isWinner = false,
+							isSelf = true,
+						},
+					},
+					currentLeader = { playerName = "PlayerA", playerClass = "WARRIOR", roll = 87 },
+					winner = nil,
+					allPassed = false,
+					startTime = 0,
+					duration = 60,
+				},
 			}):Show()
 		end
 	end
