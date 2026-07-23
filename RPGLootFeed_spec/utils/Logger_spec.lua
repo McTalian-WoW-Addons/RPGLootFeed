@@ -123,6 +123,18 @@ describe("Logger module", function()
 		end)
 
 		it("hides the frame if it is already shown", function()
+			local frameVisible = false
+			Logger.frame = {
+				IsShown = function()
+					return frameVisible
+				end,
+				Show = function()
+					frameVisible = true
+				end,
+				Hide = function()
+					frameVisible = false
+				end,
+			}
 			Logger:Show()
 			spy.on(Logger, "Hide")
 			Logger:Show()

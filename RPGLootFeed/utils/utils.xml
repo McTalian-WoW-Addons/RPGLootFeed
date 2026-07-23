@@ -15,6 +15,7 @@
   <Script file="ItemInfoTransmog.lua"/>
   <Script file="ItemInfoEquipment.lua"/>
   <Script file="Logger.lua"/>
+  <Script file="LoggerUI.lua"/>
   <Script file="Maps.lua"/>
   <Script file="Queue.lua"/>
   <Script file="HistoryService.lua"/>
