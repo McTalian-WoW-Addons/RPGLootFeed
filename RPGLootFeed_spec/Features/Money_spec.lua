@@ -72,6 +72,7 @@ describe("Money", function()
 
 		-- Load real LootElementBase so elements are fully constructed.
 		assert(loadfile("RPGLootFeed/Features/_Internals/LootElementBase.lua"))("TestAddon", ns)
+		assert(loadfile("RPGLootFeed/utils/FeatureRegistry.lua"))("TestAddon", ns)
 		assert.is_not_nil(ns.LootElementBase)
 
 		-- Load TextTemplateEngine before Money.lua so the DI entry exists.
@@ -160,7 +161,7 @@ describe("Money", function()
 		}
 
 		-- Load Money – the FeatureBase mock above resolves DI deps and injects logging.
-		Money = assert(loadfile("RPGLootFeed/Features/Money.lua"))("TestAddon", ns)
+		Money = assert(loadfile("RPGLootFeed/Features/Money/Money.lua"))("TestAddon", ns)
 
 		-- Override DI-resolved mocks for full test isolation per test run.
 		Money.moneyApi = {

@@ -2,6 +2,9 @@
             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
             xsi:schemaLocation="http://www.blizzard.com/wow/ui/
 ..\FrameXML\UI.xsd">
-    <Script file="AuctionIntegrations.lua"/>
     <Script file="ItemLoot.lua"/>
+    <Script file="ItemLootConfig.lua"/>
+    <Script file="ItemLootSample.lua"/>
+    <Script file="AuctionIntegrations.lua"/>
+    <Script file="Register.lua"/>
 </Ui>

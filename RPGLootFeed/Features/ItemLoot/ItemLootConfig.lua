@@ -4,16 +4,12 @@ local addonName, ns = ...
 ---@class G_RLF
 local G_RLF = ns
 
-local ItemConfig = {}
-
 local lsm = G_RLF.lsm
-
 local PricesEnum = G_RLF.PricesEnum
 
 local AH_CONFIRM_DIALOG = "RPGLOOTFEED_CONFIRM_AH_SOURCE"
 local PRICES_CONFIRM_DIALOG = "RPGLOOTFEED_CONFIRM_PRICES_MODE"
 
---- Returns true when a PricesEnum value requires an active AH integration.
 local function isAHBasedMode(mode)
 	return mode == PricesEnum.AH
 		or mode == PricesEnum.VendorAH
@@ -21,7 +17,6 @@ local function isAHBasedMode(mode)
 		or mode == PricesEnum.Highest
 end
 
---- Returns the display label for an AH-based PricesEnum value.
 local function ahPriceModeLabel(mode)
 	if mode == PricesEnum.AH then
 		return G_RLF.L["Auction Price"]
@@ -35,8 +30,6 @@ local function ahPriceModeLabel(mode)
 	return mode
 end
 
---- Lazily registers the StaticPopup confirmation dialog for AH source changes.
---- Guarded so it is a no-op outside of the WoW client (e.g. in unit tests).
 local function registerAHConfirmDialog()
 	if not StaticPopupDialogs or StaticPopupDialogs[AH_CONFIRM_DIALOG] then
 		return
@@ -61,8 +54,6 @@ local function registerAHConfirmDialog()
 	}
 end
 
---- Lazily registers the StaticPopup confirmation dialog for price mode changes.
---- Guarded so it is a no-op outside of the WoW client (e.g. in unit tests).
 local function registerPricesConfirmDialog()
 	if not StaticPopupDialogs or StaticPopupDialogs[PRICES_CONFIRM_DIALOG] then
 		return
@@ -87,17 +78,41 @@ local function registerPricesConfirmDialog()
 	}
 end
 
+local function testIcon(frameId, icon)
+	local styleDb = G_RLF.DbAccessor:Styling(frameId)
+	local secondaryFontSize = styleDb.secondaryFontSize
+	local sizeCoeff = G_RLF.AtlasIconCoefficients[icon] or 1
+	local atlasIconSize = secondaryFontSize * sizeCoeff
+	return string.format(G_RLF.L["Chosen Icon"], CreateAtlasMarkup(icon, atlasIconSize, atlasIconSize))
+end
+
+local function validateAtlas(_, value)
+	local info = C_Texture.GetAtlasInfo(value)
+	if info then
+		return true
+	end
+	return string.format(G_RLF.L["InvalidAtlasTexture"], value)
+end
+
+local function soundOptionValues()
+	local sounds = {}
+	for k, v in pairs(lsm:HashTable(lsm.MediaType.SOUND)) do
+		sounds[v] = k
+	end
+	return sounds
+end
+
 --- Build the AceConfig options group for Item Loot on the given frame.
---- @param frameId integer
---- @param order number
---- @return table
-function G_RLF.BuildItemLootArgs(frameId, order)
+--- Called from the config system by function name.
+---@param frameId integer
+---@param order number
+---@return table
+function G_RLF.ItemLoot:BuildConfigArgs(frameId, order)
 	local function fc()
 		return G_RLF.db.global.frames[frameId].features.itemLoot
 	end
 	return {
 		type = "group",
-		handler = ItemConfig,
 		name = G_RLF.L["Item Loot Config"],
 		order = order,
 		args = {
@@ -226,8 +241,6 @@ function G_RLF.BuildItemLootArgs(frameId, order)
 										values[PricesEnum.AHVendor] = G_RLF.L["Auction Price then Vendor Price"]
 										values[PricesEnum.Highest] = G_RLF.L["Highest Price"]
 									end
-									-- Include the saved AH-based mode even if unavailable so the
-									-- dropdown shows the real preference rather than an empty entry.
 									local savedMode = fc().pricesForSellableItems
 									if
 										isAHBasedMode(savedMode)
@@ -251,7 +264,6 @@ function G_RLF.BuildItemLootArgs(frameId, order)
 										table.insert(order, PricesEnum.AHVendor)
 										table.insert(order, PricesEnum.Highest)
 									end
-									-- Append the unavailable saved mode at the end of the list.
 									local savedMode = fc().pricesForSellableItems
 									if
 										isAHBasedMode(savedMode)
@@ -262,21 +274,15 @@ function G_RLF.BuildItemLootArgs(frameId, order)
 									return order
 								end,
 								get = function()
-									-- Return the real saved value; if it is AH-based and unavailable
-									-- it resolves to the "(unavailable)" entry added in `values`.
 									return fc().pricesForSellableItems
 								end,
 								set = function(_, value)
 									local currentSaved = fc().pricesForSellableItems
 									local savedIsUnavailable = isAHBasedMode(currentSaved)
 										and G_RLF.AuctionIntegrations.numActiveIntegrations == 0
-
 									local function applyChange()
 										fc().pricesForSellableItems = value
 									end
-
-									-- Prompt the user before overwriting a preference for a mode
-									-- that requires an AH addon which is temporarily disabled.
 									if savedIsUnavailable and value ~= currentSaved and StaticPopup_Show then
 										registerPricesConfirmDialog()
 										StaticPopup_Show(
@@ -300,16 +306,12 @@ function G_RLF.BuildItemLootArgs(frameId, order)
 									local values = {}
 									local nilStr = G_RLF.AuctionIntegrations.nilIntegration:ToString()
 									values[nilStr] = nilStr
-
 									local activeIntegrations = G_RLF.AuctionIntegrations.activeIntegrations
-									local numActiveIntegrations = G_RLF.AuctionIntegrations.numActiveIntegrations
-									if activeIntegrations and numActiveIntegrations >= 1 then
-										for k, _ in pairs(activeIntegrations) do
+									if activeIntegrations and G_RLF.AuctionIntegrations.numActiveIntegrations >= 1 then
+										for k in pairs(activeIntegrations) do
 											values[k] = k
 										end
 									end
-									-- Include the saved value even if unavailable so the dropdown
-									-- shows the user's preference rather than an empty selection.
 									local savedSource = fc().auctionHouseSource
 									if
 										savedSource
@@ -325,17 +327,14 @@ function G_RLF.BuildItemLootArgs(frameId, order)
 									local sorted = {}
 									local nilStr = G_RLF.AuctionIntegrations.nilIntegration:ToString()
 									sorted[1] = nilStr
-
 									local activeIntegrations = G_RLF.AuctionIntegrations.activeIntegrations
-									local numActiveIntegrations = G_RLF.AuctionIntegrations.numActiveIntegrations
-									if activeIntegrations and numActiveIntegrations >= 1 then
+									if activeIntegrations and G_RLF.AuctionIntegrations.numActiveIntegrations >= 1 then
 										local i = 2
-										for k, _ in pairs(activeIntegrations) do
+										for k in pairs(activeIntegrations) do
 											sorted[i] = k
 											i = i + 1
 										end
 									end
-									-- Append the unavailable saved value at the end of the list.
 									local savedSource = fc().auctionHouseSource
 									if
 										savedSource
@@ -353,10 +352,10 @@ function G_RLF.BuildItemLootArgs(frameId, order)
 								end,
 								hidden = function()
 									local activeIntegrations = G_RLF.AuctionIntegrations.activeIntegrations
-									local numActiveIntegrations = G_RLF.AuctionIntegrations.numActiveIntegrations
-									if not activeIntegrations or numActiveIntegrations == 0 then
-										-- Still reveal when there is an unavailable saved preference so
-										-- the user can see and clear it.
+									if
+										not activeIntegrations
+										or G_RLF.AuctionIntegrations.numActiveIntegrations == 0
+									then
 										local saved = fc().auctionHouseSource
 										local nilStr = G_RLF.AuctionIntegrations.nilIntegration:ToString()
 										return not saved or saved == nilStr
@@ -368,8 +367,6 @@ function G_RLF.BuildItemLootArgs(frameId, order)
 									if not saved then
 										return G_RLF.AuctionIntegrations.nilIntegration:ToString()
 									end
-									-- Return the saved value directly; if it is unavailable it will
-									-- resolve to the "(unavailable)" entry added in `values`.
 									return saved
 								end,
 								set = function(_, value)
@@ -379,7 +376,6 @@ function G_RLF.BuildItemLootArgs(frameId, order)
 									local savedIsUnavailable = currentSaved
 										and currentSaved ~= nilStr
 										and (not activeIntegrations or not activeIntegrations[currentSaved])
-
 									local function applyChange()
 										fc().auctionHouseSource = value
 										if value ~= nilStr and activeIntegrations and activeIntegrations[value] then
@@ -391,9 +387,6 @@ function G_RLF.BuildItemLootArgs(frameId, order)
 											G_RLF.AuctionIntegrations.activeIntegration = nil
 										end
 									end
-
-									-- Prompt the user before overwriting a preference for an addon
-									-- that is only temporarily disabled.
 									if savedIsUnavailable and value ~= currentSaved and StaticPopup_Show then
 										registerAHConfirmDialog()
 										StaticPopup_Show(AH_CONFIRM_DIALOG, currentSaved, nil, { apply = applyChange })
@@ -419,14 +412,14 @@ function G_RLF.BuildItemLootArgs(frameId, order)
 								set = function(_, value)
 									fc().vendorIconTexture = value
 								end,
-								validate = "ValidateAtlas",
+								validate = validateAtlas,
 								order = 3,
 							},
 							testVendorIcon = {
 								type = "description",
 								name = function()
 									local icon = fc().vendorIconTexture
-									return ItemConfig:TestIcon(frameId, icon)
+									return testIcon(frameId, icon)
 								end,
 								width = "normal",
 								order = 3.1,
@@ -453,14 +446,14 @@ function G_RLF.BuildItemLootArgs(frameId, order)
 								set = function(_, value)
 									fc().auctionHouseIconTexture = value
 								end,
-								validate = "ValidateAtlas",
+								validate = validateAtlas,
 								order = 4,
 							},
 							testAuctionHouseIcon = {
 								type = "description",
 								name = function()
 									local icon = fc().auctionHouseIconTexture
-									return ItemConfig:TestIcon(frameId, icon)
+									return testIcon(frameId, icon)
 								end,
 								width = "normal",
 								order = 4.1,
@@ -790,10 +783,10 @@ function G_RLF.BuildItemLootArgs(frameId, order)
 								name = G_RLF.L["Highlight Mounts"],
 								desc = G_RLF.L["HighlightMountsDesc"],
 								width = "double",
-								get = function(info)
+								get = function()
 									return fc().itemHighlights.mounts
 								end,
-								set = function(info, value)
+								set = function(_, value)
 									fc().itemHighlights.mounts = value
 								end,
 								order = 1,
@@ -803,10 +796,10 @@ function G_RLF.BuildItemLootArgs(frameId, order)
 								name = G_RLF.L["Highlight Legendary Items"],
 								desc = G_RLF.L["HighlightLegendaryDesc"],
 								width = "double",
-								get = function(info)
+								get = function()
 									return fc().itemHighlights.legendary
 								end,
-								set = function(info, value)
+								set = function(_, value)
 									fc().itemHighlights.legendary = value
 								end,
 								order = 2,
@@ -816,10 +809,10 @@ function G_RLF.BuildItemLootArgs(frameId, order)
 								name = G_RLF.L["Highlight Items Better Than Equipped"],
 								desc = G_RLF.L["HighlightBetterThanEquippedDesc"],
 								width = "double",
-								get = function(info)
+								get = function()
 									return fc().itemHighlights.betterThanEquipped
 								end,
-								set = function(info, value)
+								set = function(_, value)
 									fc().itemHighlights.betterThanEquipped = value
 								end,
 								order = 3,
@@ -829,41 +822,23 @@ function G_RLF.BuildItemLootArgs(frameId, order)
 								name = G_RLF.L["Highlight Items with Tertiary Stats or Sockets"],
 								desc = G_RLF.L["HighlightTertiaryOrSocketDesc"],
 								width = "double",
-								get = function(info)
+								get = function()
 									return fc().itemHighlights.hasTertiaryOrSocket
 								end,
-								set = function(info, value)
+								set = function(_, value)
 									fc().itemHighlights.hasTertiaryOrSocket = value
 								end,
 								order = 4,
 							},
-							-- highlightBoE = {
-							--   type = "toggle",
-							--   name = G_RLF.L["Highlight BoE Items"],
-							--   desc = G_RLF.L["HighlightBoEDesc"],
-							--   width = "double",
-							--   get = function(info) return fc().itemHighlights.boe end,
-							--   set = function(info, value) fc().itemHighlights.boe = value end,
-							--   order = 3,
-							-- },
-							-- highlightBoP = {
-							--   type = "toggle",
-							--   name = G_RLF.L["Highlight BoP Items"],
-							--   desc = G_RLF.L["HighlightBoPDesc"],
-							--   width = "double",
-							--   get = function(info) return fc().itemHighlights.bop end,
-							--   set = function(info, value) fc().itemHighlights.bop = value end,
-							--   order = 4,
-							-- },
 							highlightQuest = {
 								type = "toggle",
 								name = G_RLF.L["Highlight Quest Items"],
 								desc = G_RLF.L["HighlightQuestDesc"],
 								width = "double",
-								get = function(info)
+								get = function()
 									return fc().itemHighlights.quest
 								end,
-								set = function(info, value)
+								set = function(_, value)
 									fc().itemHighlights.quest = value
 								end,
 								order = 5,
@@ -873,10 +848,10 @@ function G_RLF.BuildItemLootArgs(frameId, order)
 								name = G_RLF.L["Highlight New Transmog Items"],
 								desc = G_RLF.L["HighlightTransmogDesc"],
 								width = "double",
-								get = function(info)
+								get = function()
 									return fc().itemHighlights.transmog
 								end,
-								set = function(info, value)
+								set = function(_, value)
 									fc().itemHighlights.transmog = value
 								end,
 								order = 6,
@@ -921,7 +896,7 @@ function G_RLF.BuildItemLootArgs(frameId, order)
 								type = "select",
 								name = G_RLF.L["Mount Sound"],
 								desc = G_RLF.L["MountSoundDesc"],
-								values = "SoundOptionValues",
+								values = soundOptionValues,
 								get = function()
 									return fc().sounds.mounts.sound
 								end,
@@ -966,7 +941,7 @@ function G_RLF.BuildItemLootArgs(frameId, order)
 								type = "select",
 								name = G_RLF.L["Legendary Sound"],
 								desc = G_RLF.L["LegendarySoundDesc"],
-								values = "SoundOptionValues",
+								values = soundOptionValues,
 								get = function()
 									return fc().sounds.legendary.sound
 								end,
@@ -1011,7 +986,7 @@ function G_RLF.BuildItemLootArgs(frameId, order)
 								type = "select",
 								name = G_RLF.L["Better Than Equipped Sound"],
 								desc = G_RLF.L["BetterThanEquippedSoundDesc"],
-								values = "SoundOptionValues",
+								values = soundOptionValues,
 								get = function()
 									return fc().sounds.betterThanEquipped.sound
 								end,
@@ -1021,8 +996,8 @@ function G_RLF.BuildItemLootArgs(frameId, order)
 								disabled = function()
 									return not fc().enabled or not fc().sounds.betterThanEquipped.enabled
 								end,
-								width = "full",
 								order = 6,
+								width = "full",
 							},
 							transmog = {
 								type = "toggle",
@@ -1056,7 +1031,7 @@ function G_RLF.BuildItemLootArgs(frameId, order)
 								type = "select",
 								name = G_RLF.L["Transmog Sound"],
 								desc = G_RLF.L["TransmogSoundDesc"],
-								values = "SoundOptionValues",
+								values = soundOptionValues,
 								get = function()
 									return fc().sounds.transmog.sound
 								end,
@@ -1066,8 +1041,8 @@ function G_RLF.BuildItemLootArgs(frameId, order)
 								disabled = function()
 									return not fc().enabled or not fc().sounds.transmog.enabled
 								end,
-								width = "full",
 								order = 8,
+								width = "full",
 							},
 						},
 					},
@@ -1141,28 +1116,4 @@ function G_RLF.BuildItemLootArgs(frameId, order)
 	}
 end
 
-function ItemConfig:SoundOptionValues()
-	local sounds = {}
-	for k, v in pairs(lsm:HashTable(lsm.MediaType.SOUND)) do
-		sounds[v] = k
-	end
-	return sounds
-end
-
-function ItemConfig:TestIcon(frameId, icon)
-	local styleDb = G_RLF.DbAccessor:Styling(frameId)
-	local secondaryFontSize = styleDb.secondaryFontSize
-	local sizeCoeff = G_RLF.AtlasIconCoefficients[icon] or 1
-	local atlasIconSize = secondaryFontSize * sizeCoeff
-	return string.format(G_RLF.L["Chosen Icon"], CreateAtlasMarkup(icon, atlasIconSize, atlasIconSize))
-end
-
-function ItemConfig:ValidateAtlas(_, value)
-	local info = C_Texture.GetAtlasInfo(value)
-
-	if info then
-		return true
-	end
-
-	return string.format(G_RLF.L["InvalidAtlasTexture"], value)
-end
+return {}

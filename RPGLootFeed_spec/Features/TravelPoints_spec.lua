@@ -61,6 +61,7 @@ describe("TravelPoints module", function()
 
 		-- Load real LootElementBase so elements are fully constructed.
 		assert(loadfile("RPGLootFeed/Features/_Internals/LootElementBase.lua"))("TestAddon", ns)
+		assert(loadfile("RPGLootFeed/utils/FeatureRegistry.lua"))("TestAddon", ns)
 		assert.is_not_nil(ns.LootElementBase)
 
 		-- Setup minimal DI container so FeatureBase mock resolves deps.
@@ -133,7 +134,7 @@ describe("TravelPoints module", function()
 		}
 
 		-- Load TravelPoints – the FeatureBase mock above captures deps from ns.DI.
-		TravelPointsModule = assert(loadfile("RPGLootFeed/Features/TravelPoints.lua"))("TestAddon", ns)
+		TravelPointsModule = assert(loadfile("RPGLootFeed/Features/TravelPoints/TravelPoints.lua"))("TestAddon", ns)
 
 		-- Inject fresh mock adapter for full test isolation.
 		TravelPointsModule.travelPointsApi = {

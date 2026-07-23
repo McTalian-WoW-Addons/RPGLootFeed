@@ -72,6 +72,7 @@ describe("Experience module", function()
 
 		-- Load real LootElementBase so elements are fully constructed.
 		assert(loadfile("RPGLootFeed/Features/_Internals/LootElementBase.lua"))("TestAddon", ns)
+		assert(loadfile("RPGLootFeed/utils/FeatureRegistry.lua"))("TestAddon", ns)
 		assert.is_not_nil(ns.LootElementBase)
 
 		-- Load TextTemplateEngine before Experience.lua so DI can resolve it.
@@ -145,7 +146,7 @@ describe("Experience module", function()
 		}
 
 		-- Load Experience – the FeatureBase mock above captures deps from ns.DI.
-		XpModule = assert(loadfile("RPGLootFeed/Features/Experience.lua"))("TestAddon", ns)
+		XpModule = assert(loadfile("RPGLootFeed/Features/Experience/Experience.lua"))("TestAddon", ns)
 
 		-- Inject a default adapter so event-handler tests work without
 		-- patching _G directly.

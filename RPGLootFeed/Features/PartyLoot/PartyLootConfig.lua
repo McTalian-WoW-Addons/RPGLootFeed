@@ -4,22 +4,17 @@ local addonName, ns = ...
 ---@class G_RLF
 local G_RLF = ns
 
----@class PartyLootConfig
-local PartyLootConfig = {}
-
-G_RLF.ConfigHandlers.PartyLootConfig = PartyLootConfig
-
 --- Build the AceConfig options group for Party Loot on the given frame.
---- @param frameId integer
---- @param order number
---- @return table
-function G_RLF.BuildPartyLootArgs(frameId, order)
+--- Called from the config system by function name.
+---@param frameId integer
+---@param order number
+---@return table
+function G_RLF.PartyLoot:BuildConfigArgs(frameId, order)
 	local function fc()
 		return G_RLF.db.global.frames[frameId].features.partyLoot
 	end
 	return {
 		type = "group",
-		handler = PartyLootConfig,
 		name = G_RLF.L["Party Loot Config"],
 		order = order,
 		args = {
@@ -130,7 +125,7 @@ function G_RLF.BuildPartyLootArgs(frameId, order)
 						end,
 						set = function(_, value)
 							fc().onlyEpicAndAboveInRaid = value
-							local partyLoot = G_RLF.RLF:GetModule(G_RLF.FeatureModule.PartyLoot) --[[@as RLF_PartyLoot]]
+							local partyLoot = G_RLF.RLF:GetModule(G_RLF.FeatureModule.PartyLoot)
 							partyLoot:SetPartyLootFilters()
 						end,
 						order = 3,
@@ -145,7 +140,7 @@ function G_RLF.BuildPartyLootArgs(frameId, order)
 						end,
 						set = function(_, value)
 							fc().onlyEpicAndAboveInInstance = value
-							local partyLoot = G_RLF.RLF:GetModule(G_RLF.FeatureModule.PartyLoot) --[[@as RLF_PartyLoot]]
+							local partyLoot = G_RLF.RLF:GetModule(G_RLF.FeatureModule.PartyLoot)
 							partyLoot:SetPartyLootFilters()
 						end,
 						order = 4,
@@ -173,3 +168,5 @@ function G_RLF.BuildPartyLootArgs(frameId, order)
 		},
 	}
 end
+
+return {}
