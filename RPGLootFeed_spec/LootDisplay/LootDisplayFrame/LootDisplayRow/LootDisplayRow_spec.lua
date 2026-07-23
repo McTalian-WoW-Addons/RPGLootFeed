@@ -58,6 +58,8 @@ describe("LootDisplayRowMixin", function()
 		stub(r, "LogRow")
 		stub(r, "StyleExitAnimation")
 		stub(r, "Enter")
+		stub(r, "PostBootstrapFromElement")
+		stub(r, "CleanupLootRoll")
 		-- PrimaryText:GetAlpha returns 1 so UpdateQuantity doesn't defer
 		r.PrimaryText.GetAlpha = function()
 			return 1
@@ -888,6 +890,7 @@ describe("LootDisplayRowMixin", function()
 			end
 			row.isPinned = true
 			row.pinnedFrameOffset = 42
+			row.CleanupLootRoll = function() end
 
 			local function noopEl()
 				return {
