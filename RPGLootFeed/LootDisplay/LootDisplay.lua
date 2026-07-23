@@ -47,6 +47,14 @@ end
 
 -- Public methods
 
+--- Get a live frame by ID, defaulting to MAIN when omitted.
+--- Returns nil if the frame does not exist (caller must guard).
+--- @param frame? integer Frame ID, defaults to G_RLF.Frames.MAIN
+--- @return RLF_LootDisplayFrame|nil
+function LootDisplay:GetFrame(frame)
+	return lootFrames[frame or G_RLF.Frames.MAIN]
+end
+
 --- Create and register a single loot display WoW frame for the given DB frame ID.
 --- Safe to call multiple times — returns early if the frame already exists.
 --- @param id integer Frame ID (integer key into db.global.frames)
@@ -217,116 +225,94 @@ end
 --- update the position of the frame
 --- @param frame? G_RLF.Frames
 function LootDisplay:UpdatePosition(frame)
-	frame = frame or G_RLF.Frames.MAIN
-	if lootFrames[frame] == nil then
+	local f = self:GetFrame(frame)
+	if not f then
 		return
 	end
-	local positioningDb = G_RLF.DbAccessor:Positioning(frame)
-	lootFrames[frame]:ClearAllPoints()
-	lootFrames[frame]:SetPoint(
-		positioningDb.anchorPoint,
-		_G[positioningDb.relativePoint],
-		positioningDb.xOffset,
-		positioningDb.yOffset
-	)
+	local positioningDb = G_RLF.DbAccessor:Positioning(frame or G_RLF.Frames.MAIN)
+	f:ClearAllPoints()
+	f:SetPoint(positioningDb.anchorPoint, _G[positioningDb.relativePoint], positioningDb.xOffset, positioningDb.yOffset)
 end
 
 --- Update row positions for the frame
 --- @param frame? G_RLF.Frames
 function LootDisplay:UpdateRowPositions(frame)
-	frame = frame or G_RLF.Frames.MAIN
-	if lootFrames[frame] == nil then
-		return
+	local f = self:GetFrame(frame)
+	if f then
+		f:UpdateRowPositions()
 	end
-
-	lootFrames[frame]:UpdateRowPositions()
 end
 
 --- Update the strata of the frame
 --- @param frame? G_RLF.Frames
 function LootDisplay:UpdateStrata(frame)
-	frame = frame or G_RLF.Frames.MAIN
-	if lootFrames[frame] then
-		local positioningDb = G_RLF.DbAccessor:Positioning(frame)
-		lootFrames[frame]:SetFrameStrata(positioningDb.frameStrata)
-		lootFrames[frame]:UpdateOverlayFrameDepth()
+	local f = self:GetFrame(frame)
+	if not f then
+		return
 	end
+	local positioningDb = G_RLF.DbAccessor:Positioning(frame or G_RLF.Frames.MAIN)
+	f:SetFrameStrata(positioningDb.frameStrata)
+	f:UpdateOverlayFrameDepth()
 end
 
 --- Update loot history tab appearance for the frame.
 --- @param frame? G_RLF.Frames
 function LootDisplay:UpdateTabAppearance(frame)
-	frame = frame or G_RLF.Frames.MAIN
-	if lootFrames[frame] == nil then
-		return
+	local f = self:GetFrame(frame)
+	if f then
+		f:UpdateTabAppearance()
 	end
-
-	lootFrames[frame]:UpdateTabAppearance()
 end
 
 --- Update the size of the frame
 --- @param frame? G_RLF.Frames
 function LootDisplay:UpdateSize(frame)
-	frame = frame or G_RLF.Frames.MAIN
-	if lootFrames[frame] == nil then
+	local f = self:GetFrame(frame)
+	if not f then
 		return
 	end
-
-	lootFrames[frame]:UpdateSize()
-
-	-- Update sample rows if they're currently shown
+	f:UpdateSize()
 	self:RefreshSampleRowsIfShown()
 end
 
 --- Update row styles for the frame
 --- @param frame? G_RLF.Frames
 function LootDisplay:UpdateRowStyles(frame)
-	frame = frame or G_RLF.Frames.MAIN
-	if lootFrames[frame] == nil then
+	local f = self:GetFrame(frame)
+	if not f then
 		return
 	end
-
-	lootFrames[frame]:UpdateStyles()
-
-	-- Update sample rows if they're currently shown
+	f:UpdateStyles()
 	self:RefreshSampleRowsIfShown()
 end
 
 --- Update enter animation for the frame
 --- @param frame? G_RLF.Frames
 function LootDisplay:UpdateEnterAnimation(frame)
-	frame = frame or G_RLF.Frames.MAIN
-	if lootFrames[frame] == nil then
+	local f = self:GetFrame(frame)
+	if not f then
 		return
 	end
-
-	lootFrames[frame]:UpdateEnterAnimationType()
-
-	-- Update sample rows if they're currently shown
+	f:UpdateEnterAnimationType()
 	self:RefreshSampleRowsIfShown()
 end
 
 --- Update fade delay for the frame
 --- @param frame? G_RLF.Frames
 function LootDisplay:UpdateFadeDelay(frame)
-	frame = frame or G_RLF.Frames.MAIN
-	if lootFrames[frame] == nil then
+	local f = self:GetFrame(frame)
+	if not f then
 		return
 	end
-
-	lootFrames[frame]:UpdateFadeDelay()
-
-	-- Update sample rows if they're currently shown
+	f:UpdateFadeDelay()
 	self:RefreshSampleRowsIfShown()
 end
 
 function LootDisplay:ReInitQueueLabel(frame)
-	frame = frame or G_RLF.Frames.MAIN
-	if lootFrames[frame] == nil then
-		return
+	local f = self:GetFrame(frame)
+	if f then
+		f:InitQueueLabel()
 	end
-
-	lootFrames[frame]:InitQueueLabel()
 end
 
 --- Handle the BAG_UPDATE_DELAYED event
