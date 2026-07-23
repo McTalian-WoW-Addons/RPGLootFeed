@@ -4,41 +4,21 @@ local addonName, ns = ...
 ---@class G_RLF
 local G_RLF = ns
 
--- ── External dependency locals ────────────────────────────────────────────────
--- Every reference to the addon namespace is captured here so the module's full
--- dependency surface on G_RLF / ns is visible in one place.  Tests pass a
--- minimal mock ns to loadfile("Experience.lua") to control these at
--- injection time without the full nsMocks framework.
--- NOTE: G_RLF.db is intentionally absent – AceDB populates it in
--- OnInitialize, so it must remain a runtime lookup inside function bodies.
-local LootElementBase = G_RLF.LootElementBase
-local DefaultIcons = G_RLF.DefaultIcons
-local ItemQualEnum = G_RLF.ItemQualEnum
-local FeatureBase = G_RLF.FeatureBase
-local FeatureModule = G_RLF.FeatureModule
-local TextTemplateEngine = G_RLF.TextTemplateEngine
-local LogDebug = function(...)
-	G_RLF:LogDebug(...)
-end
-local LogInfo = function(...)
-	G_RLF:LogInfo(...)
-end
-local LogWarn = function(...)
-	G_RLF:LogWarn(...)
-end
-local RGBAToHexFormat = function(...)
-	return G_RLF:RGBAToHexFormat(...)
-end
-
--- ── WoW API / Global abstraction adapters ────────────────────────────────────
--- Shared adapter from G_RLF.WoWAPI; tests override Xp._xpAdapter after load.
-local UnitXpAdapter = G_RLF.WoWAPI.Experience
+-- ── Feature module ────────────────────────────────────────────────────────────
 
 ---@class RLF_Experience: RLF_Module, AceEvent-3.0
-local Xp = FeatureBase:new(FeatureModule.Experience, "AceEvent-3.0")
+local Xp = G_RLF.FeatureBase:new("Experience", {
+	di = {
+		lootElementBase = "LootElementBase",
+		defaultIcons = "DefaultIcons",
+		itemQualEnum = "ItemQualEnum",
+		textTemplateEngine = "TextTemplateEngine",
+		xpApi = "WoWAPI.Experience",
+		rgbToHex = "RGBAToHexFormat",
+	},
+	logging = true,
+}, "AceEvent-3.0")
 local currentXP, currentMaxXP, currentLevel
-
-Xp._xpAdapter = UnitXpAdapter
 
 -- Context provider function to be registered when module is enabled
 local function createExperienceContextProvider()
@@ -67,6 +47,10 @@ function Xp:BuildPayload(quantity)
 		return nil
 	end
 
+	-- Capture DI-injected services for use inside closures
+	local _textTemplateEngine = self.textTemplateEngine
+	local _rgbToHex = self.rgbToHex
+
 	-- Generate text elements using the data-driven approach
 	local textElements = self:GenerateTextElements(quantity)
 
@@ -75,32 +59,32 @@ function Xp:BuildPayload(quantity)
 	---@type RLF_LootElementData
 	local elementData = {
 		key = "EXPERIENCE",
-		type = "Experience",
+		type = G_RLF.FeatureModule.Experience,
 		textElements = textElements,
 		quantity = quantity,
-		icon = (xpConfig.enableIcon and not G_RLF.db.global.misc.hideAllIcons) and DefaultIcons.XP or nil,
-		quality = ItemQualEnum.Epic,
+		icon = (xpConfig.enableIcon and not G_RLF.db.global.misc.hideAllIcons) and self.defaultIcons.XP or nil,
+		quality = self.itemQualEnum.Epic,
 	}
 
 	---@type RLF_ElementPayload
 	local payload = {
 		-- Routing
 		key = "EXPERIENCE",
-		type = FeatureModule.Experience,
+		type = G_RLF.FeatureModule.Experience,
 
 		-- Icon
 		icon = elementData.icon,
-		quality = ItemQualEnum.Epic,
+		quality = self.itemQualEnum.Epic,
 
 		-- Primary line
 		quantity = quantity,
 		textFn = function(existingXP)
-			return TextTemplateEngine:ProcessRowElements(1, elementData, existingXP)
+			return _textTemplateEngine:ProcessRowElements(1, elementData, existingXP)
 		end,
 
 		-- Secondary line
 		secondaryTextFn = function(existingXP)
-			return TextTemplateEngine:ProcessRowElements(2, elementData, existingXP)
+			return _textTemplateEngine:ProcessRowElements(2, elementData, existingXP)
 		end,
 
 		-- Item count display (current level)
@@ -111,15 +95,13 @@ function Xp:BuildPayload(quantity)
 			end
 			return currentLevel,
 				{
-					color = RGBAToHexFormat(unpack(xpCfg.currentLevelColor or { 0.749, 0.737, 0.012, 1 })),
+					color = _rgbToHex(unpack(xpCfg.currentLevelColor or { 0.749, 0.737, 0.012, 1 })),
 					wrapChar = xpCfg.currentLevelTextWrapChar,
 				}
 		end,
 
 		-- Lifecycle
-		IsEnabled = function()
-			return Xp:IsEnabled()
-		end,
+		moduleRef = Xp,
 	}
 
 	return payload
@@ -161,9 +143,9 @@ function Xp:GenerateTextElements(quantity)
 end
 
 local function initXpValues()
-	currentXP = Xp._xpAdapter.UnitXP("player")
-	currentMaxXP = Xp._xpAdapter.UnitXPMax("player")
-	currentLevel = Xp._xpAdapter.UnitLevel("player")
+	currentXP = Xp.xpApi.UnitXP("player")
+	currentMaxXP = Xp.xpApi.UnitXPMax("player")
+	currentLevel = Xp.xpApi.UnitLevel("player")
 end
 
 function Xp:OnInitialize()
@@ -176,17 +158,17 @@ end
 
 function Xp:OnDisable()
 	-- Unregister our context provider
-	TextTemplateEngine.contextProviders["Experience"] = nil
+	self.textTemplateEngine.contextProviders["Experience"] = nil
 
 	self:UnregisterEvent("PLAYER_ENTERING_WORLD")
 	self:UnregisterEvent("PLAYER_XP_UPDATE")
 end
 
 function Xp:OnEnable()
-	LogDebug("OnEnable", addonName, self.moduleName)
+	self:LogDebug("OnEnable")
 
 	-- Register our context provider with the TextTemplateEngine
-	TextTemplateEngine:RegisterContextProvider("Experience", createExperienceContextProvider())
+	self.textTemplateEngine:RegisterContextProvider("Experience", createExperienceContextProvider())
 
 	self:RegisterEvent("PLAYER_ENTERING_WORLD")
 	self:RegisterEvent("PLAYER_XP_UPDATE")
@@ -196,12 +178,12 @@ function Xp:OnEnable()
 end
 
 function Xp:PLAYER_ENTERING_WORLD(eventName)
-	LogInfo(eventName, "WOWEVENT", self.moduleName)
+	self:LogInfo(eventName, "WOWEVENT")
 	initXpValues()
 end
 
 function Xp:PLAYER_XP_UPDATE(eventName, unitTarget)
-	LogInfo(eventName, "WOWEVENT", self.moduleName, unitTarget)
+	self:LogInfo(eventName, "WOWEVENT", nil, unitTarget)
 	if unitTarget ~= "player" then
 		return
 	end
@@ -209,14 +191,14 @@ function Xp:PLAYER_XP_UPDATE(eventName, unitTarget)
 	local oldLevel = currentLevel
 	local oldCurrentXP = currentXP
 	local oldMaxXP = currentMaxXP
-	local newLevel = Xp._xpAdapter.UnitLevel(unitTarget)
+	local newLevel = Xp.xpApi.UnitLevel(unitTarget)
 	if newLevel == nil then
-		LogWarn("Could not get player level", addonName, self.moduleName)
+		self:LogWarn("Could not get player level")
 		return
 	end
 	currentLevel = newLevel
-	currentXP = Xp._xpAdapter.UnitXP(unitTarget)
-	currentMaxXP = Xp._xpAdapter.UnitXPMax(unitTarget)
+	currentXP = Xp.xpApi.UnitXP(unitTarget)
+	currentMaxXP = Xp.xpApi.UnitXPMax(unitTarget)
 	local delta = 0
 	if newLevel > oldLevel then
 		delta = (oldMaxXP - oldCurrentXP) + currentXP
@@ -227,11 +209,11 @@ function Xp:PLAYER_XP_UPDATE(eventName, unitTarget)
 	if delta > 0 then
 		local payload = self:BuildPayload(delta)
 		if payload then
-			local e = LootElementBase:fromPayload(payload)
+			local e = self.lootElementBase:fromPayload(payload)
 			e:Show()
 		end
 	else
-		LogWarn(eventName .. " fired but delta was not positive", addonName, self.moduleName)
+		self:LogWarn(eventName .. " fired but delta was not positive")
 	end
 end
 

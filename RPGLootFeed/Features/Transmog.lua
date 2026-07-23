@@ -4,40 +4,60 @@ local addonName, ns = ...
 ---@class G_RLF
 local G_RLF = ns
 
--- ── External dependency locals ────────────────────────────────────────────────
--- Every reference to the addon namespace is captured here so the module's full
--- dependency surface on G_RLF / ns is visible in one place.  Tests pass a
--- minimal mock ns to loadfile("Transmog.lua") to control these at
--- injection time without the full nsMocks framework.
--- NOTE: G_RLF.db is intentionally absent – AceDB populates it in
--- OnInitialize, so it must remain a runtime lookup inside function bodies.
-local LootElementBase = G_RLF.LootElementBase
-local DefaultIcons = G_RLF.DefaultIcons
-local ItemQualEnum = G_RLF.ItemQualEnum
-local FeatureBase = G_RLF.FeatureBase
-local FeatureModule = G_RLF.FeatureModule
-local LogDebug = function(...)
-	G_RLF:LogDebug(...)
-end
-local LogInfo = function(...)
-	G_RLF:LogInfo(...)
-end
-local LogWarn = function(...)
-	G_RLF:LogWarn(...)
-end
-local IsRetail = function()
-	return G_RLF:IsRetail()
-end
-
--- ── WoW API / Global abstraction adapter ─────────────────────────────────────
--- The shared adapter lives in WoWAPIAdapters.lua (G_RLF.WoWAPI.Transmog).
--- Captured here at module-load time so tests can override _transmogAdapter
--- per-test without patching _G.
+-- ── Feature module ────────────────────────────────────────────────────────────
 
 ---@class RLF_Transmog: RLF_Module, AceEvent-3.0
-local Transmog = FeatureBase:new(FeatureModule.Transmog, "AceEvent-3.0")
+local Transmog = G_RLF.FeatureBase:new("Transmog", {
+	di = {
+		lootElementBase = "LootElementBase",
+		defaultIcons = "DefaultIcons",
+		itemQualEnum = "ItemQualEnum",
+		transmogApi = "WoWAPI.Transmog",
+		textTemplateEngine = "TextTemplateEngine",
+		isRetail = "IsRetail",
+	},
+	logging = true,
+}, "AceEvent-3.0")
 
-Transmog._transmogAdapter = G_RLF.WoWAPI.Transmog
+-- ── Context provider ──────────────────────────────────────────────────────────
+
+local function createTransmogContextProvider()
+	return function(context, data)
+		local str = string.format(Transmog.transmogApi.GetErrLearnTransmogS(), " "):trim()
+		-- Some locales have the string placeholder in the middle of the string
+		str = str:gsub("   ", " ")
+		-- Remove the trailing period if it exists
+		str = str:gsub("%.$", "")
+		context.learnMessage = str
+	end
+end
+
+-- ── Text elements ─────────────────────────────────────────────────────────────
+
+--- Generate text elements for the Transmog type.
+--- Row 1: the transmog link (or truncated link)
+--- Row 2: the learn-message string
+function Transmog:GenerateTextElements()
+	local elements = {}
+
+	elements[1] = {}
+	elements[1].primary = {
+		type = "primary",
+		template = "{truncatedLink}",
+		order = 1,
+	}
+
+	elements[2] = {}
+	elements[2].context = {
+		type = "context",
+		template = "{learnMessage}",
+		order = 1,
+	}
+
+	return elements
+end
+
+-- ── BuildPayload ──────────────────────────────────────────────────────────────
 
 --- Builds a uniform payload table for a transmog collection event.
 --- Returns nil when the module is disabled.
@@ -49,44 +69,48 @@ function Transmog:BuildPayload(transmogLink, icon)
 		return nil
 	end
 
+	local textElements = self:GenerateTextElements()
+
+	---@type RLF_LootElementData
+	local elementData = {
+		key = "TMOG_" .. transmogLink,
+		type = "Transmog",
+		textElements = textElements,
+		quantity = 0,
+		icon = icon or self.defaultIcons.TRANSMOG,
+		quality = self.itemQualEnum.Epic,
+		link = transmogLink,
+	}
+
 	local payload = {}
 
 	payload.key = "TMOG_" .. transmogLink
-	payload.type = FeatureModule.Transmog
+	payload.type = G_RLF.FeatureModule.Transmog
 	payload.isLink = true
 
-	payload.icon = icon or DefaultIcons.TRANSMOG
+	payload.icon = elementData.icon
 	local transmogConfig = G_RLF.DbAccessor:AnyFeatureConfig("transmog") or {}
 	if not transmogConfig.enableIcon or G_RLF.db.global.misc.hideAllIcons then
 		payload.icon = nil
 	end
 
-	payload.quality = ItemQualEnum.Epic
-	payload.highlight = IsRetail()
+	payload.quality = self.itemQualEnum.Epic
+	payload.highlight = self.isRetail()
 
-	local link = transmogLink
-	payload.textFn = function(_, truncatedLink)
-		if not truncatedLink or truncatedLink == "" then
-			return link
-		end
-		return truncatedLink
+	payload.textFn = function(existingQuantity, truncatedLink)
+		return self.textTemplateEngine:ProcessRowElements(1, elementData, existingQuantity, truncatedLink)
 	end
 
 	payload.secondaryTextFn = function()
-		local str = string.format(Transmog._transmogAdapter.GetErrLearnTransmogS(), " "):trim()
-		-- Some locales have the string placeholder in the middle of the string
-		str = str:gsub("   ", " ")
-		-- Remove the trailing period if it exists
-		str = str:gsub("%.$", "")
-		return str
+		return self.textTemplateEngine:ProcessRowElements(2, elementData)
 	end
 
-	payload.IsEnabled = function()
-		return Transmog:IsEnabled()
-	end
+	payload.moduleRef = Transmog
 
 	return payload
 end
+
+-- ── Module lifecycle ──────────────────────────────────────────────────────────
 
 function Transmog:OnInitialize()
 	if G_RLF.DbAccessor:IsFeatureNeededByAnyFrame("transmog") then
@@ -97,21 +121,25 @@ function Transmog:OnInitialize()
 end
 
 function Transmog:OnEnable()
-	LogDebug("OnEnable", addonName, self.moduleName)
+	self:LogDebug("OnEnable")
+	self.textTemplateEngine:RegisterContextProvider("Transmog", createTransmogContextProvider())
 	self:RegisterEvent("TRANSMOG_COLLECTION_SOURCE_ADDED")
 end
 
 function Transmog:OnDisable()
+	self.textTemplateEngine.contextProviders["Transmog"] = nil
 	self:UnregisterEvent("TRANSMOG_COLLECTION_SOURCE_ADDED")
 end
 
-function Transmog:TRANSMOG_COLLECTION_SOURCE_ADDED(eventName, itemModifiedAppearanceID)
-	LogInfo(eventName, "WOWEVENT", self.moduleName, itemModifiedAppearanceID)
+-- ── Event handlers ────────────────────────────────────────────────────────────
 
-	local info = Transmog._transmogAdapter.GetAppearanceSourceInfo(itemModifiedAppearanceID)
+function Transmog:TRANSMOG_COLLECTION_SOURCE_ADDED(eventName, itemModifiedAppearanceID)
+	self:LogInfo(eventName, "WOWEVENT", nil, itemModifiedAppearanceID)
+
+	local info = self.transmogApi.GetAppearanceSourceInfo(itemModifiedAppearanceID)
 
 	if not info then
-		LogWarn("Could not get appearance source info", addonName, self.moduleName)
+		self:LogWarn("Could not get appearance source info")
 		return
 	end
 
@@ -120,14 +148,14 @@ function Transmog:TRANSMOG_COLLECTION_SOURCE_ADDED(eventName, itemModifiedAppear
 	local icon = info.icon
 
 	if not transmogLink or transmogLink == "" then
-		LogWarn("Transmog link is empty for " .. itemModifiedAppearanceID, addonName, self.moduleName)
+		self:LogWarn("Transmog link is empty for " .. itemModifiedAppearanceID)
 		if itemLink and itemLink ~= "" then
-			local item = Transmog._transmogAdapter.CreateItemFromItemLink(itemLink)
+			local item = self.transmogApi.CreateItemFromItemLink(itemLink)
 			if item then
 				item:ContinueOnItemLoad(function()
-					info = Transmog._transmogAdapter.GetAppearanceSourceInfo(itemModifiedAppearanceID)
+					info = self.transmogApi.GetAppearanceSourceInfo(itemModifiedAppearanceID)
 					if not info then
-						LogWarn("Could not get appearance source info on item load", addonName, self.moduleName)
+						self:LogWarn("Could not get appearance source info on item load")
 						return
 					end
 
@@ -136,35 +164,31 @@ function Transmog:TRANSMOG_COLLECTION_SOURCE_ADDED(eventName, itemModifiedAppear
 					icon = info.icon
 
 					if not transmogLink or transmogLink == "" then
-						LogWarn(
-							"Transmog link is still empty for " .. itemModifiedAppearanceID,
-							addonName,
-							self.moduleName
-						)
+						self:LogWarn("Transmog link is still empty for " .. itemModifiedAppearanceID)
 						transmogLink = itemLink
 					end
 
 					local payload = self:BuildPayload(transmogLink, icon)
 					if payload then
-						local e = LootElementBase:fromPayload(payload)
+						local e = self.lootElementBase:fromPayload(payload)
 						e:Show()
 					else
-						LogWarn("Could not create Transmog Element", addonName, self.moduleName)
+						self:LogWarn("Could not create Transmog Element")
 					end
 				end)
 			end
 		else
-			LogWarn("Item link is also empty for " .. itemModifiedAppearanceID, addonName, self.moduleName)
+			self:LogWarn("Item link is also empty for " .. itemModifiedAppearanceID)
 		end
 		return
 	end
 
 	local payload = self:BuildPayload(transmogLink, icon)
 	if payload then
-		local e = LootElementBase:fromPayload(payload)
+		local e = self.lootElementBase:fromPayload(payload)
 		e:Show()
 	else
-		LogWarn("Could not create Transmog Element", addonName, self.moduleName)
+		self:LogWarn("Could not create Transmog Element")
 	end
 end
 

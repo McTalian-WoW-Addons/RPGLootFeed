@@ -4,49 +4,21 @@ local addonName, ns = ...
 ---@class G_RLF
 local G_RLF = ns
 
--- ── External dependency locals ────────────────────────────────────────────────
--- Every reference to the addon namespace is captured here so the module's full
--- dependency surface on G_RLF / ns is visible in one place.  Tests pass a
--- minimal mock ns to loadfile("ItemLoot.lua") to control these at
--- injection time without the full nsMocks framework.
--- NOTE: G_RLF.db, G_RLF.equipSlotMap, G_RLF.armorClassMapping and
--- G_RLF.AuctionIntegrations are intentionally absent – they rely on runtime
--- state set after initialization or are mutable assignments by this module.
-local LootElementBase = G_RLF.LootElementBase
-local ItemQualEnum = G_RLF.ItemQualEnum
-local FeatureBase = G_RLF.FeatureBase
-local FeatureModule = G_RLF.FeatureModule
-local Expansion = G_RLF.Expansion
-local ItemInfo = G_RLF.ItemInfo
-local AtlasIconCoefficients = G_RLF.AtlasIconCoefficients
-local PricesEnum = G_RLF.PricesEnum
-local DbAccessor = G_RLF.DbAccessor
-local Frames = G_RLF.Frames
-local LogDebug = function(...)
-	G_RLF:LogDebug(...)
-end
-local LogInfo = function(...)
-	G_RLF:LogInfo(...)
-end
-local LogWarn = function(...)
-	G_RLF:LogWarn(...)
-end
-local IsRetail = function()
-	return G_RLF:IsRetail()
-end
-local RGBAToHexFormat = function(...)
-	return G_RLF:RGBAToHexFormat(...)
-end
-
--- ── WoW API / Global abstraction adapters ────────────────────────────────────
--- The shared adapter lives in WoWAPIAdapters.lua (G_RLF.WoWAPI.ItemLoot).
--- Captured here at module-load time so tests can override _itemLootAdapter
--- without patching _G directly.
+-- logging and DI injected via FeatureBase
 
 ---@class RLF_ItemLoot: RLF_Module, AceEvent-3.0, AceBucket-3.0
-local ItemLoot = FeatureBase:new(FeatureModule.ItemLoot, "AceEvent-3.0", "AceBucket-3.0")
-
-ItemLoot._itemLootAdapter = G_RLF.WoWAPI.ItemLoot
+local ItemLoot = G_RLF.FeatureBase:new("ItemLoot", {
+	di = {
+		lootElementBase = "LootElementBase",
+		itemQualEnum = "ItemQualEnum",
+		itemInfo = "ItemInfo",
+		itemLootApi = "WoWAPI.ItemLoot",
+		textTemplateEngine = "TextTemplateEngine",
+		isRetail = "IsRetail",
+		soundService = "SoundService",
+	},
+	logging = true,
+}, "AceEvent-3.0", "AceBucket-3.0")
 
 --- Decompose a copper price amount into denomination parts.
 --- Returns gold, silver, copper, plus the resolved atlas icon and its size.
@@ -60,12 +32,155 @@ local function getPriceParts(icon, fontSize, price)
 	if not price or price <= 0 then
 		return 0, 0, 0, icon or "", fontSize or 0
 	end
-	local sizeCoeff = AtlasIconCoefficients[icon] or 1
+	local sizeCoeff = G_RLF.AtlasIconCoefficients[icon] or 1
 	local iconSize = fontSize * sizeCoeff
 	local gold = math.floor(price / 10000)
 	local silver = math.floor((price % 10000) / 100)
 	local copper = price % 100
 	return gold, silver, copper, icon or "", iconSize
+end
+
+-- ── Context provider ──────────────────────────────────────────────────────────
+
+local function createItemLootContextProvider()
+	return function(context, data)
+		-- Quest color override for the item link (Row 1)
+		if data.linkOverrides then
+			for _, override in ipairs(data.linkOverrides) do
+				if override.condition then
+					context.truncatedLink = context.truncatedLink:gsub("|c.-|", override.colorHex .. "|")
+					break
+				end
+			end
+		end
+
+		-- Secondary text (Row 2) — full branching logic
+		context.secondaryText = ""
+		local info = data.info
+		local fromInfo = data.fromInfo
+		local fromLink = data.fromLink
+		local quantity = data.quantity
+
+		if not info then
+			return
+		end
+
+		local stylingDb = G_RLF.DbAccessor:Styling(G_RLF.Frames.MAIN)
+		local secondaryFontSize = stylingDb.secondaryFontSize
+
+		if fromLink and fromLink ~= "" and fromInfo then
+			context.secondaryText = info:GetUpgradeText(fromInfo, secondaryFontSize)
+			return
+		end
+
+		if info:IsEquippableItem() then
+			local secondaryText = ""
+			if info:HasItemRollBonus() then
+				secondaryText = info:GetItemRollText()
+			end
+			local equipmentTypeText = info:GetEquipmentTypeText()
+			if equipmentTypeText then
+				context.secondaryText = secondaryText .. equipmentTypeText
+				return
+			end
+			context.secondaryText = secondaryText
+			return
+		end
+
+		-- Non-equippable: price display
+		local effectiveQuantity = context.total
+		local itemCfg = G_RLF.DbAccessor:AnyFeatureConfig("itemLoot") or {}
+		local vendorPrice, auctionPrice = 0, 0
+		local pricesForSellableItems = itemCfg.pricesForSellableItems
+		if info.sellPrice and info.sellPrice > 0 then
+			vendorPrice = info.sellPrice
+		end
+		local marketPrice = ItemLoot.itemLootApi.GetAHPrice(data.itemLink)
+		if marketPrice and marketPrice > 0 then
+			auctionPrice = marketPrice
+		end
+		local showVendorPrice = vendorPrice > 0
+		local showAuctionPrice = auctionPrice > 0
+
+		-- Single-price: return spacer so SecondaryCoinDisplay renders real textures
+		if pricesForSellableItems == G_RLF.PricesEnum.Vendor and showVendorPrice then
+			context.secondaryText = " "
+			return
+		elseif pricesForSellableItems == G_RLF.PricesEnum.AH and showAuctionPrice then
+			context.secondaryText = " "
+			return
+		elseif pricesForSellableItems == G_RLF.PricesEnum.Highest then
+			if showAuctionPrice or showVendorPrice then
+				context.secondaryText = " "
+				return
+			end
+		end
+
+		-- Multi-price: plain text
+		local function plainPrice(copper)
+			local g = math.floor(copper / 10000)
+			local s = math.floor((copper % 10000) / 100)
+			local c = copper % 100
+			local parts = {}
+			if g > 0 then
+				table.insert(parts, g .. "g")
+			end
+			if s > 0 or g > 0 then
+				table.insert(parts, s .. "s")
+			end
+			table.insert(parts, c .. "c")
+			return table.concat(parts, " ")
+		end
+
+		local str = ""
+		if pricesForSellableItems == G_RLF.PricesEnum.VendorAH then
+			if showVendorPrice then
+				str = str .. plainPrice(vendorPrice * effectiveQuantity)
+			end
+			if showVendorPrice and showAuctionPrice then
+				str = str .. "    "
+			end
+			if showAuctionPrice then
+				str = str .. plainPrice(auctionPrice * effectiveQuantity)
+			end
+		elseif pricesForSellableItems == G_RLF.PricesEnum.AHVendor then
+			if showAuctionPrice then
+				str = str .. plainPrice(auctionPrice * effectiveQuantity)
+			end
+			if showAuctionPrice and showVendorPrice then
+				str = str .. "    "
+			end
+			if showVendorPrice then
+				str = str .. plainPrice(vendorPrice * effectiveQuantity)
+			end
+		end
+		context.secondaryText = str
+	end
+end
+
+-- ── Text elements ─────────────────────────────────────────────────────────────
+
+--- Generate text elements for ItemLoot type.
+--- Row 1: item link (with optional quest color override from context provider)
+--- Row 2: secondary text (upgrade / equipment / prices via context provider)
+function ItemLoot:GenerateTextElements()
+	local elements = {}
+
+	elements[1] = {}
+	elements[1].primary = {
+		type = "primary",
+		template = "{truncatedLink}",
+		order = 1,
+	}
+
+	elements[2] = {}
+	elements[2].context = {
+		type = "context",
+		template = "{secondaryText}",
+		order = 1,
+	}
+
+	return elements
 end
 
 function ItemLoot:ItemQualityName(enumValue)
@@ -83,37 +198,40 @@ local function IsBetterThanEquipped(info)
 		local slot = G_RLF.equipSlotMap[info.itemEquipLoc]
 		if type(slot) == "table" then
 			for _, s in ipairs(slot) do
-				equippedLink = ItemLoot._itemLootAdapter.GetInventoryItemLink("player", s)
+				equippedLink = ItemLoot.itemLootApi.GetInventoryItemLink("player", s)
 				if equippedLink then
 					break
 				end
 			end
 		else
-			equippedLink = ItemLoot._itemLootAdapter.GetInventoryItemLink("player", slot)
+			equippedLink = ItemLoot.itemLootApi.GetInventoryItemLink("player", slot)
 		end
 
 		if not equippedLink then
 			return false
 		end
 
-		local equippedId = ItemLoot._itemLootAdapter.GetItemIDForItemInfo(equippedLink)
-		local equippedInfo = ItemInfo:new(equippedId, ItemLoot._itemLootAdapter.GetItemInfo(equippedLink))
+		local equippedId = ItemLoot.itemLootApi.GetItemIDForItemInfo(equippedLink)
+		local equippedInfo = ItemLoot.itemInfo:new(equippedId, ItemLoot.itemLootApi.GetItemInfo(equippedLink))
 		if not equippedInfo then
 			return false
 		end
 
-		if equippedInfo.itemQuality > ItemQualEnum.Poor and info.itemQuality == ItemQualEnum.Poor then
+		if equippedInfo.itemQuality > ItemLoot.itemQualEnum.Poor and info.itemQuality == ItemLoot.itemQualEnum.Poor then
 			-- If the equipped item is better than poor and the new item is poor, we don't consider it an upgrade
 			return false
 		end
-		if equippedInfo.itemQuality > ItemQualEnum.Common and info.itemQuality == ItemQualEnum.Common then
+		if
+			equippedInfo.itemQuality > ItemLoot.itemQualEnum.Common
+			and info.itemQuality == ItemLoot.itemQualEnum.Common
+		then
 			-- If the equipped item is better than common and the new item is common, we don't consider it an upgrade
 			return false
 		end
 		if equippedInfo.itemLevel and equippedInfo.itemLevel < info.itemLevel then
 			return true
 		elseif equippedInfo.itemLevel == info.itemLevel then
-			local statDelta = ItemLoot._itemLootAdapter.GetItemStatDelta(equippedLink, info.itemLink)
+			local statDelta = ItemLoot.itemLootApi.GetItemStatDelta(equippedLink, info.itemLink)
 			for k, v in pairs(statDelta) do
 				-- Has a Tertiary Stat
 				if k:find("ITEM_MOD_CR_") and v > 0 then
@@ -146,9 +264,9 @@ function ItemLoot:BuildPayload(info, quantity, fromLink)
 	local fromInfo = nil
 	if fromLink then
 		key = "UPGRADE_" .. key
-		fromInfo = ItemInfo:new(
-			ItemLoot._itemLootAdapter.GetItemIDForItemInfo(fromLink),
-			ItemLoot._itemLootAdapter.GetItemInfo(fromLink)
+		fromInfo = ItemLoot.itemInfo:new(
+			ItemLoot.itemLootApi.GetItemIDForItemInfo(fromLink),
+			ItemLoot.itemLootApi.GetItemInfo(fromLink)
 		)
 	end
 
@@ -165,9 +283,9 @@ function ItemLoot:BuildPayload(info, quantity, fromLink)
 
 	local topLeftText = nil
 	local topLeftColor = nil
-	if info:IsEquippableItem() and info.itemQuality > ItemQualEnum.Poor then
+	if info:IsEquippableItem() and info.itemQuality > ItemLoot.itemQualEnum.Poor then
 		topLeftText = tostring(info.itemLevel)
-		local r, g, b = ItemLoot._itemLootAdapter.GetItemQualityColor(info.itemQuality)
+		local r, g, b = ItemLoot.itemLootApi.GetItemQualityColor(info.itemQuality)
 		topLeftColor = { r, g, b }
 	end
 
@@ -189,7 +307,7 @@ function ItemLoot:BuildPayload(info, quantity, fromLink)
 		or (isNewTransmog and itemHighlights.transmog and "New Transmog")
 	local highlight = highlightReason and true or false
 	if highlight then
-		LogDebug("Highlighted because of " .. highlightReason, addonName, ItemLoot.moduleName, key)
+		self:LogDebug("Highlighted because of " .. highlightReason, addonName, self.moduleName, key)
 	end
 
 	-- ── Quest color override ─────────────────────────────────────────────────
@@ -216,10 +334,40 @@ function ItemLoot:BuildPayload(info, quantity, fromLink)
 		soundPath = soundsConfig.transmog.sound
 	end
 
+	-- ── Element data (feeds TextTemplateEngine) ─────────────────────────────
+	local textElements = self:GenerateTextElements()
+
+	-- Build color override list for the context provider
+	local linkOverrides = {}
+	local tso = itemConfig.textStyleOverrides or {}
+	if isQuestItem and tso.quest and tso.quest.enabled then
+		table.insert(linkOverrides, {
+			condition = true,
+			colorHex = G_RLF:RGBAToHexFormat(unpack(tso.quest.color)),
+		})
+	end
+
+	---@type RLF_LootElementData
+	local elementData = {
+		key = key,
+		type = "ItemLoot",
+		textElements = textElements,
+		quantity = quantity,
+		icon = icon,
+		quality = quality,
+		link = itemLink,
+		-- Extra fields for context provider
+		info = info,
+		fromInfo = fromInfo,
+		fromLink = fromLink,
+		itemLink = itemLink,
+		linkOverrides = #linkOverrides > 0 and linkOverrides or nil,
+	}
+
 	-- ── Payload ───────────────────────────────────────────────────────────────
 	local payload = {
 		key = key,
-		type = FeatureModule.ItemLoot,
+		type = G_RLF.FeatureModule.ItemLoot,
 		icon = icon,
 		quality = quality,
 		topLeftText = topLeftText,
@@ -232,26 +380,13 @@ function ItemLoot:BuildPayload(info, quantity, fromLink)
 		g = g,
 		b = b,
 		a = a,
-		-- Filter metadata evaluated per-frame by LootDisplayFrame:PassesPerFrameFilters
 		filterItemId = info.itemId,
 		filterItemQuality = info.itemQuality,
-		IsEnabled = function()
-			return ItemLoot:IsEnabled()
-		end,
+		moduleRef = ItemLoot,
 	}
 
 	payload.textFn = function(existingQuantity, truncatedLink)
-		if not truncatedLink then
-			return itemLink
-		end
-		local text = truncatedLink
-		local tso = (G_RLF.DbAccessor:AnyFeatureConfig("itemLoot") or {}).textStyleOverrides or {}
-		if isQuestItem and tso.quest and tso.quest.enabled then
-			local qr, qg, qb, qa = unpack(tso.quest.color)
-			-- Replace the color in the link portion of the text with the quest color
-			text = text:gsub("|c.-|", RGBAToHexFormat(qr, qg, qb, qa) .. "|")
-		end
-		return text
+		return self.textTemplateEngine:ProcessRowElements(1, elementData, existingQuantity, truncatedLink)
 	end
 
 	payload.amountTextFn = function(existingQuantity)
@@ -263,96 +398,7 @@ function ItemLoot:BuildPayload(info, quantity, fromLink)
 	end
 
 	payload.secondaryTextFn = function(...)
-		local stylingDb = DbAccessor:Styling(Frames.MAIN)
-		local secondaryFontSize = stylingDb.secondaryFontSize
-
-		if fromLink ~= "" and fromLink ~= nil then
-			return info:GetUpgradeText(fromInfo, secondaryFontSize)
-		end
-
-		if info:IsEquippableItem() then
-			local secondaryText = ""
-			if info:HasItemRollBonus() then
-				secondaryText = info:GetItemRollText()
-			end
-			local equipmentTypeText = info:GetEquipmentTypeText()
-			if equipmentTypeText then
-				return secondaryText .. equipmentTypeText
-			end
-			return secondaryText
-		end
-
-		-- Non-equippable sellable items: price display.
-		-- Single-price modes return " " (spacer) here; SecondaryCoinDisplay
-		-- (via secondaryCoinDataFn) renders the real Texture coin icons.
-		-- Multi-price modes return plain text (no |T| markup) for both prices.
-		local effectiveQuantity = ... or 1
-		local itemCfg = G_RLF.DbAccessor:AnyFeatureConfig("itemLoot") or {}
-		local vendorIcon = itemCfg.vendorIconTexture
-		local auctionIcon = itemCfg.auctionHouseIconTexture
-		local vendorPrice, auctionPrice = 0, 0
-		local pricesForSellableItems = itemCfg.pricesForSellableItems
-		if info.sellPrice and info.sellPrice > 0 then
-			vendorPrice = info.sellPrice
-		end
-		local marketPrice = ItemLoot._itemLootAdapter.GetAHPrice(itemLink)
-		if marketPrice and marketPrice > 0 then
-			auctionPrice = marketPrice
-		end
-		local showVendorPrice = vendorPrice > 0
-		local showAuctionPrice = auctionPrice > 0
-
-		-- Single-price modes delegate to SecondaryCoinDisplay; just return a spacer.
-		if pricesForSellableItems == PricesEnum.Vendor and showVendorPrice then
-			return " "
-		elseif pricesForSellableItems == PricesEnum.AH and showAuctionPrice then
-			return " "
-		elseif pricesForSellableItems == PricesEnum.Highest then
-			if showAuctionPrice or showVendorPrice then
-				return " "
-			end
-		end
-
-		-- Multi-price modes: build plain text (no |T| markup → no animation jank)
-		local function plainPrice(copper)
-			local g = math.floor(copper / 10000)
-			local s = math.floor((copper % 10000) / 100)
-			local c = copper % 100
-			local parts = {}
-			if g > 0 then
-				table.insert(parts, g .. "g")
-			end
-			if s > 0 or g > 0 then
-				table.insert(parts, s .. "s")
-			end
-			table.insert(parts, c .. "c")
-			return table.concat(parts, " ")
-		end
-
-		local str = ""
-		if pricesForSellableItems == PricesEnum.VendorAH then
-			if showVendorPrice then
-				str = str .. plainPrice(vendorPrice * effectiveQuantity)
-			end
-			if showVendorPrice and showAuctionPrice then
-				str = str .. "    "
-			end
-			if showAuctionPrice then
-				str = str .. plainPrice(auctionPrice * effectiveQuantity)
-			end
-		elseif pricesForSellableItems == PricesEnum.AHVendor then
-			if showAuctionPrice then
-				str = str .. plainPrice(auctionPrice * effectiveQuantity)
-			end
-			if showAuctionPrice and showVendorPrice then
-				str = str .. "    "
-			end
-			if showVendorPrice then
-				str = str .. plainPrice(vendorPrice * effectiveQuantity)
-			end
-		end
-
-		return str
+		return self.textTemplateEngine:ProcessRowElements(2, elementData)
 	end
 
 	-- secondaryCoinDataFn: drives SecondaryCoinDisplay (real Textures) for
@@ -370,21 +416,21 @@ function ItemLoot:BuildPayload(info, quantity, fromLink)
 		local pricesForSellableItems = itemCfg.pricesForSellableItems
 		local vendorPrice = (info.sellPrice and info.sellPrice > 0) and info.sellPrice or 0
 		local auctionPrice = 0
-		local marketPrice = ItemLoot._itemLootAdapter.GetAHPrice(itemLink)
+		local marketPrice = ItemLoot.itemLootApi.GetAHPrice(itemLink)
 		if marketPrice and marketPrice > 0 then
 			auctionPrice = marketPrice
 		end
-		local stylingDb = DbAccessor:Styling(Frames.MAIN)
+		local stylingDb = G_RLF.DbAccessor:Styling(G_RLF.Frames.MAIN)
 		local secondaryFontSize = stylingDb.secondaryFontSize
-		if pricesForSellableItems == PricesEnum.Vendor and vendorPrice > 0 then
+		if pricesForSellableItems == G_RLF.PricesEnum.Vendor and vendorPrice > 0 then
 			local g, s, c, atl, sz =
 				getPriceParts(itemCfg.vendorIconTexture, secondaryFontSize, vendorPrice * effectiveQuantity)
 			return g, s, c, atl, sz
-		elseif pricesForSellableItems == PricesEnum.AH and auctionPrice > 0 then
+		elseif pricesForSellableItems == G_RLF.PricesEnum.AH and auctionPrice > 0 then
 			local g, s, c, atl, sz =
 				getPriceParts(itemCfg.auctionHouseIconTexture, secondaryFontSize, auctionPrice * effectiveQuantity)
 			return g, s, c, atl, sz
-		elseif pricesForSellableItems == PricesEnum.Highest then
+		elseif pricesForSellableItems == G_RLF.PricesEnum.Highest then
 			if auctionPrice > vendorPrice and auctionPrice > 0 then
 				local g, s, c, atl, sz =
 					getPriceParts(itemCfg.auctionHouseIconTexture, secondaryFontSize, auctionPrice * effectiveQuantity)
@@ -405,12 +451,12 @@ function ItemLoot:BuildPayload(info, quantity, fromLink)
 			return nil
 		end
 		local success, name = pcall(function()
-			return ItemLoot._itemLootAdapter.GetItemInfo(itemLink)
+			return ItemLoot.itemLootApi.GetItemInfo(itemLink)
 		end)
 		if not success or not name then
 			return nil
 		end
-		local itemCount = ItemLoot._itemLootAdapter.GetItemCount(itemLink, true, false, true, true)
+		local itemCount = ItemLoot.itemLootApi.GetItemCount(itemLink, true, false, true, true)
 		return itemCount,
 			{
 				color = G_RLF:RGBAToHexFormat(unpack(itemDb.itemCountTextColor)),
@@ -419,21 +465,6 @@ function ItemLoot:BuildPayload(info, quantity, fromLink)
 	end
 
 	return payload
-end
-
---- Play the appropriate item sound if one is configured in the payload.
---- Called after Show() in the event handler pipeline.
----@param payload RLF_ElementPayload
-function ItemLoot:PlaySoundIfEnabled(payload)
-	if not payload or not payload.sound then
-		return
-	end
-	local willPlay, handle = ItemLoot._itemLootAdapter.PlaySoundFile(payload.sound)
-	if not willPlay then
-		LogWarn("Failed to play sound " .. payload.sound, addonName, ItemLoot.moduleName)
-	else
-		LogDebug("Sound queued to play " .. payload.sound .. " " .. handle, addonName, ItemLoot.moduleName)
-	end
 end
 
 function ItemLoot:OnInitialize()
@@ -446,24 +477,26 @@ function ItemLoot:OnInitialize()
 end
 
 function ItemLoot:OnDisable()
+	self.textTemplateEngine.contextProviders["ItemLoot"] = nil
 	self:UnregisterEvent("CHAT_MSG_LOOT")
 	self:UnregisterEvent("GET_ITEM_INFO_RECEIVED")
 end
 
 function ItemLoot:OnEnable()
+	self.textTemplateEngine:RegisterContextProvider("ItemLoot", createItemLootContextProvider())
 	self:RegisterEvent("CHAT_MSG_LOOT")
 	self:RegisterEvent("GET_ITEM_INFO_RECEIVED")
-	LogDebug("OnEnable", addonName, self.moduleName)
+	self:LogDebug("OnEnable", addonName, self.moduleName)
 	if
-		ItemLoot._itemLootAdapter.GetExpansionLevel() >= Expansion.CATA
-		and ItemLoot._itemLootAdapter.GetExpansionLevel() <= Expansion.MOP
+		ItemLoot.itemLootApi.GetExpansionLevel() >= G_RLF.Expansion.CATA
+		and ItemLoot.itemLootApi.GetExpansionLevel() <= G_RLF.Expansion.MOP
 	then
 		self:SetEquippableArmorClass()
 	end
 end
 
 function ItemLoot:SetEquippableArmorClass()
-	local _, playerClass = ItemLoot._itemLootAdapter.UnitClass("player")
+	local _, playerClass = ItemLoot.itemLootApi.UnitClass("player")
 
 	if
 		playerClass == "ROGUE"
@@ -475,7 +508,7 @@ function ItemLoot:SetEquippableArmorClass()
 		return
 	end
 
-	local playerLevel = ItemLoot._itemLootAdapter.UnitLevel("player")
+	local playerLevel = ItemLoot.itemLootApi.UnitLevel("player")
 	if playerLevel < 40 then
 		if not self.armorLevelListener then
 			self.armorLevelListener = self:RegisterBucketEvent("PLAYER_LEVEL_UP", 1, "SetEquippableArmorClass")
@@ -501,21 +534,23 @@ function ItemLoot:OnItemReadyToShow(info, amount, fromLink)
 	if not payload then
 		return
 	end
-	LootElementBase:fromPayload(payload):Show(info.itemName, info.itemQuality)
-	self:PlaySoundIfEnabled(payload)
+	self.lootElementBase:fromPayload(payload):Show(info.itemName, info.itemQuality)
+	if payload.sound then
+		self.soundService:PlaySound(payload.sound)
+	end
 end
 
 function ItemLoot:GET_ITEM_INFO_RECEIVED(eventName, itemID, success)
-	LogInfo(eventName, "WOWEVENT", self.moduleName, nil, eventName .. " " .. itemID)
+	self:LogInfo(eventName, "WOWEVENT", self.moduleName, nil, eventName .. " " .. itemID)
 	if self.pendingItemRequests[itemID] then
 		local itemLink, amount, fromLink = unpack(self.pendingItemRequests[itemID])
 
 		if not success then
 			error("Failed to load item: " .. itemID .. " " .. itemLink .. " x" .. amount)
 		else
-			local info = ItemInfo:new(itemID, ItemLoot._itemLootAdapter.GetItemInfo(itemLink))
+			local info = self.itemInfo:new(itemID, self.itemLootApi.GetItemInfo(itemLink))
 			if info == nil then
-				LogDebug("ItemInfo is nil for " .. itemLink, addonName, self.moduleName)
+				self:LogDebug("ItemInfo is nil for " .. itemLink, addonName, self.moduleName)
 				return
 			end
 			self:OnItemReadyToShow(info, amount, fromLink)
@@ -525,9 +560,9 @@ end
 
 function ItemLoot:ShowItemLoot(msg, itemLink, fromLink)
 	local amount = tonumber(msg:match("r ?x(%d+)") or 1) or 1
-	local itemId = ItemLoot._itemLootAdapter.GetItemIDForItemInfo(itemLink)
+	local itemId = self.itemLootApi.GetItemIDForItemInfo(itemLink)
 	self.pendingItemRequests[itemId] = { itemLink, amount, fromLink }
-	local info = ItemInfo:new(itemId, ItemLoot._itemLootAdapter.GetItemInfo(itemLink))
+	local info = self.itemInfo:new(itemId, self.itemLootApi.GetItemInfo(itemLink))
 	if info ~= nil then
 		self:OnItemReadyToShow(info, amount, fromLink)
 	end
@@ -544,31 +579,36 @@ end
 
 function ItemLoot:CHAT_MSG_LOOT(eventName, ...)
 	local msg, playerName, _, _, playerName2, _, _, _, _, _, _, guid = ...
-	if ItemLoot._itemLootAdapter.IssecretValue(msg) then
-		LogWarn("(" .. eventName .. ") Secret value detected, ignoring chat message", "WOWEVENT", self.moduleName, "")
+	if self.itemLootApi.IssecretValue(msg) then
+		self:LogWarn(
+			"(" .. eventName .. ") Secret value detected, ignoring chat message",
+			"WOWEVENT",
+			self.moduleName,
+			""
+		)
 		return
 	end
 
-	LogInfo(eventName, "WOWEVENT", self.moduleName, nil, eventName .. " " .. msg)
+	self:LogInfo(eventName, "WOWEVENT", self.moduleName, nil, eventName .. " " .. msg)
 
 	local raidLoot = msg:match("HlootHistory:")
 	if raidLoot then
 		-- Ignore this message as it's a raid loot message
-		LogDebug("Raid Loot Ignored", "WOWEVENT", self.moduleName, "", msg)
+		self:LogDebug("Raid Loot Ignored", "WOWEVENT", self.moduleName, "", msg)
 		return
 	end
 
 	local me = false
-	if IsRetail() then
-		me = guid == ItemLoot._itemLootAdapter.GetPlayerGuid()
+	if self.isRetail() then
+		me = guid == self.itemLootApi.GetPlayerGuid()
 	-- So far, MoP Classic and below doesn't work with GetPlayerGuid()
 	else
-		me = playerName2 == ItemLoot._itemLootAdapter.UnitName("player")
+		me = playerName2 == self.itemLootApi.UnitName("player")
 	end
 
 	-- Only process our own loot now, party loot is handled by PartyLoot module
 	if not me then
-		LogDebug("Loot ignored, not me", "WOWEVENT", self.moduleName, "", msg)
+		self:LogDebug("Loot ignored, not me", "WOWEVENT", self.moduleName, "", msg)
 		return
 	end
 

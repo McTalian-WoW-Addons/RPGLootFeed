@@ -4,55 +4,32 @@ local addonName, ns = ...
 ---@class G_RLF
 local G_RLF = ns
 
--- ── External dependency locals ────────────────────────────────────────────────
--- Every reference to the addon namespace is captured here so the module's full
--- dependency surface on G_RLF / ns is visible in one place.  Tests pass a
--- minimal mock ns to loadfile("Money.lua") to control these at
--- injection time without the full nsMocks framework.
--- NOTE: G_RLF.db is intentionally absent – AceDB populates it in
--- OnInitialize, so it must remain a runtime lookup inside function bodies.
-local LootElementBase = G_RLF.LootElementBase
-local DefaultIcons = G_RLF.DefaultIcons
-local ItemQualEnum = G_RLF.ItemQualEnum
-local FeatureBase = G_RLF.FeatureBase
-local FeatureModule = G_RLF.FeatureModule
-local TextTemplateEngine = G_RLF.TextTemplateEngine
-local LogDebug = function(...)
-	G_RLF:LogDebug(...)
-end
-local LogWarn = function(...)
-	G_RLF:LogWarn(...)
-end
-
--- ── WoW API / Global abstraction adapters ────────────────────────────────────
--- Shared adapter from G_RLF.WoWAPI; tests override Money._moneyAdapter after load.
-local MoneyAdapter = G_RLF.WoWAPI.Money
-
 ---@class RLF_Money: RLF_Module, AceEvent-3.0
-local Money = FeatureBase:new(FeatureModule.Money, "AceEvent-3.0")
-
-Money._moneyAdapter = MoneyAdapter
+local Money = G_RLF.FeatureBase:new("Money", {
+	di = {
+		lootElementBase = "LootElementBase",
+		defaultIcons = "DefaultIcons",
+		itemQualEnum = "ItemQualEnum",
+		textTemplateEngine = "TextTemplateEngine",
+		moneyApi = "WoWAPI.Money",
+		soundService = "SoundService",
+	},
+	logging = true,
+}, "AceEvent-3.0")
 
 --- Plays the configured money loot sound if the override is enabled.
---- Calls Money._moneyAdapter.PlaySoundFile so tests can inject a mock.
 function Money:PlaySoundIfEnabled()
 	local moneyConfig = G_RLF.DbAccessor:AnyFeatureConfig("money") or {}
 	if moneyConfig.overrideMoneyLootSound and (moneyConfig.moneyLootSound or "") ~= "" then
-		local willPlay, handle = Money._moneyAdapter.PlaySoundFile(moneyConfig.moneyLootSound)
-		if not willPlay then
-			LogWarn("Failed to play sound " .. moneyConfig.moneyLootSound, addonName, Money.moduleName or "Money")
-		else
-			LogDebug(
-				"Sound queued to play " .. moneyConfig.moneyLootSound .. " " .. handle,
-				addonName,
-				Money.moduleName or "Money"
-			)
+		local didPlay = self.soundService:PlaySound(moneyConfig.moneyLootSound)
+		if didPlay then
+			self:LogDebug("Sound queued to play " .. moneyConfig.moneyLootSound, addonName, Money.moduleName or "Money")
 		end
 	end
 end
 
 -- Context provider function to be registered when module is enabled.
--- Defined after Money so the inner closure can reference Money._moneyAdapter.
+-- Defined after Money so the inner closure can reference Money.moneyApi.
 local function createMoneyContextProvider()
 	return function(context, data)
 		local moneyConfig = G_RLF.DbAccessor:AnyFeatureConfig("money") or {}
@@ -86,7 +63,7 @@ function Money:BuildPayload(quantity)
 		return nil
 	end
 
-	local icon = DefaultIcons.MONEY
+	local icon = self.defaultIcons.MONEY
 	local moneyBuildConfig = G_RLF.DbAccessor:AnyFeatureConfig("money") or {}
 	if not moneyBuildConfig.enableIcon or G_RLF.db.global.misc.hideAllIcons then
 		icon = nil
@@ -102,19 +79,19 @@ function Money:BuildPayload(quantity)
 	---@type RLF_LootElementData
 	local elementData = {
 		key = "MONEY_LOOT",
-		type = FeatureModule.Money,
+		type = "Money",
 		textElements = textElements,
 		quantity = quantity,
 		icon = icon,
-		quality = ItemQualEnum.Poor,
+		quality = self.itemQualEnum.Poor,
 	}
 
 	---@type RLF_ElementPayload
 	local payload = {
 		key = "MONEY_LOOT",
-		type = FeatureModule.Money,
+		type = G_RLF.FeatureModule.Money,
 		icon = icon,
-		quality = ItemQualEnum.Poor,
+		quality = self.itemQualEnum.Poor,
 		quantity = quantity,
 		r = r,
 		g = g,
@@ -129,7 +106,7 @@ function Money:BuildPayload(quantity)
 			end
 		end,
 		textFn = function(existingCopper)
-			return TextTemplateEngine:ProcessRowElements(1, elementData, existingCopper)
+			return self.textTemplateEngine:ProcessRowElements(1, elementData, existingCopper)
 		end,
 		secondaryTextFn = function(existingCopper)
 			local mc = G_RLF.DbAccessor:AnyFeatureConfig("money") or {}
@@ -169,7 +146,7 @@ function Money:BuildPayload(quantity)
 			if not mc.showMoneyTotal then
 				return nil
 			end
-			local currentMoney = Money._moneyAdapter.GetMoney()
+			local currentMoney = Money.moneyApi.GetMoney()
 			-- Truncation: amounts over 1000g strip silver and copper
 			if currentMoney > 10000000 then
 				currentMoney = math.floor(currentMoney / 10000) * 10000
@@ -180,13 +157,11 @@ function Money:BuildPayload(quantity)
 			-- Abbreviation: return a formatted goldText string when enabled and >= 1000g
 			local goldText = nil
 			if mc.abbreviateTotal and gold >= 1000 then
-				goldText = TextTemplateEngine:AbbreviateNumber(gold)
+				goldText = self.textTemplateEngine:AbbreviateNumber(gold)
 			end
 			return gold, silver, copper, nil, nil, goldText
 		end,
-		IsEnabled = function()
-			return Money:IsEnabled()
-		end,
+		moduleRef = Money,
 	}
 
 	if moneyBuildConfig.overrideMoneyLootSound and (moneyBuildConfig.moneyLootSound or "") ~= "" then
@@ -244,27 +219,27 @@ end
 
 function Money:OnEnable()
 	-- Register our context provider with the TextTemplateEngine
-	TextTemplateEngine:RegisterContextProvider("Money", createMoneyContextProvider())
+	self.textTemplateEngine:RegisterContextProvider("Money", createMoneyContextProvider())
 
 	self:RegisterEvent("PLAYER_MONEY")
 	self:RegisterEvent("PLAYER_ENTERING_WORLD")
-	self.startingMoney = Money._moneyAdapter.GetMoney()
+	self.startingMoney = self.moneyApi.GetMoney()
 end
 
 function Money:OnDisable()
 	-- Unregister our context provider
-	TextTemplateEngine.contextProviders["Money"] = nil
+	self.textTemplateEngine.contextProviders["Money"] = nil
 
 	self:UnregisterEvent("PLAYER_MONEY")
 	self:UnregisterEvent("PLAYER_ENTERING_WORLD")
 end
 
 function Money:PLAYER_ENTERING_WORLD(eventName)
-	self.startingMoney = Money._moneyAdapter.GetMoney()
+	self.startingMoney = self.moneyApi.GetMoney()
 end
 
 function Money:PLAYER_MONEY(eventName)
-	local newMoney = Money._moneyAdapter.GetMoney()
+	local newMoney = self.moneyApi.GetMoney()
 	local amountInCopper = newMoney - self.startingMoney
 	if amountInCopper == 0 then
 		return
@@ -277,7 +252,7 @@ function Money:PLAYER_MONEY(eventName)
 
 	local payload = Money:BuildPayload(amountInCopper)
 	if payload then
-		LootElementBase:fromPayload(payload):Show()
+		self.lootElementBase:fromPayload(payload):Show()
 		Money:PlaySoundIfEnabled()
 	end
 end

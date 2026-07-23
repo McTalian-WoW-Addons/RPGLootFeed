@@ -81,13 +81,9 @@ describe("Currency Module", function()
 		ns = {
 			FeatureModule = { Currency = "Currency" },
 			Expansion = { TBC = 2, WOTLK = 3, BFA = 8 },
-			-- Closure wrappers call these as G_RLF:Method(...) so self = ns.
 			LogDebug = spy.new(function() end),
 			LogInfo = spy.new(function() end),
 			LogWarn = spy.new(function() end),
-			IsRetail = function()
-				return false
-			end,
 			RGBAToHexFormat = function()
 				return "|cFFFFFFFF"
 			end,
@@ -131,19 +127,46 @@ describe("Currency Module", function()
 			Frames = { MAIN = 1 },
 		}
 
-		-- WoWAPIAdapters.lua provides G_RLF.WoWAPI.Currency at runtime; supply an
-		-- empty table here so Currency.lua can assign _currencyAdapter = G_RLF.WoWAPI.Currency
-		-- during loadfile without erroring.  Tests replace _currencyAdapter via makeDefaultAdapter().
-		ns.WoWAPI = { Currency = {} }
+		-- DI container for dependency injection
+		ns.DI = {
+			_registry = {},
+			Register = function(self, name, instance)
+				self._registry[name] = instance
+			end,
+			Resolve = function(self, name)
+				return self._registry[name]
+			end,
+		}
 
 		-- Load real LootElementBase so elements are fully constructed.
 		assert(loadfile("RPGLootFeed/Features/_Internals/LootElementBase.lua"))("TestAddon", ns)
 		assert.is_not_nil(ns.LootElementBase)
 
-		-- FeatureBase stub – independent of AceAddon plumbing.
+		-- Load TextTemplateEngine so DI can resolve it for Currency.
+		assert(loadfile("RPGLootFeed/Features/_Internals/TextTemplateEngine.lua"))("TestAddon", ns)
+		assert.is_not_nil(ns.TextTemplateEngine)
+
+		-- Register DI dependencies before loading Currency
+		ns.DI:Register("LootElementBase", ns.LootElementBase)
+		ns.DI:Register("TextTemplateEngine", ns.TextTemplateEngine)
+		ns.DI:Register("WoWAPI.Currency", makeDefaultAdapter())
+		ns.DI:Register("IsRetail", function()
+			return false
+		end)
+
+		-- FeatureBase stub – supports DI deps table and logging injection.
 		ns.FeatureBase = {
-			new = function(_, name)
-				return {
+			new = function(_, name, depsOrMixin, ...)
+				local deps = {}
+				local mixins = {}
+				if type(depsOrMixin) == "table" then
+					deps = depsOrMixin
+					mixins = { ... }
+				else
+					mixins = { depsOrMixin, ... }
+				end
+
+				local module = {
 					moduleName = name,
 					Enable = function() end,
 					Disable = function() end,
@@ -153,14 +176,42 @@ describe("Currency Module", function()
 					RegisterEvent = function() end,
 					UnregisterEvent = function() end,
 				}
+
+				-- Resolve DI dependencies
+				for fieldName, depName in pairs(deps.di or {}) do
+					module[fieldName] = ns.DI:Resolve(depName)
+				end
+
+				-- Inject logging methods
+				if deps.logging then
+					module.LogDebug = function(self, message, source, type_, id, content, amount, isNew)
+						ns.LogDebug(
+							message,
+							source or "TestAddon",
+							type_ or self.moduleName,
+							id,
+							content,
+							amount,
+							isNew
+						)
+					end
+					module.LogInfo = function(self, message, source, type_, id, content, amount, isNew)
+						ns.LogInfo(message, source or "TestAddon", type_ or self.moduleName, id, content, amount, isNew)
+					end
+					module.LogWarn = function(self, message, source, type_, id, content, amount, isNew)
+						ns.LogWarn(message, source or "TestAddon", type_ or self.moduleName, id, content, amount, isNew)
+					end
+					module.LogError = function(self, message, source, type_, id, content, amount, isNew)
+						-- no-op for tests
+					end
+				end
+
+				return module
 			end,
 		}
 
 		-- Load Currency.lua – all external dependency locals captured at this point.
 		CurrencyModule = assert(loadfile("RPGLootFeed/Features/Currency/Currency.lua"))("TestAddon", ns)
-
-		-- Inject fresh default adapter; tests override individual methods per-test.
-		CurrencyModule._currencyAdapter = makeDefaultAdapter()
 	end)
 
 	-- ── Lifecycle ──────────────────────────────────────────────────────────────
@@ -170,7 +221,7 @@ describe("Currency Module", function()
 			ns.DbAccessor.IsFeatureNeededByAnyFrame = function()
 				return true
 			end
-			CurrencyModule._currencyAdapter.GetExpansionLevel = function()
+			CurrencyModule.currencyApi.GetExpansionLevel = function()
 				return 3 -- WOTLK
 			end
 			local spyEnable = spy.on(CurrencyModule, "Enable")
@@ -184,7 +235,7 @@ describe("Currency Module", function()
 			ns.DbAccessor.IsFeatureNeededByAnyFrame = function()
 				return false
 			end
-			CurrencyModule._currencyAdapter.GetExpansionLevel = function()
+			CurrencyModule.currencyApi.GetExpansionLevel = function()
 				return 3
 			end
 			local spyEnable = spy.on(CurrencyModule, "Enable")
@@ -198,7 +249,7 @@ describe("Currency Module", function()
 			ns.DbAccessor.IsFeatureNeededByAnyFrame = function()
 				return true
 			end
-			CurrencyModule._currencyAdapter.GetExpansionLevel = function()
+			CurrencyModule.currencyApi.GetExpansionLevel = function()
 				return 2 -- TBC
 			end
 			local spyEnable = spy.on(CurrencyModule, "Enable")
@@ -209,10 +260,10 @@ describe("Currency Module", function()
 		end)
 
 		it("OnEnable registers CURRENCY_DISPLAY_UPDATE + PERKS_PROGRAM for Retail >= BFA", function()
-			ns.IsRetail = function()
+			CurrencyModule.isRetail = function()
 				return true
 			end
-			CurrencyModule._currencyAdapter.GetExpansionLevel = function()
+			CurrencyModule.currencyApi.GetExpansionLevel = function()
 				return 8 -- BFA
 			end
 			local spyReg = spy.on(CurrencyModule, "RegisterEvent")
@@ -223,10 +274,10 @@ describe("Currency Module", function()
 		end)
 
 		it("OnEnable registers only CHAT_MSG_CURRENCY for Classic >= WOTLK", function()
-			ns.IsRetail = function()
+			CurrencyModule.isRetail = function()
 				return false
 			end
-			CurrencyModule._currencyAdapter.GetExpansionLevel = function()
+			CurrencyModule.currencyApi.GetExpansionLevel = function()
 				return 3 -- WOTLK
 			end
 			local spyReg = spy.on(CurrencyModule, "RegisterEvent")
@@ -236,7 +287,7 @@ describe("Currency Module", function()
 		end)
 
 		it("OnEnable does not register events for TBC (below WOTLK)", function()
-			CurrencyModule._currencyAdapter.GetExpansionLevel = function()
+			CurrencyModule.currencyApi.GetExpansionLevel = function()
 				return 2 -- TBC
 			end
 			local spyReg = spy.on(CurrencyModule, "RegisterEvent")
@@ -245,10 +296,10 @@ describe("Currency Module", function()
 		end)
 
 		it("OnDisable unregisters all three events for Retail >= BFA", function()
-			ns.IsRetail = function()
+			CurrencyModule.isRetail = function()
 				return true
 			end
-			CurrencyModule._currencyAdapter.GetExpansionLevel = function()
+			CurrencyModule.currencyApi.GetExpansionLevel = function()
 				return 8
 			end
 			local spyUnreg = spy.on(CurrencyModule, "UnregisterEvent")
@@ -260,10 +311,10 @@ describe("Currency Module", function()
 		end)
 
 		it("OnDisable unregisters only CHAT_MSG_CURRENCY for Classic >= WOTLK", function()
-			ns.IsRetail = function()
+			CurrencyModule.isRetail = function()
 				return false
 			end
-			CurrencyModule._currencyAdapter.GetExpansionLevel = function()
+			CurrencyModule.currencyApi.GetExpansionLevel = function()
 				return 3
 			end
 			local spyUnreg = spy.on(CurrencyModule, "UnregisterEvent")
@@ -273,7 +324,7 @@ describe("Currency Module", function()
 		end)
 
 		it("OnDisable does not unregister events when expansion < WOTLK", function()
-			CurrencyModule._currencyAdapter.GetExpansionLevel = function()
+			CurrencyModule.currencyApi.GetExpansionLevel = function()
 				return 2
 			end
 			local spyUnreg = spy.on(CurrencyModule, "UnregisterEvent")
@@ -300,7 +351,7 @@ describe("Currency Module", function()
 	end)
 
 	it("does not show loot if currency info is nil", function()
-		CurrencyModule._currencyAdapter.GetCurrencyInfo = function()
+		CurrencyModule.currencyApi.GetCurrencyInfo = function()
 			return nil
 		end
 		CurrencyModule:CURRENCY_DISPLAY_UPDATE("CURRENCY_DISPLAY_UPDATE", 123, 1, 1)
@@ -308,7 +359,7 @@ describe("Currency Module", function()
 	end)
 
 	it("does not show loot if currency info has empty description", function()
-		CurrencyModule._currencyAdapter.GetCurrencyInfo = function()
+		CurrencyModule.currencyApi.GetCurrencyInfo = function()
 			return { currencyID = 123, description = "", iconFileID = 123456 }
 		end
 		CurrencyModule:CURRENCY_DISPLAY_UPDATE("CURRENCY_DISPLAY_UPDATE", 123, 5, 2)
@@ -316,7 +367,7 @@ describe("Currency Module", function()
 	end)
 
 	it("does not show loot if currency info has nil iconFileID", function()
-		CurrencyModule._currencyAdapter.GetCurrencyInfo = function()
+		CurrencyModule.currencyApi.GetCurrencyInfo = function()
 			return { currencyID = 123, description = "Some currency", iconFileID = nil }
 		end
 		CurrencyModule:CURRENCY_DISPLAY_UPDATE("CURRENCY_DISPLAY_UPDATE", 123, 5, 2)
@@ -330,7 +381,7 @@ describe("Currency Module", function()
 	end)
 
 	it("does not show if currency link is nil", function()
-		CurrencyModule._currencyAdapter.GetCurrencyLinkFromLib = function()
+		CurrencyModule.currencyApi.GetCurrencyLinkFromLib = function()
 			return nil
 		end
 		CurrencyModule:CURRENCY_DISPLAY_UPDATE("CURRENCY_DISPLAY_UPDATE", 123, 5, 2)
@@ -349,13 +400,13 @@ describe("Currency Module", function()
 		}
 		local basicInfo = { displayAmount = 2 }
 		local link = "|c12345678|Hcurrency:123|h[Best Coin]|h|r"
-		CurrencyModule._currencyAdapter.GetCurrencyInfo = function()
+		CurrencyModule.currencyApi.GetCurrencyInfo = function()
 			return info
 		end
-		CurrencyModule._currencyAdapter.GetBasicCurrencyInfo = function()
+		CurrencyModule.currencyApi.GetBasicCurrencyInfo = function()
 			return basicInfo
 		end
-		CurrencyModule._currencyAdapter.GetCurrencyLinkFromLib = function()
+		CurrencyModule.currencyApi.GetCurrencyLinkFromLib = function()
 			return link
 		end
 
@@ -366,11 +417,11 @@ describe("Currency Module", function()
 	end)
 
 	it("falls back to GetCurrencyLinkFromGlobal when HasGetCurrencyLinkAPI returns false", function()
-		CurrencyModule._currencyAdapter.HasGetCurrencyLinkAPI = function()
+		CurrencyModule.currencyApi.HasGetCurrencyLinkAPI = function()
 			return false
 		end
 		local fallbackLink = "|c12345678|Hcurrency:123|h[Fallback]|h|r"
-		CurrencyModule._currencyAdapter.GetCurrencyLinkFromGlobal = function()
+		CurrencyModule.currencyApi.GetCurrencyLinkFromGlobal = function()
 			return fallbackLink
 		end
 		local spyBuildPayload = spy.on(CurrencyModule, "BuildPayload")
@@ -393,13 +444,13 @@ describe("Currency Module", function()
 		}
 		local basicInfo = { displayAmount = 5 }
 		local link = "|c12345678|Hcurrency:3008|h[Trader's Tender]|h|r"
-		CurrencyModule._currencyAdapter.GetCurrencyInfo = function()
+		CurrencyModule.currencyApi.GetCurrencyInfo = function()
 			return info
 		end
-		CurrencyModule._currencyAdapter.GetBasicCurrencyInfo = function()
+		CurrencyModule.currencyApi.GetBasicCurrencyInfo = function()
 			return basicInfo
 		end
-		CurrencyModule._currencyAdapter.GetCurrencyLinkFromLib = function()
+		CurrencyModule.currencyApi.GetCurrencyLinkFromLib = function()
 			return link
 		end
 
@@ -426,16 +477,16 @@ describe("Currency Module", function()
 		before_each(function()
 			-- Switch to Classic WOTLK expansion (< BFA) to activate the
 			-- CHAT_MSG_CURRENCY code path and classic pattern computation.
-			CurrencyModule._currencyAdapter.GetExpansionLevel = function()
+			CurrencyModule.currencyApi.GetExpansionLevel = function()
 				return 3 -- WOTLK
 			end
-			CurrencyModule._currencyAdapter.GetCurrencyGainedMultiplePattern = function()
+			CurrencyModule.currencyApi.GetCurrencyGainedMultiplePattern = function()
 				return "You receive currency: %s x%d."
 			end
-			CurrencyModule._currencyAdapter.GetCurrencyGainedMultipleBonusPattern = function()
+			CurrencyModule.currencyApi.GetCurrencyGainedMultipleBonusPattern = function()
 				return "You receive currency: %s x%d. (Bonus Objective)"
 			end
-			CurrencyModule._currencyAdapter.GetCurrencyLinkFromGlobal = function()
+			CurrencyModule.currencyApi.GetCurrencyLinkFromGlobal = function()
 				return currencyLink
 			end
 			-- Call OnInitialize to pre-compute classicCurrencyPatterns from the
@@ -479,7 +530,7 @@ describe("Currency Module", function()
 					iconFileID = 133784,
 					quality = 1,
 				}
-				CurrencyModule._currencyAdapter.GetCurrencyInfo = function()
+				CurrencyModule.currencyApi.GetCurrencyInfo = function()
 					return currencyInfo
 				end
 			end)
@@ -507,7 +558,7 @@ describe("Currency Module", function()
 			end)
 
 			it("does not show when currency info is nil", function()
-				CurrencyModule._currencyAdapter.GetCurrencyInfo = function()
+				CurrencyModule.currencyApi.GetCurrencyInfo = function()
 					return nil
 				end
 				CurrencyModule:CHAT_MSG_CURRENCY("CHAT_MSG_CURRENCY", "You receive currency: " .. currencyLink .. ".")
@@ -557,7 +608,7 @@ describe("Currency Module", function()
 			end)
 
 			it("ignores secrets-value messages", function()
-				CurrencyModule._currencyAdapter.IssecretValue = function()
+				CurrencyModule.currencyApi.IssecretValue = function()
 					return true
 				end
 				CurrencyModule:CHAT_MSG_CURRENCY("CHAT_MSG_CURRENCY", "secretmsg")
@@ -574,16 +625,16 @@ describe("Currency Module", function()
 		local currencyInfo
 
 		before_each(function()
-			CurrencyModule._currencyAdapter.GetExpansionLevel = function()
+			CurrencyModule.currencyApi.GetExpansionLevel = function()
 				return 3 -- WOTLK
 			end
-			CurrencyModule._currencyAdapter.GetCurrencyGainedMultiplePattern = function()
+			CurrencyModule.currencyApi.GetCurrencyGainedMultiplePattern = function()
 				return "Вы получаете валюту – %s, %d шт."
 			end
-			CurrencyModule._currencyAdapter.GetCurrencyGainedMultipleBonusPattern = function()
+			CurrencyModule.currencyApi.GetCurrencyGainedMultipleBonusPattern = function()
 				return "Вы получаете валюту – %s, %d шт. (дополнительные задачи)"
 			end
-			CurrencyModule._currencyAdapter.GetCurrencyLinkFromGlobal = function()
+			CurrencyModule.currencyApi.GetCurrencyLinkFromGlobal = function()
 				return ruCurrencyLink
 			end
 			currencyInfo = {
@@ -592,7 +643,7 @@ describe("Currency Module", function()
 				iconFileID = 133784,
 				quality = 1,
 			}
-			CurrencyModule._currencyAdapter.GetCurrencyInfo = function()
+			CurrencyModule.currencyApi.GetCurrencyInfo = function()
 				return currencyInfo
 			end
 			ns.DbAccessor.IsFeatureNeededByAnyFrame = function()
@@ -689,13 +740,13 @@ describe("Currency Module", function()
 					quality = 1,
 					name = "Очки справедливости",
 				}
-				CurrencyModule._currencyAdapter.GetCurrencyInfo = function()
+				CurrencyModule.currencyApi.GetCurrencyInfo = function()
 					return bigCurrencyInfo
 				end
 				ns.ExtractCurrencyID = function()
 					return 395
 				end
-				CurrencyModule._currencyAdapter.GetCurrencyLinkFromGlobal = function()
+				CurrencyModule.currencyApi.GetCurrencyLinkFromGlobal = function()
 					return "|cffffffff|Hcurrency:395:0|h[Очки справедливости]|h|r"
 				end
 				local parseStub = stub(CurrencyModule, "ParseCurrencyChangeMessage").returns(83)
@@ -791,6 +842,7 @@ describe("Currency Module", function()
 		end)
 
 		it("secondaryTextFn returns empty string when cappedQuantity is 0", function()
+			CurrencyModule:OnEnable() -- registers context provider
 			local p = CurrencyModule:BuildPayload(makeLink(), makeInfo(), { displayAmount = 1 })
 			-- cappedQuantity = maxQuantity = 0
 			assert.equals("", p.secondaryTextFn())
