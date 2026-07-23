@@ -61,8 +61,12 @@ describe("Features module", function()
 		local featureImports = 0
 		for line in file:lines() do
 			if line:find("file=") then
-				-- Skip lines that do not contain "file="
-				if not (line:find('file="_Internals')) then
+				-- Skip internal files, co-located config files, and co-located sample files
+				if
+					not (line:find('file="_Internals'))
+					and not (line:find('Config%.lua"'))
+					and not (line:find('Sample%.lua"'))
+				then
 					featureImports = featureImports + 1
 				end
 			end
