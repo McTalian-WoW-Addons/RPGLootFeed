@@ -258,7 +258,9 @@ local function generateRandomLoot()
 			local payload = module:BuildPayload(info, amountLooted)
 			if payload then
 				G_RLF.LootElementBase:fromPayload(payload):Show(info.itemName, info.itemQuality)
-				module:PlaySoundIfEnabled(payload)
+				if module.PlaySoundIfEnabled then
+					module:PlaySoundIfEnabled(payload)
+				end
 				G_RLF:LogDebug("Item looted: " .. info.itemName, addonName)
 			end
 

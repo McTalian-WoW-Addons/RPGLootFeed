@@ -26,17 +26,6 @@ end
 
 local WOWEVENT = G_RLF.LogEventSource.WOWEVENT
 
-local ItemLoot = G_RLF.FeatureModule.ItemLoot
-local Currency = G_RLF.FeatureModule.Currency
-local Money = G_RLF.FeatureModule.Money
-local Reputation = G_RLF.FeatureModule.Reputation
-local Experience = G_RLF.FeatureModule.Experience
-local Profession = G_RLF.FeatureModule.Profession
-local PartyLoot = G_RLF.FeatureModule.PartyLoot
-local TravelPoints = G_RLF.FeatureModule.TravelPoints
-local Transmog = G_RLF.FeatureModule.Transmog
-local LootRolls = G_RLF.FeatureModule.LootRolls
-
 local levelColors = {
 	[G_RLF.LogLevel.debug] = "|cFF808080{D}|r",
 	[G_RLF.LogLevel.info] = "|cFFADD8E6{I}|r",
@@ -44,18 +33,8 @@ local levelColors = {
 	[G_RLF.LogLevel.error] = "|cFFFF0000{E}|r",
 }
 
-local typeColors = {
-	[ItemLoot] = "|cFF00FF00[ITEM]|r",
-	[Currency] = "|cFFFFD700[CURR]|r",
-	[Money] = "|cFFC0C0C0[GOLD]|r",
-	[Reputation] = "|cFF1E90FF[REPU]|r",
-	[Experience] = "|cFF9932CC[EXPR]|r",
-	[Profession] = "|cFF8B4513[PROF]|r",
-	[PartyLoot] = "|cFF00FFFF[PRTY]|r",
-	[TravelPoints] = "|cFF8A2BE2[TRVL]|r",
-	[Transmog] = "|cFFFF69B4[TMOG]|r",
-	[LootRolls] = "|cFFFF8C00[ROLL]|r",
-}
+-- typeColors populated dynamically from G_RLF.FeatureLogMetadata
+-- (registered by each feature module via FeatureRegistry:Register)
 
 local sourceStrings = {
 	[addonName] = "(" .. addonName .. ")",
@@ -78,7 +57,8 @@ function Logger:FormatLogEntry(logEntry)
 	local ts = "|cFF808080" .. timeOnly .. "|r"
 	local level = levelColors[logEntry.level] or ""
 	local src = sourceStrings[logEntry.source] or ""
-	local typ = typeColors[logEntry.type] or ""
+	local meta = G_RLF.FeatureLogMetadata and G_RLF.FeatureLogMetadata[logEntry.type]
+	local typ = meta and meta.color or ""
 	local content = logEntry.content == "" and logEntry.message or logEntry.content .. " MSG: " .. logEntry.message
 	local amount = logEntry.amount ~= "" and format(" (tot: %s)", logEntry.amount) or ""
 	local update = logEntry.new == false and " ~UPDATE~" or ""
