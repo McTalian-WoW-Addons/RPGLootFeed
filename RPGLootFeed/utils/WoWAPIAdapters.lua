@@ -355,4 +355,22 @@ G_RLF.WoWAPI.LootRolls = {
 	end,
 }
 
+-- ── Self-register in DI container ─────────────────────────────────────────────
+if G_RLF.DI then
+	for _, key in ipairs({
+		"Reputation",
+		"Experience",
+		"Money",
+		"TravelPoints",
+		"Currency",
+		"Professions",
+		"Transmog",
+		"ItemLoot",
+		"PartyLoot",
+		"LootRolls",
+	}) do
+		G_RLF.DI:Register("WoWAPI." .. key, G_RLF.WoWAPI[key])
+	end
+end
+
 return G_RLF.WoWAPI

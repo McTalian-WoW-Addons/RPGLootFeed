@@ -492,3 +492,13 @@ function G_RLF:GetWrapChars(wrapChar)
 	end
 	return sChar, eChar
 end
+
+-- ── Register DI entries for utility functions ─────────────────────────────────
+if G_RLF.DI then
+	G_RLF.DI:Register("IsRetail", function()
+		return G_RLF:IsRetail()
+	end)
+	G_RLF.DI:Register("RGBAToHexFormat", function(r, g, b, a)
+		return G_RLF:RGBAToHexFormat(r, g, b, a)
+	end)
+end

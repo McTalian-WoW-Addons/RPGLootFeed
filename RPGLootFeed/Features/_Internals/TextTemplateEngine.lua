@@ -276,4 +276,9 @@ end
 
 G_RLF.TextTemplateEngine = TextTemplateEngine
 
+-- ── Self-register in DI container ─────────────────────────────────────────────
+if G_RLF.DI then
+	G_RLF.DI:Register("TextTemplateEngine", TextTemplateEngine)
+end
+
 return TextTemplateEngine
