@@ -61,6 +61,7 @@ describe("Transmog module", function()
 
 		-- Load real LootElementBase so elements are fully constructed.
 		assert(loadfile("RPGLootFeed/Features/_Internals/LootElementBase.lua"))("TestAddon", ns)
+		assert(loadfile("RPGLootFeed/utils/FeatureRegistry.lua"))("TestAddon", ns)
 		assert.is_not_nil(ns.LootElementBase)
 
 		-- Load TextTemplateEngine so DI can resolve it for Transmog.
@@ -140,7 +141,7 @@ describe("Transmog module", function()
 		}
 
 		-- Load Transmog – the FeatureBase mock above captures deps from ns.DI.
-		TransmogModule = assert(loadfile("RPGLootFeed/Features/Transmog.lua"))("TestAddon", ns)
+		TransmogModule = assert(loadfile("RPGLootFeed/Features/Transmog/Transmog.lua"))("TestAddon", ns)
 
 		-- Inject a fresh mock adapter so tests control external WoW API calls
 		-- without patching _G directly.

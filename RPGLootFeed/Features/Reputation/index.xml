@@ -1,5 +1,8 @@
 <Ui xsi:schemaLocation="http://www.blizzard.com/wow/ui/ ..\FrameXML\UI.xsd">
-    <Script file="LegacyChatParsingImpl.lua"/>
     <Script file="Reputation.lua"/>
+    <Script file="ReputationConfig.lua"/>
+    <Script file="ReputationSample.lua"/>
+    <Script file="LegacyChatParsingImpl.lua"/>
     <Script file="ReputationDelversJourney.lua"/>
+    <Script file="Register.lua"/>
 </Ui>

@@ -3,4 +3,7 @@
             xsi:schemaLocation="http://www.blizzard.com/wow/ui/
 ..\FrameXML\UI.xsd">
     <Script file="LootRolls.lua"/>
+    <Script file="LootRollsConfig.lua"/>
+    <Script file="LootRollsSample.lua"/>
+    <Script file="Register.lua"/>
 </Ui>

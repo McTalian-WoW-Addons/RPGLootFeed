@@ -4,19 +4,17 @@ local addonName, ns = ...
 ---@class G_RLF
 local G_RLF = ns
 
-local ReputationConfig = {}
-
 --- Build the AceConfig options group for Reputation on the given frame.
---- @param frameId integer
---- @param order number
---- @return table
-function G_RLF.BuildReputationArgs(frameId, order)
+--- Called from the config system by function name.
+---@param frameId integer
+---@param order number
+---@return table
+function G_RLF.Reputation:BuildConfigArgs(frameId, order)
 	local function fc()
 		return G_RLF.db.global.frames[frameId].features.reputation
 	end
 	return {
 		type = "group",
-		handler = ReputationConfig,
 		name = G_RLF.L["Reputation Config"],
 		order = order,
 		args = {
@@ -156,3 +154,5 @@ function G_RLF.BuildReputationArgs(frameId, order)
 		},
 	}
 end
+
+return {}

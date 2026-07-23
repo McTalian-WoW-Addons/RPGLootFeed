@@ -4,21 +4,19 @@ local addonName, ns = ...
 ---@class G_RLF
 local G_RLF = ns
 
-local MoneyConfig = {}
-
 local lsm = G_RLF.lsm
 
 --- Build the AceConfig options group for Money on the given frame.
---- @param frameId integer
---- @param order number
---- @return table
-function G_RLF.BuildMoneyArgs(frameId, order)
+--- Called from the config system by function name.
+---@param frameId integer
+---@param order number
+---@return table
+function G_RLF.Money:BuildConfigArgs(frameId, order)
 	local function fc()
 		return G_RLF.db.global.frames[frameId].features.money
 	end
 	return {
 		type = "group",
-		handler = MoneyConfig,
 		name = G_RLF.L["Money Config"],
 		order = order,
 		args = {
@@ -71,10 +69,6 @@ function G_RLF.BuildMoneyArgs(frameId, order)
 						end,
 						order = 0.5,
 					},
-					-- TODO: Money total is in secondary text row, unlike other total counters
-					-- Will need to make Money consistent with other features to have the same
-					-- options for total counters.
-
 					moneyTotalOptions = {
 						type = "group",
 						inline = true,
@@ -93,36 +87,6 @@ function G_RLF.BuildMoneyArgs(frameId, order)
 									fc().showMoneyTotal = value
 								end,
 							},
-							-- moneyTotalColor = {
-							--   type = "color",
-							--   name = G_RLF.L["Money Total Color"],
-							--   desc = G_RLF.L["MoneyTotalColorDesc"],
-							--   disabled = function()
-							--     return not fc().showMoneyTotal
-							--   end,
-							--   hasAlpha = true,
-							--   get = function()
-							--     return unpack(fc().moneyTotalColor)
-							--   end,
-							--   set = function(_, r, g, b, a)
-							--     fc().moneyTotalColor = { r, g, b, a }
-							--   end,
-							-- },
-							-- moneyTextWrapChar = {
-							--   type = "select",
-							--   name = G_RLF.L["Money Text Wrap Char"],
-							--   desc = G_RLF.L["MoneyTextWrapCharDesc"],
-							--   disabled = function()
-							--     return not fc().showMoneyTotal
-							--   end,
-							--   values = G_RLF.WrapCharOptions,
-							--   get = function()
-							--     return fc().moneyTextWrapChar
-							--   end,
-							--   set = function(_, value)
-							--     fc().moneyTextWrapChar = value
-							--   end,
-							-- },
 							abbreviateTotal = {
 								type = "toggle",
 								name = G_RLF.L["Abbreviate Total"],
@@ -178,7 +142,11 @@ function G_RLF.BuildMoneyArgs(frameId, order)
 						end,
 						set = function(_, value)
 							fc().overrideMoneyLootSound = value
-							MoneyConfig:OverrideSound(frameId)
+							if value then
+								MuteSoundFile(G_RLF.GameSounds.LOOT_SMALL_COIN)
+							else
+								UnmuteSoundFile(G_RLF.GameSounds.LOOT_SMALL_COIN)
+							end
 						end,
 						width = "double",
 						order = 5,
@@ -199,7 +167,9 @@ function G_RLF.BuildMoneyArgs(frameId, order)
 						end,
 						set = function(_, value)
 							fc().moneyLootSound = value
-							MoneyConfig:OverrideSound(frameId)
+							if fc().overrideMoneyLootSound then
+								MuteSoundFile(G_RLF.GameSounds.LOOT_SMALL_COIN)
+							end
 						end,
 						disabled = function()
 							return not fc().enabled or not fc().overrideMoneyLootSound
@@ -213,11 +183,4 @@ function G_RLF.BuildMoneyArgs(frameId, order)
 	}
 end
 
-function MoneyConfig:OverrideSound(frameId)
-	local featureCfg = G_RLF.db.global.frames[frameId].features.money
-	if featureCfg.overrideMoneyLootSound then
-		MuteSoundFile(G_RLF.GameSounds.LOOT_SMALL_COIN)
-	else
-		UnmuteSoundFile(G_RLF.GameSounds.LOOT_SMALL_COIN)
-	end
-end
+return {}

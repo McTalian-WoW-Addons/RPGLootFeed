@@ -67,6 +67,7 @@ describe("Professions Module", function()
 
 		-- Load real LootElementBase so elements are fully constructed.
 		assert(loadfile("RPGLootFeed/Features/_Internals/LootElementBase.lua"))("TestAddon", ns)
+		assert(loadfile("RPGLootFeed/utils/FeatureRegistry.lua"))("TestAddon", ns)
 		assert.is_not_nil(ns.LootElementBase)
 
 		-- Setup minimal DI container so FeatureBase mock resolves deps.
@@ -134,7 +135,7 @@ describe("Professions Module", function()
 		}
 
 		-- Load Professions – the FeatureBase mock above captures deps from ns.DI.
-		Professions = assert(loadfile("RPGLootFeed/Features/Professions.lua"))("TestAddon", ns)
+		Professions = assert(loadfile("RPGLootFeed/Features/Professions/Professions.lua"))("TestAddon", ns)
 
 		-- Inject a fresh mock adapter so tests control external WoW API calls.
 		Professions.professionsApi = {

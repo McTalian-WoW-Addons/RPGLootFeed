@@ -4,19 +4,17 @@ local addonName, ns = ...
 ---@class G_RLF
 local G_RLF = ns
 
-local ProfessionConfig = {}
-
 --- Build the AceConfig options group for Profession on the given frame.
---- @param frameId integer
---- @param order number
---- @return table
-function G_RLF.BuildProfessionArgs(frameId, order)
+--- Called from the config system by function name.
+---@param frameId integer
+---@param order number
+---@return table
+function G_RLF.Professions:BuildConfigArgs(frameId, order)
 	local function fc()
 		return G_RLF.db.global.frames[frameId].features.profession
 	end
 	return {
 		type = "group",
-		handler = ProfessionConfig,
 		name = G_RLF.L["Profession Config"],
 		order = order,
 		args = {
@@ -129,3 +127,5 @@ function G_RLF.BuildProfessionArgs(frameId, order)
 		},
 	}
 end
+
+return {}
