@@ -2,6 +2,9 @@
             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
             xsi:schemaLocation="http://www.blizzard.com/wow/ui/
 ..\FrameXML\UI.xsd">
-    <Script file="HiddenCurrencies.lua"/>
     <Script file="Currency.lua"/>
+    <Script file="CurrencyConfig.lua"/>
+    <Script file="CurrencySample.lua"/>
+    <Script file="HiddenCurrencies.lua"/>
+    <Script file="Register.lua"/>
 </Ui>
