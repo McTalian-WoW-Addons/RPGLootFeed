@@ -6,11 +6,11 @@
     <Include file="ItemLoot/ItemLoot.xml"/>
     <Include file="PartyLoot/PartyLoot.xml"/>
     <Include file="Currency/Currency.xml"/>
-    <Script file="Money.lua"/>
-    <Script file="Experience.lua"/>
+    <Include file="Money/Money.xml"/>
+    <Include file="Experience/Experience.xml"/>
     <Include file="Reputation/index.xml"/>
-    <Script file="Professions.lua"/>
-    <Script file="TravelPoints.lua"/>
-    <Script file="Transmog.lua"/>
+    <Include file="Professions/Professions.xml"/>
+    <Include file="TravelPoints/TravelPoints.xml"/>
+    <Include file="Transmog/Transmog.xml"/>
     <Include file="LootRolls/LootRolls.xml"/>
 </Ui>

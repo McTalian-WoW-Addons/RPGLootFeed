@@ -4,19 +4,17 @@ local addonName, ns = ...
 ---@class G_RLF
 local G_RLF = ns
 
-local CurrencyConfig = {}
-
 --- Build the AceConfig options group for Currency on the given frame.
---- @param frameId integer
---- @param order number
---- @return table
-function G_RLF.BuildCurrencyArgs(frameId, order)
+--- Called from the config system by function name.
+---@param frameId integer
+---@param order number
+---@return table
+function G_RLF.Currency:BuildConfigArgs(frameId, order)
 	local function fc()
 		return G_RLF.db.global.frames[frameId].features.currency
 	end
 	return {
 		type = "group",
-		handler = CurrencyConfig,
 		name = G_RLF.L["Currency Config"],
 		order = order,
 		disabled = function()
@@ -160,3 +158,5 @@ function G_RLF.BuildCurrencyArgs(frameId, order)
 		},
 	}
 end
+
+return {}

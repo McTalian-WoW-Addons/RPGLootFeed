@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Ui xsi:schemaLocation="http://www.blizzard.com/wow/ui/ ..\..\FrameXML\UI.xsd">
+    <Script file="Transmog.lua"/>
+    <Script file="TransmogConfig.lua"/>
+    <Script file="TransmogSample.lua"/>
+    <Script file="Register.lua"/>
+</Ui>

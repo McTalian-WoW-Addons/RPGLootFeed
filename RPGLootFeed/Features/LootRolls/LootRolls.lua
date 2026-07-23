@@ -760,3 +760,5 @@ function LootRolls:ReplayActiveRolls()
 		self:START_LOOT_ROLL(rollID, duration)
 	end
 end
+
+return LootRolls

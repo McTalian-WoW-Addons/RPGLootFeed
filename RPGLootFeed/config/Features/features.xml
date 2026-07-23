@@ -3,14 +3,4 @@
             xsi:schemaLocation="http://www.blizzard.com/wow/ui/
 ..\FrameXML\UI.xsd">
     <Script file="Features.lua"/>
-    <Script file="ItemConfig.lua"/>
-    <Script file="PartyLootConfig.lua"/>
-    <Script file="CurrencyConfig.lua"/>
-    <Script file="MoneyConfig.lua"/>
-    <Script file="ExperienceConfig.lua"/>
-    <Script file="ReputationConfig.lua"/>
-    <Script file="ProfessionConfig.lua"/>
-    <Script file="TravelPointsConfig.lua"/>
-    <Script file="TransmogConfig.lua"/>
-    <Script file="LootRollsConfig.lua"/>
 </Ui>

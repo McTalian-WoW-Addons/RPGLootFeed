@@ -69,6 +69,7 @@ describe("PartyLoot Module", function()
 
 		-- Load real LootElementBase so elements are fully constructed.
 		assert(loadfile("RPGLootFeed/Features/_Internals/LootElementBase.lua"))("TestAddon", ns)
+		assert(loadfile("RPGLootFeed/utils/FeatureRegistry.lua"))("TestAddon", ns)
 		assert.is_not_nil(ns.LootElementBase)
 
 		-- DI container for dependency injection

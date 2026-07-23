@@ -4,19 +4,17 @@ local addonName, ns = ...
 ---@class G_RLF
 local G_RLF = ns
 
-local ExperienceConfig = {}
-
 --- Build the AceConfig options group for Experience on the given frame.
---- @param frameId integer
---- @param order number
---- @return table
-function G_RLF.BuildExperienceArgs(frameId, order)
+--- Called from the config system by function name.
+---@param frameId integer
+---@param order number
+---@return table
+function G_RLF.Experience:BuildConfigArgs(frameId, order)
 	local function fc()
 		return G_RLF.db.global.frames[frameId].features.experience
 	end
 	return {
 		type = "group",
-		handler = ExperienceConfig,
 		name = G_RLF.L["Experience Config"],
 		order = order,
 		args = {
@@ -143,3 +141,5 @@ function G_RLF.BuildExperienceArgs(frameId, order)
 		},
 	}
 end
+
+return {}

@@ -222,6 +222,7 @@ describe("Reputation Module", function()
 		-- Load real LootElementBase so elements are fully constructed.
 		if not n.LootElementBase then
 			assert(loadfile("RPGLootFeed/Features/_Internals/LootElementBase.lua"))("TestAddon", n)
+			assert(loadfile("RPGLootFeed/utils/FeatureRegistry.lua"))("TestAddon", n)
 			assert.is_not_nil(n.LootElementBase)
 		end
 

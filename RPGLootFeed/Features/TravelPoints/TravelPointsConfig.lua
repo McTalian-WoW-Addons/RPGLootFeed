@@ -4,19 +4,17 @@ local addonName, ns = ...
 ---@class G_RLF
 local G_RLF = ns
 
-local TravelPointsConfig = {}
-
 --- Build the AceConfig options group for Travel Points on the given frame.
---- @param frameId integer
---- @param order number
---- @return table
-function G_RLF.BuildTravelPointsArgs(frameId, order)
+--- Called from the config system by function name.
+---@param frameId integer
+---@param order number
+---@return table
+function G_RLF.TravelPoints:BuildConfigArgs(frameId, order)
 	local function fc()
 		return G_RLF.db.global.frames[frameId].features.travelPoints
 	end
 	return {
 		type = "group",
-		handler = TravelPointsConfig,
 		name = G_RLF.L["Travel Points Config"],
 		order = order,
 		disabled = function()
@@ -94,3 +92,5 @@ function G_RLF.BuildTravelPointsArgs(frameId, order)
 		},
 	}
 end
+
+return {}

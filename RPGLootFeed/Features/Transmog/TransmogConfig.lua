@@ -4,21 +4,17 @@ local addonName, ns = ...
 ---@class G_RLF
 local G_RLF = ns
 
-local TransmogConfig = {}
-
-local lsm = G_RLF.lsm
-
 --- Build the AceConfig options group for Transmog on the given frame.
---- @param frameId integer
---- @param order number
---- @return table
-function G_RLF.BuildTransmogArgs(frameId, order)
+--- Co-located on the module to avoid a G_RLF global.
+---@param frameId integer
+---@param order number
+---@return table
+function G_RLF.Transmog:BuildConfigArgs(frameId, order)
 	local function fc()
 		return G_RLF.db.global.frames[frameId].features.transmog
 	end
 	return {
 		type = "group",
-		handler = TransmogConfig,
 		name = G_RLF.L["Transmog Config"],
 		order = order,
 		args = {
@@ -120,3 +116,5 @@ function G_RLF.BuildTransmogArgs(frameId, order)
 		},
 	}
 end
+
+return {}
