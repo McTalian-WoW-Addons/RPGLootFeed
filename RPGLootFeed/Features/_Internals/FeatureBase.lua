@@ -75,6 +75,9 @@ function G_RLF.FeatureBase:new(moduleName, depsOrMixin, ...)
 	-- ── Store metadata for future tooling ─────────────────────────────────────
 	module.__dependencies = deps
 
+	-- ── Make accessible to co-located Config/Sample/Register files ───────────
+	G_RLF[moduleName] = module
+
 	return module
 end
 

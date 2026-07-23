@@ -101,20 +101,33 @@ local function buildFrameGroup(id)
 						order = 1,
 						fontSize = "medium",
 					},
-					itemLoot = G_RLF.BuildItemLootArgs(id, 2),
-					partyLoot = G_RLF.BuildPartyLootArgs(id, 3),
-					currency = G_RLF.BuildCurrencyArgs(id, 4),
-					money = G_RLF.BuildMoneyArgs(id, 5),
-					experience = G_RLF.BuildExperienceArgs(id, 6),
-					reputation = G_RLF.BuildReputationArgs(id, 7),
-					profession = G_RLF.BuildProfessionArgs(id, 8),
-					travelPoints = G_RLF.BuildTravelPointsArgs(id, 9),
-					transmog = G_RLF.BuildTransmogArgs(id, 10),
-					lootRolls = G_RLF.BuildLootRollsArgs(id, 11),
 				},
 			},
 		},
 	}
+
+	-- Build per-feature config args from the FeatureRegistry.
+	-- Each feature that registers `config` in its FeatureRegistry:Register()
+	-- call gets a slot in the lootFeeds group. Order in the UI is derived
+	-- from the feature's mainFeatureOrder (offset by +1).
+	if G_RLF._featureConfigs then
+		local sorted = {}
+		for key, builderFn in pairs(G_RLF._featureConfigs) do
+			local feat = G_RLF.FeatureRegistry.features[key]
+			table.insert(sorted, {
+				key = key,
+				builder = builderFn,
+				order = (feat and feat.order or 99),
+			})
+		end
+		table.sort(sorted, function(a, b)
+			return a.order < b.order
+		end)
+		for _, feat in ipairs(sorted) do
+			group.args.lootFeeds.args[feat.key] = feat.builder(id, feat.order + 1)
+		end
+	end
+
 	wrapSettersWithRefresh(group.args)
 	return group
 end
