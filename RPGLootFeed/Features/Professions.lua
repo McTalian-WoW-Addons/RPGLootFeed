@@ -4,45 +4,18 @@ local addonName, ns = ...
 ---@class G_RLF
 local G_RLF = ns
 
--- ── External dependency locals ────────────────────────────────────────────────
--- Every reference to the addon namespace is captured here so the module's full
--- dependency surface on G_RLF / ns is visible in one place.  Tests pass a
--- minimal mock ns to loadfile("Professions.lua") to control these at
--- injection time without the full nsMocks framework.
--- NOTE: G_RLF.db is intentionally absent – AceDB populates it in
--- OnInitialize, so it must remain a runtime lookup inside function bodies.
-local LootElementBase = G_RLF.LootElementBase
-local DefaultIcons = G_RLF.DefaultIcons
-local ItemQualEnum = G_RLF.ItemQualEnum
-local FeatureBase = G_RLF.FeatureBase
-local FeatureModule = G_RLF.FeatureModule
-local LogDebug = function(...)
-	G_RLF:LogDebug(...)
-end
-local LogInfo = function(...)
-	G_RLF:LogInfo(...)
-end
-local LogWarn = function(...)
-	G_RLF:LogWarn(...)
-end
-local RGBAToHexFormat = function(...)
-	return G_RLF:RGBAToHexFormat(...)
-end
-local CreatePatternSegments = function(pattern)
-	return G_RLF:CreatePatternSegmentsForStringNumber(pattern)
-end
-local ExtractDynamicsFromPattern = function(message, segs)
-	return G_RLF:ExtractDynamicsFromPattern(message, segs)
-end
-
--- ── WoW API / Global abstraction adapters ────────────────────────────────────
--- The shared adapter lives in WoWAPIAdapters.lua (G_RLF.WoWAPI.Professions).
--- Tests replace Professions._professionsAdapter with a mock after loadfile.
+-- ── Feature module ────────────────────────────────────────────────────────────
 
 ---@class RLF_Professions: RLF_Module, AceEvent-3.0
-local Professions = FeatureBase:new(FeatureModule.Profession, "AceEvent-3.0")
-
-Professions._professionsAdapter = G_RLF.WoWAPI.Professions
+local Professions = G_RLF.FeatureBase:new("Professions", {
+	di = {
+		lootElementBase = "LootElementBase",
+		defaultIcons = "DefaultIcons",
+		itemQualEnum = "ItemQualEnum",
+		professionsApi = "WoWAPI.Professions",
+	},
+	logging = true,
+}, "AceEvent-3.0")
 
 --- Builds a uniform payload for LootElementBase:fromPayload().
 ---@param key string Unique key for this profession (typically skillName)
@@ -53,17 +26,17 @@ Professions._professionsAdapter = G_RLF.WoWAPI.Professions
 ---@return RLF_ElementPayload
 function Professions:BuildPayload(key, name, icon, level, quantity)
 	local profConfig = G_RLF.DbAccessor:AnyFeatureConfig("profession") or {}
-	local color = RGBAToHexFormat(unpack(profConfig.skillColor or { 0.333, 0.333, 1.0, 1.0 }))
+	local color = G_RLF:RGBAToHexFormat(unpack(profConfig.skillColor or { 0.333, 0.333, 1.0, 1.0 }))
 
 	---@type RLF_ElementPayload
 	local payload = {
 		-- Routing
 		key = "PROF_" .. key,
-		type = FeatureModule.Profession,
+		type = G_RLF.FeatureModule.Profession,
 
 		-- Icon
 		icon = (profConfig.enableIcon and not G_RLF.db.global.misc.hideAllIcons) and icon or nil,
-		quality = ItemQualEnum.Rare,
+		quality = self.itemQualEnum.Rare,
 
 		-- Primary line
 		quantity = quantity,
@@ -77,8 +50,6 @@ function Professions:BuildPayload(key, name, icon, level, quantity)
 		end,
 
 		-- Item count display (skill delta)
-		-- netAmount is passed by UpdateQuantity when stacking rows so the badge
-		-- reflects the accumulated total rather than just this element's delta.
 		itemCountFn = function(netAmount)
 			local profCfg = G_RLF.DbAccessor:AnyFeatureConfig("profession") or {}
 			if not profCfg.showSkillChange then
@@ -86,16 +57,14 @@ function Professions:BuildPayload(key, name, icon, level, quantity)
 			end
 			return netAmount or quantity,
 				{
-					color = RGBAToHexFormat(unpack(profCfg.skillColor or { 0.333, 0.333, 1.0, 1.0 })),
+					color = G_RLF:RGBAToHexFormat(unpack(profCfg.skillColor or { 0.333, 0.333, 1.0, 1.0 })),
 					wrapChar = profCfg.skillTextWrapChar,
 					showSign = true,
 				}
 		end,
 
 		-- Lifecycle
-		IsEnabled = function()
-			return Professions:IsEnabled()
-		end,
+		moduleRef = Professions,
 	}
 
 	return payload
@@ -111,8 +80,8 @@ function Professions:OnInitialize()
 	else
 		self:Disable()
 	end
-	local pattern = Professions._professionsAdapter.GetSkillRankUpPattern()
-	segments = CreatePatternSegments(pattern)
+	local pattern = self.professionsApi.GetSkillRankUpPattern()
+	segments = G_RLF:CreatePatternSegmentsForStringNumber(pattern)
 end
 
 function Professions:OnDisable()
@@ -123,16 +92,16 @@ end
 function Professions:OnEnable()
 	self:RegisterEvent("PLAYER_ENTERING_WORLD")
 	self:RegisterEvent("CHAT_MSG_SKILL")
-	LogDebug("OnEnable", addonName, self.moduleName)
+	self:LogDebug("OnEnable")
 end
 
 function Professions:InitializeProfessions()
-	local primaryId, secondaryId, archId, fishingId, cookingId = Professions._professionsAdapter.GetProfessions()
+	local primaryId, secondaryId, archId, fishingId, cookingId = self.professionsApi.GetProfessions()
 	local profs = { primaryId, secondaryId, archId, fishingId, cookingId }
 	for i = 1, #profs do
 		if profs[i] then
 			local name, icon, skillLevel, maxSkillLevel, numAbilities, spellOffset, skillLine, skillModifier, specializationIndex, specializationOffset, a, b =
-				Professions._professionsAdapter.GetProfessionInfo(profs[i])
+				self.professionsApi.GetProfessionInfo(profs[i])
 			if name and icon then
 				self.profNameIconMap[name] = icon
 			end
@@ -149,20 +118,18 @@ function Professions:PLAYER_ENTERING_WORLD()
 end
 
 function Professions:CHAT_MSG_SKILL(event, message)
-	if Professions._professionsAdapter.IssecretValue(message) then
-		LogWarn("(" .. event .. ") Secret value detected, ignoring chat message", "WOWEVENT", self.moduleName, "")
+	if self.professionsApi.IssecretValue(message) then
+		self:LogWarn(event .. " Secret value detected, ignoring chat message", "WOWEVENT")
 		return
 	end
 
-	LogInfo(event, "WOWEVENT", self.moduleName, nil, message)
+	self:LogInfo(event, "WOWEVENT", nil, message)
 
-	local skillName, skillLevel = ExtractDynamicsFromPattern(message, segments)
+	local skillName, skillLevel = G_RLF:ExtractDynamicsFromPattern(message, segments)
 	if skillName and skillLevel then
 		if not self.professions[skillName] then
 			self.professions[skillName] = {
 				name = skillName,
-				-- Initialize to current level so the first-seen gain shows no delta;
-				-- we don't know how many points were gained before this session.
 				lastSkillLevel = skillLevel,
 			}
 		end
@@ -179,7 +146,7 @@ function Professions:CHAT_MSG_SKILL(event, message)
 			end
 		end
 		if not icon then
-			icon = DefaultIcons.PROFESSION
+			icon = self.defaultIcons.PROFESSION
 		end
 		local payload = self:BuildPayload(
 			skillName,
@@ -188,7 +155,7 @@ function Professions:CHAT_MSG_SKILL(event, message)
 			skillLevel,
 			skillLevel - self.professions[skillName].lastSkillLevel
 		)
-		LootElementBase:fromPayload(payload):Show()
+		self.lootElementBase:fromPayload(payload):Show()
 		self.professions[skillName].lastSkillLevel = skillLevel
 	end
 end

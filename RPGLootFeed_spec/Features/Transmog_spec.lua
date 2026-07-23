@@ -21,14 +21,9 @@ describe("Transmog module", function()
 		-- Only the fields actually referenced by Transmog.lua and LootElementBase.lua
 		-- are included; everything else is intentionally absent.
 		ns = {
-			-- Captured as locals by Transmog.lua at load time.
-			DefaultIcons = { TRANSMOG = "Interface/Icons/Inv_misc_questionmark" },
-			ItemQualEnum = { Epic = 4 },
-			FeatureModule = { Transmog = "Transmog" },
-			-- WoWAPI stub so Transmog._transmogAdapter = G_RLF.WoWAPI.Transmog
-			-- resolves at load time (overridden per-test in before_each).
+			-- WoWAPI stub so Transmog gets a default adapter per-test.
 			WoWAPI = { Transmog = {} },
-			-- Closure wrappers in Transmog.lua call these as G_RLF:Method(...).
+			-- Closure wrappers in Transmog.lua used by LootElementBase:Show()
 			LogDebug = function() end,
 			LogInfo = function() end,
 			LogWarn = logWarnSpy,
@@ -59,17 +54,55 @@ describe("Transmog module", function()
 				end,
 			},
 			Frames = { MAIN = 1 },
+			DefaultIcons = { TRANSMOG = "Interface/Icons/Inv_misc_questionmark" },
+			ItemQualEnum = { Epic = 4 },
+			FeatureModule = { Transmog = "Transmog" },
 		}
 
 		-- Load real LootElementBase so elements are fully constructed.
 		assert(loadfile("RPGLootFeed/Features/_Internals/LootElementBase.lua"))("TestAddon", ns)
 		assert.is_not_nil(ns.LootElementBase)
 
+		-- Load TextTemplateEngine so DI can resolve it for Transmog.
+		assert(loadfile("RPGLootFeed/Features/_Internals/TextTemplateEngine.lua"))("TestAddon", ns)
+		assert.is_not_nil(ns.TextTemplateEngine)
+
+		-- Setup minimal DI container so FeatureBase mock resolves deps.
+		ns.DI = {
+			registry = {},
+			Register = function(self, k, v)
+				self.registry[k] = v
+			end,
+			Resolve = function(self, k)
+				return self.registry[k]
+			end,
+		}
+		ns.DI:Register("LootElementBase", ns.LootElementBase)
+		ns.DI:Register("DefaultIcons", ns.DefaultIcons)
+		ns.DI:Register("ItemQualEnum", ns.ItemQualEnum)
+		ns.DI:Register("TextTemplateEngine", ns.TextTemplateEngine)
+		ns.DI:Register("WoWAPI.Transmog", {})
+		-- IsRetail: normally registered by AddonMethods.lua at addon load,
+		-- but tests don't load that file.  Register it manually here.
+		ns.DI:Register("IsRetail", function()
+			return ns.IsRetail()
+		end)
+
 		-- Mock FeatureBase – returns a minimal stub module so Transmog tests
-		-- are completely independent of AceAddon plumbing.
+		-- are completely independent of AceAddon plumbing.  Handles both
+		-- old-style (name, mixin, ...) and new-style (name, deps, mixin, ...) calls.
 		ns.FeatureBase = {
-			new = function(_, name)
-				return {
+			new = function(_, name, depsOrMixin, ...)
+				local deps = {}
+				local mixins = {}
+				if type(depsOrMixin) == "table" then
+					deps = depsOrMixin
+					mixins = { ... }
+				else
+					mixins = { depsOrMixin, ... }
+				end
+
+				local module = {
 					moduleName = name,
 					Enable = function() end,
 					Disable = function() end,
@@ -79,16 +112,39 @@ describe("Transmog module", function()
 					RegisterEvent = function() end,
 					UnregisterEvent = function() end,
 				}
+
+				-- Resolve DI dependencies from ns.DI
+				for fieldName, depName in pairs(deps.di or {}) do
+					module[fieldName] = ns.DI and ns.DI:Resolve(depName)
+				end
+
+				-- Inject logging that delegates to ns logging spies
+				-- so existing assert.spy(logWarnSpy).was.called_with(...) assertions work.
+				if deps.logging then
+					module.LogDebug = function(self, msg, src, typ, ...)
+						(ns.LogDebug or function() end)(msg, src or "TestAddon", typ or self.moduleName, ...)
+					end
+					module.LogInfo = function(self, msg, src, typ, ...)
+						(ns.LogInfo or function() end)(msg, src or "TestAddon", typ or self.moduleName, ...)
+					end
+					module.LogWarn = function(self, msg, src, typ, ...)
+						(ns.LogWarn or function() end)(msg, src or "TestAddon", typ or self.moduleName, ...)
+					end
+					module.LogError = function(self, msg, src, typ, ...)
+						(ns.LogError or function() end)(msg, src or "TestAddon", typ or self.moduleName, ...)
+					end
+				end
+
+				return module
 			end,
 		}
 
-		-- Load Transmog – the FeatureBase mock above is captured at load time.
+		-- Load Transmog – the FeatureBase mock above captures deps from ns.DI.
 		TransmogModule = assert(loadfile("RPGLootFeed/Features/Transmog.lua"))("TestAddon", ns)
 
 		-- Inject a fresh mock adapter so tests control external WoW API calls
-		-- without patching _G directly.  Tests that need specific behaviour
-		-- override individual fields before the act step.
-		TransmogModule._transmogAdapter = {
+		-- without patching _G directly.
+		TransmogModule.transmogApi = {
 			GetAppearanceSourceInfo = function(_id)
 				return nil
 			end,
@@ -148,6 +204,8 @@ describe("Transmog module", function()
 		it("secondaryTextFn returns formatted transmog learn message", function()
 			local transmogLink = "|cff9d9d9d|Htransmogappearance:12345|h[Test Transmog]|h|r"
 
+			TransmogModule:OnEnable() -- registers context provider
+
 			local payload = TransmogModule:BuildPayload(transmogLink)
 			local result = payload.secondaryTextFn()
 
@@ -155,11 +213,13 @@ describe("Transmog module", function()
 		end)
 
 		it("secondaryTextFn returns formatted transmog learn message for ruRU", function()
-			TransmogModule._transmogAdapter.GetErrLearnTransmogS = function()
+			TransmogModule.transmogApi.GetErrLearnTransmogS = function()
 				return "Модель %s добавлена в вашу коллекцию."
 			end
 
 			local transmogLink = "|cff9d9d9d|Htransmogappearance:12345|h[Test Transmog]|h|r"
+
+			TransmogModule:OnEnable() -- registers context provider
 
 			local payload = TransmogModule:BuildPayload(transmogLink)
 			local result = payload.secondaryTextFn()
@@ -169,15 +229,16 @@ describe("Transmog module", function()
 
 		it("IsEnabled closure reflects live module enabled state", function()
 			local payload = TransmogModule:BuildPayload("|cff9d9d9d|Htransmogappearance:12345|h[Test]|h|r")
+			local element = ns.LootElementBase:fromPayload(payload)
 
 			-- Test when enabled
 			local enabledStub = stub(TransmogModule, "IsEnabled").returns(true)
-			assert.is_true(payload.IsEnabled())
+			assert.is_true(element.IsEnabled())
 			enabledStub:revert()
 
 			-- Test when disabled
 			local disabledStub = stub(TransmogModule, "IsEnabled").returns(false)
-			assert.is_false(payload.IsEnabled())
+			assert.is_false(element.IsEnabled())
 			disabledStub:revert()
 		end)
 	end)
@@ -229,7 +290,7 @@ describe("Transmog module", function()
 			local icon = "Interface\\Icons\\TestIcon"
 
 			-- Inject adapter with a successful response.
-			TransmogModule._transmogAdapter = {
+			TransmogModule.transmogApi = {
 				GetAppearanceSourceInfo = function(_id)
 					return {
 						category = 1,
@@ -277,7 +338,7 @@ describe("Transmog module", function()
 			assert.spy(buildPayloadSpy).was.not_called()
 			assert
 				.spy(logWarnSpy).was
-				.called_with(_, "Could not get appearance source info", "TestAddon", TransmogModule.moduleName)
+				.called_with("Could not get appearance source info", "TestAddon", TransmogModule.moduleName)
 		end)
 
 		it(
@@ -286,7 +347,7 @@ describe("Transmog module", function()
 				local itemModifiedAppearanceID = 12345
 
 				-- Inject adapter with both links empty.
-				TransmogModule._transmogAdapter = {
+				TransmogModule.transmogApi = {
 					GetAppearanceSourceInfo = function(_id)
 						return {
 							category = 1,
@@ -318,12 +379,7 @@ describe("Transmog module", function()
 				assert.spy(buildPayloadSpy).was.not_called()
 				assert
 					.spy(logWarnSpy).was
-					.called_with(
-						_,
-						"Item link is also empty for " .. itemModifiedAppearanceID,
-						"TestAddon",
-						TransmogModule.moduleName
-					)
+					.called_with("Item link is also empty for " .. itemModifiedAppearanceID, "TestAddon", TransmogModule.moduleName)
 			end
 		)
 
@@ -332,7 +388,7 @@ describe("Transmog module", function()
 			local transmogLink = "|cff9d9d9d|Htransmogappearance:12345|h[Test Transmog]|h|r"
 
 			-- Inject adapter with a successful response.
-			TransmogModule._transmogAdapter = {
+			TransmogModule.transmogApi = {
 				GetAppearanceSourceInfo = function(_id)
 					return {
 						category = 1,
@@ -364,7 +420,7 @@ describe("Transmog module", function()
 
 			assert
 				.spy(logWarnSpy).was
-				.called_with(_, "Could not create Transmog Element", "TestAddon", TransmogModule.moduleName)
+				.called_with("Could not create Transmog Element", "TestAddon", TransmogModule.moduleName)
 		end)
 	end)
 end)
