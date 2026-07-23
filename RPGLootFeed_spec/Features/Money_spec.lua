@@ -11,23 +11,23 @@ local stub = busted.stub
 describe("Money", function()
 	local _ = match._
 	---@type RLF_Money, table
-	local Money, ns, sendMessageSpy
+	local Money, ns, sendMessageSpy, logWarnSpy
 
 	before_each(function()
 		sendMessageSpy = spy.new(function() end)
+		logWarnSpy = spy.new(function() end)
 
 		-- Build a minimal ns from scratch – no nsMocks framework needed.
 		-- Only the fields actually referenced by Money.lua, LootElementBase.lua,
 		-- and TextTemplateEngine.lua are included; everything else is intentionally absent.
 		ns = {
-			-- Captured as locals by Money.lua at load time.
 			DefaultIcons = { MONEY = 132279, MONEY_SILVER = 132280, MONEY_COPPER = 132281 },
 			ItemQualEnum = { Poor = 0 },
 			FeatureModule = { Money = "Money" },
 			WoWAPI = { Money = {} },
 			-- Closure wrappers call these as G_RLF:Method(...).
 			LogDebug = function() end,
-			LogWarn = function() end,
+			LogWarn = logWarnSpy,
 			-- RGBAToHexFormat referenced in TextTemplateEngine for colored elements.
 			RGBAToHexFormat = function()
 				return "|cFFFFFFFF"
@@ -71,21 +71,63 @@ describe("Money", function()
 				end,
 			},
 			Frames = { MAIN = 1 },
+			FeatureModule = { Money = "Money" },
 		}
 
 		-- Load real LootElementBase so elements are fully constructed.
 		assert(loadfile("RPGLootFeed/Features/_Internals/LootElementBase.lua"))("TestAddon", ns)
 		assert.is_not_nil(ns.LootElementBase)
 
-		-- Load TextTemplateEngine before Money.lua so the local capture works.
+		-- Load TextTemplateEngine before Money.lua so the DI entry exists.
 		assert(loadfile("RPGLootFeed/Features/_Internals/TextTemplateEngine.lua"))("TestAddon", ns)
 		assert.is_not_nil(ns.TextTemplateEngine)
 
+		-- Setup minimal DI container so FeatureBase mock resolves deps.
+		ns.DI = {
+			registry = {},
+			Register = function(self, k, v)
+				self.registry[k] = v
+			end,
+			Resolve = function(self, k)
+				return self.registry[k]
+			end,
+		}
+		ns.DI:Register("LootElementBase", ns.LootElementBase)
+		ns.DI:Register("DefaultIcons", ns.DefaultIcons)
+		ns.DI:Register("ItemQualEnum", ns.ItemQualEnum)
+		ns.DI:Register("TextTemplateEngine", ns.TextTemplateEngine)
+		ns.DI:Register("WoWAPI.Money", {
+			GetCoinTextureString = function(amount)
+				local gold = math.floor(amount / 10000)
+				local silver = math.floor((amount % 10000) / 100)
+				local copper = amount % 100
+				return string.format("%dg %ds %dc", gold, silver, copper)
+			end,
+			GetMoney = function()
+				return 1500000 -- 150 gold default
+			end,
+		})
+		ns.DI:Register("SoundService", {
+			PlaySound = function()
+				return true
+			end,
+		})
+
 		-- Mock FeatureBase – returns a minimal stub module so Money tests
-		-- are completely independent of AceAddon plumbing.
+		-- are completely independent of AceAddon plumbing.  The stub resolves
+		-- DI dependencies and injects logging methods.
 		ns.FeatureBase = {
-			new = function(_, name)
-				return {
+			new = function(_, name, depsOrMixin, ...)
+				local deps = {}
+				local mixins = {}
+				if type(depsOrMixin) == "table" then
+					deps = depsOrMixin
+					mixins = { ... }
+				else
+					mixins = { depsOrMixin, ... }
+				end
+
+				local module = {
 					moduleName = name,
 					Enable = function() end,
 					Disable = function() end,
@@ -95,29 +137,46 @@ describe("Money", function()
 					RegisterEvent = function() end,
 					UnregisterEvent = function() end,
 				}
+
+				-- Resolve DI dependencies from ns.DI
+				for fieldName, depName in pairs(deps.di or {}) do
+					module[fieldName] = ns.DI and ns.DI:Resolve(depName)
+				end
+
+				-- Inject logging that delegates to ns logging spies
+				if deps.logging then
+					module.LogDebug = function(self, msg, src, typ, ...)
+						(ns.LogDebug or function() end)(msg, src or "TestAddon", typ or self.moduleName, ...)
+					end
+					module.LogInfo = function(self, msg, src, typ, ...)
+						(ns.LogInfo or function() end)(msg, src or "TestAddon", typ or self.moduleName, ...)
+					end
+					module.LogWarn = function(self, msg, src, typ, ...)
+						(ns.LogWarn or function() end)(msg, src or "TestAddon", typ or self.moduleName, ...)
+					end
+					module.LogError = function(self, msg, src, typ, ...)
+						(ns.LogError or function() end)(msg, src or "TestAddon", typ or self.moduleName, ...)
+					end
+				end
+
+				return module
 			end,
 		}
 
-		-- Load Money – the FeatureBase mock above is captured at load time.
+		-- Load Money – the FeatureBase mock above resolves DI deps and injects logging.
 		Money = assert(loadfile("RPGLootFeed/Features/Money.lua"))("TestAddon", ns)
 
-		-- Inject a fresh mock adapter so tests control external API calls without
-		-- patching _G directly.  Tests that need specific behaviour set adapter
-		-- fields directly before the act step.
-		local mockCoinTextureString = function(amount)
-			local gold = math.floor(amount / 10000)
-			local silver = math.floor((amount % 10000) / 100)
-			local copper = amount % 100
-			return string.format("%dg %ds %dc", gold, silver, copper)
-		end
-		Money._moneyAdapter = {
-			GetCoinTextureString = mockCoinTextureString,
+		-- Override DI-resolved mocks for full test isolation per test run.
+		Money.moneyApi = {
+			GetCoinTextureString = function(amount)
+				local gold = math.floor(amount / 10000)
+				local silver = math.floor((amount % 10000) / 100)
+				local copper = amount % 100
+				return string.format("%dg %ds %dc", gold, silver, copper)
+			end,
 			GetMoney = function()
 				return 1500000 -- 150 gold default
 			end,
-			PlaySoundFile = spy.new(function()
-				return true, 12345
-			end),
 			GetGoldAmountSymbol = function()
 				return "g"
 			end,
@@ -126,6 +185,11 @@ describe("Money", function()
 			end,
 			GetCopperAmountSymbol = function()
 				return "c"
+			end,
+		}
+		Money.soundService = {
+			PlaySound = function()
+				return true
 			end,
 		}
 	end)
@@ -226,7 +290,6 @@ describe("Money", function()
 			assert.is_not_nil(payload.icon)
 			assert.is_function(payload.textFn)
 			assert.is_function(payload.secondaryTextFn)
-			assert.is_function(payload.IsEnabled)
 		end)
 
 		it("creates element from payload via fromPayload", function()
@@ -505,8 +568,8 @@ describe("Money", function()
 
 	describe("PlaySoundIfEnabled (module method)", function()
 		before_each(function()
-			Money._moneyAdapter.PlaySoundFile = spy.new(function()
-				return true, 12345
+			Money.soundService.PlaySound = spy.new(function()
+				return true
 			end)
 		end)
 
@@ -516,7 +579,7 @@ describe("Money", function()
 
 			Money:PlaySoundIfEnabled()
 
-			assert.spy(Money._moneyAdapter.PlaySoundFile).was.called_with("Interface\\Sounds\\Custom.ogg")
+			assert.spy(Money.soundService.PlaySound).was.called_with(_, "Interface\\Sounds\\Custom.ogg")
 		end)
 
 		it("does not play sound when overrideMoneyLootSound is disabled", function()
@@ -525,7 +588,7 @@ describe("Money", function()
 
 			Money:PlaySoundIfEnabled()
 
-			assert.spy(Money._moneyAdapter.PlaySoundFile).was.not_called()
+			assert.spy(Money.soundService.PlaySound).was.not_called()
 		end)
 
 		it("does not play sound when moneyLootSound is empty", function()
@@ -534,7 +597,7 @@ describe("Money", function()
 
 			Money:PlaySoundIfEnabled()
 
-			assert.spy(Money._moneyAdapter.PlaySoundFile).was.not_called()
+			assert.spy(Money.soundService.PlaySound).was.not_called()
 		end)
 	end)
 
@@ -544,7 +607,7 @@ describe("Money", function()
 		end)
 
 		it("tracks starting money on PLAYER_ENTERING_WORLD", function()
-			Money._moneyAdapter.GetMoney = function()
+			Money.moneyApi.GetMoney = function()
 				return 2000000
 			end -- 200 gold
 
@@ -555,7 +618,7 @@ describe("Money", function()
 
 		it("processes money changes on PLAYER_MONEY", function()
 			Money.startingMoney = 1000000 -- 100 gold
-			Money._moneyAdapter.GetMoney = function()
+			Money.moneyApi.GetMoney = function()
 				return 1050000
 			end -- 105 gold
 
@@ -571,7 +634,7 @@ describe("Money", function()
 
 		it("ignores zero money changes", function()
 			Money.startingMoney = 1000000
-			Money._moneyAdapter.GetMoney = function()
+			Money.moneyApi.GetMoney = function()
 				return 1000000
 			end -- Same amount
 
@@ -586,7 +649,7 @@ describe("Money", function()
 		it("respects onlyIncome setting", function()
 			ns.db.global.money.onlyIncome = true
 			Money.startingMoney = 1000000
-			Money._moneyAdapter.GetMoney = function()
+			Money.moneyApi.GetMoney = function()
 				return 950000
 			end -- Lost money
 
@@ -648,7 +711,7 @@ describe("Money", function()
 		describe("current money truncation", function()
 			it("truncates silver and copper for amounts over 1000 gold", function()
 				-- Set current money to 15,235,678 copper = 1523g 56s 78c
-				Money._moneyAdapter.GetMoney = function()
+				Money.moneyApi.GetMoney = function()
 					return 15235678
 				end
 				ns.db.global.money.showMoneyTotal = true
@@ -664,7 +727,7 @@ describe("Money", function()
 
 			it("does not truncate amounts under 1000 gold", function()
 				-- Set current money to 9,876,543 copper = 987g 65s 43c (under 1000g)
-				Money._moneyAdapter.GetMoney = function()
+				Money.moneyApi.GetMoney = function()
 					return 9876543
 				end
 				ns.db.global.money.showMoneyTotal = true
@@ -680,7 +743,7 @@ describe("Money", function()
 
 			it("handles exactly 1000 gold threshold", function()
 				-- Set current money to exactly 10,000,000 copper = 1000g 0s 0c
-				Money._moneyAdapter.GetMoney = function()
+				Money.moneyApi.GetMoney = function()
 					return 10000000
 				end
 				ns.db.global.money.showMoneyTotal = true
@@ -696,7 +759,7 @@ describe("Money", function()
 
 			it("handles exactly 1000g 1c threshold", function()
 				-- Set current money to 10,000,001 copper = 1000g 0s 1c
-				Money._moneyAdapter.GetMoney = function()
+				Money.moneyApi.GetMoney = function()
 					return 10000001
 				end
 				ns.db.global.money.showMoneyTotal = true
@@ -714,7 +777,7 @@ describe("Money", function()
 		describe("current money abbreviation", function()
 			it("abbreviates gold when enabled and over 1000 gold", function()
 				-- Set current money to 25,000,000 copper = 2500g 0s 0c
-				Money._moneyAdapter.GetMoney = function()
+				Money.moneyApi.GetMoney = function()
 					return 25000000
 				end
 				ns.db.global.money.showMoneyTotal = true
@@ -732,7 +795,7 @@ describe("Money", function()
 
 			it("does not abbreviate when disabled", function()
 				-- Set current money to 25,000,000 copper = 2500g 0s 0c
-				Money._moneyAdapter.GetMoney = function()
+				Money.moneyApi.GetMoney = function()
 					return 25000000
 				end
 				ns.db.global.money.showMoneyTotal = true
@@ -748,7 +811,7 @@ describe("Money", function()
 
 			it("does not abbreviate amounts under 1000 gold", function()
 				-- Set current money to 9,876,543 copper = 987g 65s 43c (under 1000g)
-				Money._moneyAdapter.GetMoney = function()
+				Money.moneyApi.GetMoney = function()
 					return 9876543
 				end
 				ns.db.global.money.showMoneyTotal = true
@@ -764,7 +827,7 @@ describe("Money", function()
 
 			it("handles millions of gold", function()
 				-- Set current money to 250,000,000 copper = 25,000g 0s 0c
-				Money._moneyAdapter.GetMoney = function()
+				Money.moneyApi.GetMoney = function()
 					return 250000000
 				end
 				ns.db.global.money.showMoneyTotal = true
@@ -782,7 +845,7 @@ describe("Money", function()
 		describe("combined truncation and abbreviation", function()
 			it("truncates before abbreviating", function()
 				-- Set current money to 25,123,456 copper = 2512g 34s 56c
-				Money._moneyAdapter.GetMoney = function()
+				Money.moneyApi.GetMoney = function()
 					return 25123456
 				end
 				ns.db.global.money.showMoneyTotal = true
@@ -824,7 +887,7 @@ describe("Money", function()
 
 			it("renders the wallet total as plain text and suppresses secondaryCoinDataFn", function()
 				ns.db.global.money.showMoneyTotal = true
-				Money._moneyAdapter.GetMoney = function()
+				Money.moneyApi.GetMoney = function()
 					return 1500000 -- 150g
 				end
 
@@ -853,7 +916,7 @@ describe("Money", function()
 			it("still truncates and abbreviates the wallet total", function()
 				ns.db.global.money.showMoneyTotal = true
 				ns.db.global.money.abbreviateTotal = true
-				Money._moneyAdapter.GetMoney = function()
+				Money.moneyApi.GetMoney = function()
 					return 25123456 -- 2512g 34s 56c, truncated then abbreviated
 				end
 

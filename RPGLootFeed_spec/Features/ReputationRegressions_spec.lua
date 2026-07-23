@@ -146,11 +146,37 @@ describe("Reputation Regressions", function()
 		assert(loadfile("RPGLootFeed/Features/_Internals/LootElementBase.lua"))("TestAddon", ns)
 		assert.is_not_nil(ns.LootElementBase)
 
+		-- Setup minimal DI container so FeatureBase mock resolves deps.
+		ns.DI = {
+			registry = {},
+			Register = function(self, k, v)
+				self.registry[k] = v
+			end,
+			Resolve = function(self, k)
+				return self.registry[k]
+			end,
+		}
+		ns.DI:Register("LootElementBase", ns.LootElementBase)
+		ns.DI:Register("ItemQualEnum", ns.ItemQualEnum)
+		ns.DI:Register("WoWAPI.Reputation", {})
+		ns.DI:Register("IsRetail", function()
+			return ns.IsRetail()
+		end)
+
 		-- Mock FeatureBase – returns a minimal stub module so Reputation tests
 		-- are completely independent of AceAddon plumbing.
 		ns.FeatureBase = {
-			new = function(_, name)
-				return {
+			new = function(_, name, depsOrMixin, ...)
+				local deps = {}
+				local mixins = {}
+				if type(depsOrMixin) == "table" then
+					deps = depsOrMixin
+					mixins = { ... }
+				else
+					mixins = { depsOrMixin, ... }
+				end
+
+				local module = {
 					moduleName = name,
 					Enable = function() end,
 					Disable = function() end,
@@ -162,16 +188,39 @@ describe("Reputation Regressions", function()
 					RegisterBucketEvent = function() end,
 					UnregisterAllBuckets = function() end,
 				}
+
+				-- Resolve DI dependencies from ns.DI
+				for fieldName, depName in pairs(deps.di or {}) do
+					module[fieldName] = ns.DI and ns.DI:Resolve(depName)
+				end
+
+				-- Inject logging that delegates to ns logging spies
+				if deps.logging then
+					module.LogDebug = function(self, msg, src, typ, ...)
+						(ns.LogDebug or function() end)(msg, src or "TestAddon", typ or self.moduleName, ...)
+					end
+					module.LogInfo = function(self, msg, src, typ, ...)
+						(ns.LogInfo or function() end)(msg, src or "TestAddon", typ or self.moduleName, ...)
+					end
+					module.LogWarn = function(self, msg, src, typ, ...)
+						(ns.LogWarn or function() end)(msg, src or "TestAddon", typ or self.moduleName, ...)
+					end
+					module.LogError = function(self, msg, src, typ, ...)
+						(ns.LogError or function() end)(msg, src or "TestAddon", typ or self.moduleName, ...)
+					end
+				end
+
+				return module
 			end,
 		}
 
-		-- Load Reputation – the FeatureBase mock above is captured at load time.
+		-- Load Reputation – the FeatureBase mock above captures deps from ns.DI.
 		-- RepUtils and LegacyRepParsing stubs set above are also captured here.
 		RepModule = assert(loadfile("RPGLootFeed/Features/Reputation/Reputation.lua"))("TestAddon", ns)
 
 		-- Inject a fresh mock adapter so tests control external WoW API calls
 		-- without patching _G directly.
-		RepModule._repAdapter = {
+		RepModule.reputationApi = {
 			GetExpansionLevel = function()
 				return 8 -- below TWW (10), skips all Delvers Journey / TWW paths
 			end,

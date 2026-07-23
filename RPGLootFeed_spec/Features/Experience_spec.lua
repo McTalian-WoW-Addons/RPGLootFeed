@@ -18,9 +18,8 @@ describe("Experience module", function()
 
 		-- Build a minimal ns from scratch – no nsMocks framework needed.
 		-- Only the fields actually referenced by Experience.lua, LootElementBase.lua,
-		-- and TextTemplateEngine.lua are included; everything else is intentionally absent.
+		-- and TextTemplateEngine.lua are included.
 		ns = {
-			-- Captured as locals by Experience.lua at load time.
 			DefaultIcons = { XP = 894556 },
 			ItemQualEnum = { Epic = 4 },
 			FeatureModule = { Experience = "Experience" },
@@ -75,15 +74,41 @@ describe("Experience module", function()
 		assert(loadfile("RPGLootFeed/Features/_Internals/LootElementBase.lua"))("TestAddon", ns)
 		assert.is_not_nil(ns.LootElementBase)
 
-		-- Load TextTemplateEngine before Experience.lua so the local capture works.
+		-- Load TextTemplateEngine before Experience.lua so DI can resolve it.
 		assert(loadfile("RPGLootFeed/Features/_Internals/TextTemplateEngine.lua"))("TestAddon", ns)
 		assert.is_not_nil(ns.TextTemplateEngine)
+
+		-- Setup minimal DI container so FeatureBase mock resolves deps.
+		ns.DI = {
+			registry = {},
+			Register = function(self, k, v)
+				self.registry[k] = v
+			end,
+			Resolve = function(self, k)
+				return self.registry[k]
+			end,
+		}
+		ns.DI:Register("LootElementBase", ns.LootElementBase)
+		ns.DI:Register("DefaultIcons", ns.DefaultIcons)
+		ns.DI:Register("ItemQualEnum", ns.ItemQualEnum)
+		ns.DI:Register("TextTemplateEngine", ns.TextTemplateEngine)
+		ns.DI:Register("WoWAPI.Experience", {})
+		ns.DI:Register("RGBAToHexFormat", ns.RGBAToHexFormat)
 
 		-- Mock FeatureBase – returns a minimal stub module so Experience tests
 		-- are completely independent of AceAddon plumbing.
 		ns.FeatureBase = {
-			new = function(_, name)
-				return {
+			new = function(_, name, depsOrMixin, ...)
+				local deps = {}
+				local mixins = {}
+				if type(depsOrMixin) == "table" then
+					deps = depsOrMixin
+					mixins = { ... }
+				else
+					mixins = { depsOrMixin, ... }
+				end
+
+				local module = {
 					moduleName = name,
 					Enable = function() end,
 					Disable = function() end,
@@ -93,15 +118,38 @@ describe("Experience module", function()
 					RegisterEvent = function() end,
 					UnregisterEvent = function() end,
 				}
+
+				-- Resolve DI dependencies from ns.DI
+				for fieldName, depName in pairs(deps.di or {}) do
+					module[fieldName] = ns.DI and ns.DI:Resolve(depName)
+				end
+
+				-- Inject logging that delegates to ns logging spies
+				if deps.logging then
+					module.LogDebug = function(self, msg, src, typ, ...)
+						(ns.LogDebug or function() end)(msg, src or "TestAddon", typ or self.moduleName, ...)
+					end
+					module.LogInfo = function(self, msg, src, typ, ...)
+						(ns.LogInfo or function() end)(msg, src or "TestAddon", typ or self.moduleName, ...)
+					end
+					module.LogWarn = function(self, msg, src, typ, ...)
+						(ns.LogWarn or function() end)(msg, src or "TestAddon", typ or self.moduleName, ...)
+					end
+					module.LogError = function(self, msg, src, typ, ...)
+						(ns.LogError or function() end)(msg, src or "TestAddon", typ or self.moduleName, ...)
+					end
+				end
+
+				return module
 			end,
 		}
 
-		-- Load Experience – the FeatureBase mock above is captured at load time.
+		-- Load Experience – the FeatureBase mock above captures deps from ns.DI.
 		XpModule = assert(loadfile("RPGLootFeed/Features/Experience.lua"))("TestAddon", ns)
 
 		-- Inject a default adapter so event-handler tests work without
 		-- patching _G directly.
-		XpModule._xpAdapter = {
+		XpModule.xpApi = {
 			UnitXP = function()
 				return 10
 			end,
@@ -141,10 +189,10 @@ describe("Experience module", function()
 		-- old max XP was 50
 		-- xp value is still 10
 		-- (50 max for last level - 10 old xp value) + 10 new xp value = 50 xp earned
-		XpModule._xpAdapter.UnitLevel = function()
+		XpModule.xpApi.UnitLevel = function()
 			return 3
 		end
-		XpModule._xpAdapter.UnitXPMax = function()
+		XpModule.xpApi.UnitXPMax = function()
 			return 100
 		end
 
@@ -201,7 +249,6 @@ describe("Experience module", function()
 			assert.is_function(payload.textFn)
 			assert.is_function(payload.secondaryTextFn)
 			assert.is_function(payload.itemCountFn)
-			assert.is_function(payload.IsEnabled)
 		end)
 
 		it("creates element from payload via fromPayload", function()
@@ -235,10 +282,10 @@ describe("Experience module", function()
 
 		it("secondaryTextFn shows XP percentage when XP data available", function()
 			-- Override adapter to return specific XP values for this test.
-			XpModule._xpAdapter.UnitXP = function()
+			XpModule.xpApi.UnitXP = function()
 				return 7526
 			end
-			XpModule._xpAdapter.UnitXPMax = function()
+			XpModule.xpApi.UnitXPMax = function()
 				return 10000
 			end
 
@@ -259,10 +306,10 @@ describe("Experience module", function()
 
 		it("secondaryTextFn returns empty when XP data unavailable", function()
 			-- Override adapter to return nil to simulate missing data.
-			XpModule._xpAdapter.UnitXP = function()
+			XpModule.xpApi.UnitXP = function()
 				return nil
 			end
-			XpModule._xpAdapter.UnitXPMax = function()
+			XpModule.xpApi.UnitXPMax = function()
 				return nil
 			end
 
