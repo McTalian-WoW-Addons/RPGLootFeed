@@ -207,7 +207,14 @@ function G_RLF.LootElementBase:fromPayload(payload)
 	if payload.logFn then
 		element.logFn = payload.logFn
 	end
-	if payload.IsEnabled then
+	-- Auto-inject IsEnabled from moduleRef so features don't repeat the closure.
+	-- Explicit payload.IsEnabled still takes precedence when set.
+	if payload.moduleRef then
+		local ref = payload.moduleRef
+		element.IsEnabled = function()
+			return ref:IsEnabled()
+		end
+	elseif payload.IsEnabled then
 		element.IsEnabled = payload.IsEnabled
 	end
 
@@ -270,6 +277,7 @@ end
 ---@field showForSeconds? number Override fade timer
 ---@field isSampleRow? boolean Test mode flag, never expires
 ---@field logFn? fun(text: string, amount: number, new: boolean) Logging hook
+---@field moduleRef? table Module reference; fromPayload auto-injects IsEnabled from this when set
 ---@field IsEnabled? fun(): boolean Permission gate
 ---@field itemCount? number Backwards compat: raw count for non-migrated modules
 

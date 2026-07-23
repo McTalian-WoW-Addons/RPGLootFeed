@@ -11,7 +11,7 @@ local stub = busted.stub
 describe("ItemLoot Module", function()
 	local _ = match._
 	---@type RLF_ItemLoot, table
-	local ItemLoot, ns, sendMessageSpy
+	local ItemLoot, ns, sendMessageSpy, soundServiceMock
 
 	--- Build a minimal ItemInfo-like stub with sensible defaults.
 	--- @param overrides? table
@@ -83,6 +83,7 @@ describe("ItemLoot Module", function()
 			ItemQualEnum = { Poor = 0, Common = 1, Uncommon = 2, Rare = 3, Epic = 4, Legendary = 5 },
 			FeatureModule = { ItemLoot = "ItemLoot" },
 			Expansion = { CATA = 10, MOP = 11 },
+			-- FeatureModule references replaced with string "ItemLoot"
 			AtlasIconCoefficients = {},
 			PricesEnum = {
 				Vendor = "Vendor",
@@ -108,20 +109,12 @@ describe("ItemLoot Module", function()
 					return ns.db.global.animations
 				end,
 			},
-			Frames = { MAIN = 1 },
 			Frames = { MAIN = "MAIN" },
-			-- WoWAPI namespace: ItemLoot.lua captures G_RLF.WoWAPI.ItemLoot as
-			-- _itemLootAdapter at load time.  The spec replaces _itemLootAdapter
-			-- with a full mock after loadfile, so the table just needs to exist.
-			WoWAPI = { ItemLoot = {} },
-			-- Log closure wrappers call these as G_RLF:Method(...) so self is ns.
+			-- Log methods for LootElementBase and FeatureBase logging injections
 			LogDebug = spy.new(function() end),
 			LogInfo = spy.new(function() end),
 			LogWarn = spy.new(function() end),
 			LogError = spy.new(function() end),
-			IsRetail = function()
-				return false
-			end,
 			RGBAToHexFormat = function()
 				return "|cFFFFFFFF"
 			end,
@@ -192,32 +185,30 @@ describe("ItemLoot Module", function()
 		assert(loadfile("RPGLootFeed/Features/_Internals/LootElementBase.lua"))("TestAddon", ns)
 		assert.is_not_nil(ns.LootElementBase)
 
-		-- FeatureBase stub – independent of AceAddon plumbing.
-		-- ItemLoot uses AceBucket so RegisterBucketEvent / UnregisterBucket are needed.
-		ns.FeatureBase = {
-			new = function(_, name)
-				return {
-					moduleName = name,
-					Enable = function() end,
-					Disable = function() end,
-					IsEnabled = function()
-						return true
-					end,
-					RegisterEvent = function() end,
-					UnregisterEvent = function() end,
-					RegisterBucketEvent = function() end,
-					UnregisterBucket = function() end,
-				}
+		-- Load TextTemplateEngine so DI can resolve it for ItemLoot.
+		assert(loadfile("RPGLootFeed/Features/_Internals/TextTemplateEngine.lua"))("TestAddon", ns)
+		assert.is_not_nil(ns.TextTemplateEngine)
+
+		-- Setup minimal DI container so FeatureBase mock resolves deps.
+		ns.DI = {
+			registry = {},
+			Register = function(self, k, v)
+				self.registry[k] = v
+			end,
+			Resolve = function(self, k)
+				return self.registry[k]
 			end,
 		}
+		ns.DI:Register("LootElementBase", ns.LootElementBase)
+		ns.DI:Register("ItemQualEnum", ns.ItemQualEnum)
+		ns.DI:Register("ItemInfo", ns.ItemInfo)
+		ns.DI:Register("TextTemplateEngine", ns.TextTemplateEngine)
+		ns.DI:Register("IsRetail", function()
+			return false
+		end)
 
-		-- Load ItemLoot – all external dependency locals are captured from ns
-		-- at load time.
-		ItemLoot = assert(loadfile("RPGLootFeed/Features/ItemLoot/ItemLoot.lua"))("TestAddon", ns)
-
-		-- Inject a fresh no-op adapter per-test so WoW API calls are controlled
-		-- without patching _G directly.  Tests override individual methods as needed.
-		ItemLoot._itemLootAdapter = {
+		-- WoWAPI adapter injected via DI
+		local defaultAdapter = {
 			GetExpansionLevel = function()
 				return 0
 			end,
@@ -248,8 +239,120 @@ describe("ItemLoot Module", function()
 			CreateAtlasMarkup = function(icon)
 				return "[" .. icon .. "]"
 			end,
-			PlaySoundFile = function()
-				return true, 1
+			GetAHPrice = function()
+				return nil
+			end,
+			GetItemInfo = function()
+				return nil
+			end,
+			GetItemIDForItemInfo = function()
+				return 18803
+			end,
+			GetItemCount = function()
+				return 1
+			end,
+			GetItemStatDelta = function()
+				return {}
+			end,
+		}
+		ns.DI:Register("WoWAPI.ItemLoot", defaultAdapter)
+
+		-- SoundService mock injected via DI
+		soundServiceMock = {
+			PlaySound = spy.new(function()
+				return true
+			end),
+		}
+		ns.DI:Register("SoundService", soundServiceMock)
+
+		-- Mock FeatureBase – returns a minimal stub module so ItemLoot tests
+		-- are completely independent of AceAddon plumbing.  The stub resolves
+		-- DI dependencies and injects logging methods.
+		ns.FeatureBase = {
+			new = function(_, name, depsOrMixin, ...)
+				local deps = {}
+				local mixins = {}
+				if type(depsOrMixin) == "table" then
+					deps = depsOrMixin
+					mixins = { ... }
+				else
+					mixins = { depsOrMixin, ... }
+				end
+
+				local module = {
+					moduleName = name,
+					Enable = function() end,
+					Disable = function() end,
+					IsEnabled = function()
+						return true
+					end,
+					RegisterEvent = function() end,
+					UnregisterEvent = function() end,
+					RegisterBucketEvent = function() end,
+					UnregisterBucket = function() end,
+				}
+
+				-- Resolve DI dependencies from ns.DI
+				for fieldName, depName in pairs(deps.di or {}) do
+					module[fieldName] = ns.DI and ns.DI:Resolve(depName)
+				end
+
+				-- Inject logging that delegates to ns logging spies
+				if deps.logging then
+					module.LogDebug = function(self, msg, src, typ, ...)
+						(ns.LogDebug or function() end)(msg, src or "TestAddon", typ or self.moduleName, ...)
+					end
+					module.LogInfo = function(self, msg, src, typ, ...)
+						(ns.LogInfo or function() end)(msg, src or "TestAddon", typ or self.moduleName, ...)
+					end
+					module.LogWarn = function(self, msg, src, typ, ...)
+						(ns.LogWarn or function() end)(msg, src or "TestAddon", typ or self.moduleName, ...)
+					end
+					module.LogError = function(self, msg, src, typ, ...)
+						(ns.LogError or function() end)(msg, src or "TestAddon", typ or self.moduleName, ...)
+					end
+				end
+
+				return module
+			end,
+		}
+
+		-- Load ItemLoot – all external dependency locals are captured from ns
+		-- at load time via DI.
+		ItemLoot = assert(loadfile("RPGLootFeed/Features/ItemLoot/ItemLoot.lua"))("TestAddon", ns)
+
+		-- Per-test adapter overrides: reset to defaults each test.
+		-- Tests override individual methods on this table as needed.
+		ItemLoot.itemLootApi = {
+			GetExpansionLevel = function()
+				return 0
+			end,
+			UnitName = function()
+				return "Player"
+			end,
+			UnitClass = function()
+				return "Warrior", "WARRIOR"
+			end,
+			UnitLevel = function()
+				return 60
+			end,
+			IssecretValue = function()
+				return false
+			end,
+			GetPlayerGuid = function()
+				return "Player-1234-ABCD1234"
+			end,
+			GetInventoryItemLink = function()
+				return nil
+			end,
+			GetItemQualityColor = function()
+				return 1, 1, 1
+			end,
+			GetCoinTextureString = function(p)
+				return tostring(p)
+			end,
+			CreateAtlasMarkup = function(icon)
+				return "[" .. icon .. "]"
 			end,
 			GetAHPrice = function()
 				return nil
@@ -278,11 +381,10 @@ describe("ItemLoot Module", function()
 			assert.is_function(ItemLoot.OnItemReadyToShow)
 			assert.is_function(ItemLoot.ShowItemLoot)
 			assert.is_function(ItemLoot.BuildPayload)
-			assert.is_function(ItemLoot.PlaySoundIfEnabled)
 		end)
 
-		it("exposes _itemLootAdapter on the module", function()
-			assert.is_table(ItemLoot._itemLootAdapter)
+		it("exposes itemLootApi on the module", function()
+			assert.is_table(ItemLoot.itemLootApi)
 		end)
 
 		it("enables when any frame needs itemLoot", function()
@@ -336,7 +438,7 @@ describe("ItemLoot Module", function()
 		end)
 
 		it("calls SetEquippableArmorClass when expansion is in CATA-MOP range", function()
-			ItemLoot._itemLootAdapter.GetExpansionLevel = function()
+			ItemLoot.itemLootApi.GetExpansionLevel = function()
 				return 10 -- CATA
 			end
 			spy.on(ItemLoot, "SetEquippableArmorClass")
@@ -347,7 +449,7 @@ describe("ItemLoot Module", function()
 		end)
 
 		it("does not call SetEquippableArmorClass outside CATA-MOP range", function()
-			ItemLoot._itemLootAdapter.GetExpansionLevel = function()
+			ItemLoot.itemLootApi.GetExpansionLevel = function()
 				return 9 -- before CATA
 			end
 			spy.on(ItemLoot, "SetEquippableArmorClass")
@@ -360,7 +462,7 @@ describe("ItemLoot Module", function()
 
 	describe("SetEquippableArmorClass", function()
 		it("returns early for caster classes (MAGE)", function()
-			ItemLoot._itemLootAdapter.UnitClass = function()
+			ItemLoot.itemLootApi.UnitClass = function()
 				return "Mage", "MAGE"
 			end
 			-- Should not error and should not set armorClassMapping
@@ -369,10 +471,10 @@ describe("ItemLoot Module", function()
 		end)
 
 		it("registers bucket event at low level for non-casters", function()
-			ItemLoot._itemLootAdapter.UnitClass = function()
+			ItemLoot.itemLootApi.UnitClass = function()
 				return "Warrior", "WARRIOR"
 			end
-			ItemLoot._itemLootAdapter.UnitLevel = function()
+			ItemLoot.itemLootApi.UnitLevel = function()
 				return 20 -- below 40
 			end
 			spy.on(ItemLoot, "RegisterBucketEvent")
@@ -383,10 +485,10 @@ describe("ItemLoot Module", function()
 		end)
 
 		it("sets legacy armor class mapping below level 40", function()
-			ItemLoot._itemLootAdapter.UnitClass = function()
+			ItemLoot.itemLootApi.UnitClass = function()
 				return "Warrior", "WARRIOR"
 			end
-			ItemLoot._itemLootAdapter.UnitLevel = function()
+			ItemLoot.itemLootApi.UnitLevel = function()
 				return 20
 			end
 			ns.legacyArmorClassMappingLowLevel = { sentinel = true }
@@ -397,10 +499,10 @@ describe("ItemLoot Module", function()
 		end)
 
 		it("sets standard armor class mapping at level 40+", function()
-			ItemLoot._itemLootAdapter.UnitClass = function()
+			ItemLoot.itemLootApi.UnitClass = function()
 				return "Warrior", "WARRIOR"
 			end
-			ItemLoot._itemLootAdapter.UnitLevel = function()
+			ItemLoot.itemLootApi.UnitLevel = function()
 				return 60
 			end
 			ns.standardArmorClassMapping = { sentinel = true }
@@ -417,13 +519,13 @@ describe("ItemLoot Module", function()
 
 		before_each(function()
 			ItemLoot:OnInitialize()
-			ItemLoot._itemLootAdapter.GetPlayerGuid = function()
+			ItemLoot.itemLootApi.GetPlayerGuid = function()
 				return GUID
 			end
 		end)
 
 		it("ignores messages flagged as secret values", function()
-			ItemLoot._itemLootAdapter.IssecretValue = function()
+			ItemLoot.itemLootApi.IssecretValue = function()
 				return true
 			end
 			spy.on(ItemLoot, "ShowItemLoot")
@@ -444,7 +546,7 @@ describe("ItemLoot Module", function()
 		end)
 
 		it("ignores loot from other players (Retail: guid mismatch)", function()
-			ns.IsRetail = function()
+			ItemLoot.isRetail = function()
 				return true
 			end
 			spy.on(ItemLoot, "ShowItemLoot")
@@ -471,10 +573,10 @@ describe("ItemLoot Module", function()
 		end)
 
 		it("ignores loot from other players (Classic: playerName2 mismatch)", function()
-			ns.IsRetail = function()
+			ItemLoot.isRetail = function()
 				return false
 			end
-			ItemLoot._itemLootAdapter.UnitName = function()
+			ItemLoot.itemLootApi.UnitName = function()
 				return "MyChar"
 			end
 			spy.on(ItemLoot, "ShowItemLoot")
@@ -486,8 +588,8 @@ describe("ItemLoot Module", function()
 				"Player",
 				nil,
 				nil,
-				"OtherChar",
 				nil,
+				"OtherChar",
 				nil,
 				nil,
 				nil,
@@ -500,7 +602,7 @@ describe("ItemLoot Module", function()
 		end)
 
 		it("processes own loot (Retail: guid match)", function()
-			ns.IsRetail = function()
+			ItemLoot.isRetail = function()
 				return true
 			end
 			local showSpy = spy.on(ItemLoot, "ShowItemLoot")
@@ -512,10 +614,10 @@ describe("ItemLoot Module", function()
 		end)
 
 		it("processes own loot (Classic: playerName2 match)", function()
-			ns.IsRetail = function()
+			ItemLoot.isRetail = function()
 				return false
 			end
-			ItemLoot._itemLootAdapter.UnitName = function()
+			ItemLoot.itemLootApi.UnitName = function()
 				return "MyChar"
 			end
 			local showSpy = spy.on(ItemLoot, "ShowItemLoot")
@@ -541,7 +643,7 @@ describe("ItemLoot Module", function()
 		end)
 
 		it("passes correct itemLink to ShowItemLoot for single-item message", function()
-			ns.IsRetail = function()
+			ItemLoot.isRetail = function()
 				return true
 			end
 			local capturedLink
@@ -556,7 +658,7 @@ describe("ItemLoot Module", function()
 		end)
 
 		it("handles item upgrade (2 item links): fromLink and itemLink both passed", function()
-			ns.IsRetail = function()
+			ItemLoot.isRetail = function()
 				return true
 			end
 			local capturedFrom, capturedLink
@@ -633,7 +735,6 @@ describe("ItemLoot Module", function()
 			assert.is_not_nil(payload)
 			assert.equals("ItemLoot", payload.type)
 			assert.equals(1, payload.quantity)
-			assert.is_function(payload.IsEnabled)
 			assert.is_function(payload.textFn)
 			assert.is_function(payload.secondaryTextFn)
 			assert.is_function(payload.itemCountFn)
@@ -677,7 +778,7 @@ describe("ItemLoot Module", function()
 		end)
 
 		it("sets topLeftText and topLeftColor for equippable non-poor items", function()
-			ItemLoot._itemLootAdapter.GetItemQualityColor = function()
+			ItemLoot.itemLootApi.GetItemQualityColor = function()
 				return 0.5, 0.5, 1
 			end
 			local info = makeItemInfo({
@@ -848,54 +949,43 @@ describe("ItemLoot Module", function()
 			end)
 		end)
 
-		describe("PlaySoundIfEnabled", function()
+		describe("sound service (via OnItemReadyToShow)", function()
+			before_each(function()
+				ItemLoot:OnInitialize()
+			end)
+
 			it("plays mount sound when mount sound is enabled and item is a mount", function()
 				ns.db.global.item.sounds.mounts = { enabled = true, sound = "Interface/Sounds/mount.ogg" }
-				local playSpy = spy.new(function()
-					return true, 1
-				end)
-				ItemLoot._itemLootAdapter.PlaySoundFile = playSpy
 				local info = makeItemInfo({
 					IsMount = function()
 						return true
 					end,
 				})
-				local payload = ItemLoot:BuildPayload(info, 1, nil)
 
-				ItemLoot:PlaySoundIfEnabled(payload)
+				ItemLoot:OnItemReadyToShow(info, 1, nil)
 
-				assert.spy(playSpy).was.called_with("Interface/Sounds/mount.ogg")
+				assert.spy(soundServiceMock.PlaySound).was.called_with(_, "Interface/Sounds/mount.ogg")
 			end)
 
 			it("plays legendary sound when legendary sound is enabled and item is legendary", function()
 				ns.db.global.item.sounds.legendary = { enabled = true, sound = "Interface/Sounds/legendary.ogg" }
-				local playSpy = spy.new(function()
-					return true, 1
-				end)
-				ItemLoot._itemLootAdapter.PlaySoundFile = playSpy
 				local info = makeItemInfo({
 					IsLegendary = function()
 						return true
 					end,
 				})
-				local payload = ItemLoot:BuildPayload(info, 1, nil)
 
-				ItemLoot:PlaySoundIfEnabled(payload)
+				ItemLoot:OnItemReadyToShow(info, 1, nil)
 
-				assert.spy(playSpy).was.called_with("Interface/Sounds/legendary.ogg")
+				assert.spy(soundServiceMock.PlaySound).was.called_with(_, "Interface/Sounds/legendary.ogg")
 			end)
 
 			it("does not play sound when no conditions match", function()
-				local playSpy = spy.new(function()
-					return true, 1
-				end)
-				ItemLoot._itemLootAdapter.PlaySoundFile = playSpy
 				local info = makeItemInfo()
-				local payload = ItemLoot:BuildPayload(info, 1, nil)
 
-				ItemLoot:PlaySoundIfEnabled(payload)
+				ItemLoot:OnItemReadyToShow(info, 1, nil)
 
-				assert.spy(playSpy).was_not.called()
+				assert.spy(soundServiceMock.PlaySound).was_not.called()
 			end)
 		end)
 
@@ -912,10 +1002,10 @@ describe("ItemLoot Module", function()
 
 			it("returns item count and options when enabled and item is in cache", function()
 				ns.db.global.item.itemCountTextEnabled = true
-				ItemLoot._itemLootAdapter.GetItemInfo = function()
+				ItemLoot.itemLootApi.GetItemInfo = function()
 					return "Finkle's Lava Dredger"
 				end
-				ItemLoot._itemLootAdapter.GetItemCount = function()
+				ItemLoot.itemLootApi.GetItemCount = function()
 					return 5
 				end
 				local info = makeItemInfo()
@@ -929,7 +1019,7 @@ describe("ItemLoot Module", function()
 
 			it("returns nil when GetItemInfo fails (item not in cache)", function()
 				ns.db.global.item.itemCountTextEnabled = true
-				ItemLoot._itemLootAdapter.GetItemInfo = function()
+				ItemLoot.itemLootApi.GetItemInfo = function()
 					error("item not cached")
 				end
 				local info = makeItemInfo()
@@ -942,7 +1032,7 @@ describe("ItemLoot Module", function()
 
 			it("returns nil when GetItemInfo returns nil name", function()
 				ns.db.global.item.itemCountTextEnabled = true
-				ItemLoot._itemLootAdapter.GetItemInfo = function()
+				ItemLoot.itemLootApi.GetItemInfo = function()
 					return nil
 				end
 				local info = makeItemInfo()

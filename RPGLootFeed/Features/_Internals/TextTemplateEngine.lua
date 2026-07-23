@@ -138,8 +138,9 @@ end
 --- Process all text elements for a loot element data
 ---@param elementData RLF_LootElementData The loot element data
 ---@param existingQuantity? number Optional existing quantity
+---@param truncatedItemLink? string Optional pre-truncated item link for {truncatedLink} placeholders
 ---@return table<number, table<string, string>> processedTexts Row-indexed map of element key to processed text
-function TextTemplateEngine:ProcessAllTextElements(elementData, existingQuantity)
+function TextTemplateEngine:ProcessAllTextElements(elementData, existingQuantity, truncatedItemLink)
 	local result = {}
 
 	for rowNumber, rowElements in pairs(elementData.textElements or {}) do
@@ -149,7 +150,7 @@ function TextTemplateEngine:ProcessAllTextElements(elementData, existingQuantity
 				result[rowNumber][elementKey] = string.rep(" ", textElement.spacerCount or 1)
 			else
 				result[rowNumber][elementKey] =
-					self:ProcessTemplate(textElement.template, elementData, existingQuantity)
+					self:ProcessTemplate(textElement.template, elementData, existingQuantity, truncatedItemLink)
 				result[rowNumber][elementKey] = self:ApplyTextColor(result[rowNumber][elementKey], textElement.color)
 			end
 		end
@@ -162,8 +163,9 @@ end
 ---@param rowIndex number The row index to process
 ---@param elementData table The element data for processing templates
 ---@param existingQuantity? number Optional existing quantity
+---@param truncatedItemLink? string Optional pre-truncated item link for {truncatedLink} placeholders
 ---@return string layoutText The combined text for this row
-function TextTemplateEngine:ProcessRowElements(rowIndex, elementData, existingQuantity)
+function TextTemplateEngine:ProcessRowElements(rowIndex, elementData, existingQuantity, truncatedItemLink)
 	if not elementData.textElements then
 		error(elementData.type .. ": textElements row is nil for index: " .. tostring(rowIndex))
 	end
@@ -204,7 +206,8 @@ function TextTemplateEngine:ProcessRowElements(rowIndex, elementData, existingQu
 		if item.element.type == "spacer" then
 			processedText = string.rep(" ", item.element.spacerCount or 1)
 		else
-			processedText = self:ProcessTemplate(item.element.template, elementData, existingQuantity)
+			processedText =
+				self:ProcessTemplate(item.element.template, elementData, existingQuantity, truncatedItemLink)
 			processedText = self:ApplyTextColor(processedText, item.element.color)
 		end
 
