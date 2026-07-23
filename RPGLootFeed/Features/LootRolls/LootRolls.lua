@@ -4,26 +4,14 @@ local addonName, ns = ...
 ---@class G_RLF
 local G_RLF = ns
 
-local FeatureBase = G_RLF.FeatureBase
-local FeatureModule = G_RLF.FeatureModule
-local DbAccessor = G_RLF.DbAccessor
-
-local LogDebug = function(...)
-	G_RLF:LogDebug(...)
-end
-local LogInfo = function(...)
-	G_RLF:LogInfo(...)
-end
-local LogWarn = function(...)
-	G_RLF:LogWarn(...)
-end
+-- logging injected via FeatureBase DI
 
 -- ── WoW API / Global abstraction adapters ────────────────────────────────────
 -- Captured here at module-load time so tests can override _adapter without
 -- patching _G directly.
 
 ---@class RLF_LootRolls: RLF_Module, AceEvent-3.0, AceBucket-3.0
-local LootRolls = FeatureBase:new(FeatureModule.LootRolls, "AceEvent-3.0", "AceBucket-3.0")
+local LootRolls = G_RLF.FeatureBase:new("LootRolls", { logging = true }, "AceEvent-3.0", "AceBucket-3.0")
 
 LootRolls._adapter = G_RLF.WoWAPI.LootRolls
 
@@ -110,7 +98,7 @@ end
 ---@param rollTime number  Duration in seconds
 ---@param lootHandle number|nil
 function LootRolls:START_LOOT_ROLL(eventName, rollID, rollTime, lootHandle)
-	LogDebug(eventName, G_RLF.LogEventSource.WOWEVENT, self.moduleName, rollID, nil, rollTime)
+	self:LogDebug(eventName, G_RLF.LogEventSource.WOWEVENT, self.moduleName, rollID, nil, rollTime)
 
 	-- Fetch item info via adapter
 	local texture, name, count, quality = self._adapter.GetLootRollItemInfo(rollID)
@@ -126,7 +114,7 @@ function LootRolls:START_LOOT_ROLL(eventName, rollID, rollTime, lootHandle)
 	-- Build payload
 	local payload = {
 		key = rollKey(rollID),
-		type = FeatureModule.LootRolls,
+		type = G_RLF.FeatureModule.LootRolls,
 		icon = texture,
 		quality = quality,
 		isLink = true,
@@ -137,9 +125,7 @@ function LootRolls:START_LOOT_ROLL(eventName, rollID, rollTime, lootHandle)
 		showForSeconds = math.pow(2, 19), -- Never auto-fade; dismissed by events
 		rollID = rollID,
 		rollDuration = rollTime,
-		IsEnabled = function()
-			return LootRolls:IsEnabled()
-		end,
+		moduleRef = LootRolls,
 	}
 	local itemID = self._adapter.GetItemInfoInstant(itemLink)
 	payload.filterItemId = itemID
@@ -172,13 +158,13 @@ end
 ---@param eventName string
 ---@param rollID number
 function LootRolls:CANCEL_LOOT_ROLL(eventName, rollID)
-	LogDebug(eventName, G_RLF.LogEventSource.WOWEVENT, self.moduleName, rollID)
+	self:LogDebug(eventName, G_RLF.LogEventSource.WOWEVENT, self.moduleName, rollID)
 	self:ReleaseRollRows(rollID)
 	self:_UntrackRoll(rollID)
 end
 
 function LootRolls:CANCEL_ALL_LOOT_ROLLS(eventName)
-	LogDebug(eventName, G_RLF.LogEventSource.WOWEVENT, self.moduleName)
+	self:LogDebug(eventName, G_RLF.LogEventSource.WOWEVENT, self.moduleName)
 	if not self._activeRolls then
 		return
 	end
@@ -199,7 +185,7 @@ end
 ---@param roll number
 ---@param isWinning boolean
 function LootRolls:MAIN_SPEC_NEED_ROLL(eventName, rollID, roll, isWinning)
-	LogDebug(eventName, G_RLF.LogEventSource.WOWEVENT, self.moduleName, rollID, nil, roll, isWinning)
+	self:LogDebug(eventName, G_RLF.LogEventSource.WOWEVENT, self.moduleName, rollID, nil, roll, isWinning)
 	local rows = self:FindRollRows(rollID)
 	for _, entry in ipairs(rows) do
 		entry.row:OnMainSpecNeedRoll(roll, isWinning)
@@ -209,7 +195,7 @@ end
 ---@param eventName string
 ---@param lootHandle number
 function LootRolls:LOOT_ROLLS_COMPLETE(eventName, lootHandle)
-	LogDebug(eventName, G_RLF.LogEventSource.WOWEVENT, self.moduleName, nil, nil, lootHandle)
+	self:LogDebug(eventName, G_RLF.LogEventSource.WOWEVENT, self.moduleName, nil, nil, lootHandle)
 	if not self._lootHandleMap then
 		return
 	end
@@ -375,7 +361,7 @@ end
 ---@param roll number
 ---@param upgraded boolean
 function LootRolls:LOOT_ITEM_ROLL_WON(eventName, itemLink, quantity, rollType, roll, upgraded)
-	LogDebug(eventName, G_RLF.LogEventSource.WOWEVENT, self.moduleName, nil, nil, rollType)
+	self:LogDebug(eventName, G_RLF.LogEventSource.WOWEVENT, self.moduleName, nil, nil, rollType)
 	if not self._activeRolls then
 		return
 	end
@@ -400,14 +386,14 @@ end
 ---@param encounterID number
 ---@param lootListID number
 function LootRolls:LOOT_HISTORY_UPDATE_DROP(eventName, encounterID, lootListID)
-	LogDebug(eventName, G_RLF.LogEventSource.WOWEVENT, self.moduleName, encounterID, nil, lootListID)
+	self:LogDebug(eventName, G_RLF.LogEventSource.WOWEVENT, self.moduleName, encounterID, nil, lootListID)
 	self:HandleHistoryDropUpdate(encounterID, lootListID)
 end
 
 ---@param eventName string
 ---@param encounterID number
 function LootRolls:LOOT_HISTORY_UPDATE_ENCOUNTER(eventName, encounterID)
-	LogDebug(eventName, G_RLF.LogEventSource.WOWEVENT, self.moduleName, encounterID)
+	self:LogDebug(eventName, G_RLF.LogEventSource.WOWEVENT, self.moduleName, encounterID)
 	-- Full re-poll for this encounter to catch any unmatched drops
 	if not self._historyMatchMap or not self._historyMatchMap[encounterID] then
 		return
@@ -544,7 +530,7 @@ function LootRolls:CHAT_MSG_LOOT(eventName, msg, playerName, _, _, playerName2, 
 	for key, cp in pairs(_classicPatterns) do
 		local captures = { msg:match(cp.pattern) }
 		if #captures > 0 then
-			LogDebug(eventName, G_RLF.LogEventSource.WOWEVENT, self.moduleName, nil, key .. ": " .. msg)
+			self:LogDebug(eventName, G_RLF.LogEventSource.WOWEVENT, self.moduleName, nil, key .. ": " .. msg)
 
 			if key == "ROLLED_NEED_SELF" then
 				-- captures: rollValue, itemLinkRest...
@@ -699,8 +685,8 @@ end
 -- ── Module Lifecycle ─────────────────────────────────────────────────────────
 
 function LootRolls:OnInitialize()
-	LogDebug("LootRolls:OnInitialize()", addonName, self.moduleName)
-	if DbAccessor:IsFeatureNeededByAnyFrame("lootRolls") then
+	self:LogDebug("LootRolls:OnInitialize()", addonName, self.moduleName)
+	if G_RLF.DbAccessor:IsFeatureNeededByAnyFrame("lootRolls") then
 		self:Enable()
 	else
 		self:Disable()
@@ -732,7 +718,7 @@ function LootRolls:OnDisable()
 end
 
 function LootRolls:OnEnable()
-	LogDebug("OnEnable", addonName, self.moduleName)
+	self:LogDebug("OnEnable", addonName, self.moduleName)
 
 	self:RegisterEvent("START_LOOT_ROLL")
 	self:RegisterEvent("CANCEL_LOOT_ROLL")
@@ -768,7 +754,7 @@ function LootRolls:ReplayActiveRolls()
 		return
 	end
 
-	LogDebug("ReplayActiveRolls", addonName, #pendingRollIDs)
+	self:LogDebug("ReplayActiveRolls", addonName, #pendingRollIDs)
 	for _, rollID in ipairs(pendingRollIDs) do
 		local duration = self._adapter.GetLootRollDuration(rollID)
 		self:START_LOOT_ROLL(rollID, duration)

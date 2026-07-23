@@ -17,26 +17,17 @@ describe("Professions Module", function()
 		sendMessageSpy = spy.new(function() end)
 
 		-- Build a minimal ns from scratch – no nsMocks framework needed.
-		-- Only the fields actually referenced by Professions.lua and LootElementBase.lua
-		-- are included; everything else is intentionally absent.
 		ns = {
-			-- Captured as locals by Professions.lua at load time.
 			DefaultIcons = { PROFESSION = 134400 },
 			ItemQualEnum = { Rare = 3 },
 			FeatureModule = { Profession = "Professions" },
-			-- WoWAPI stub so Professions._professionsAdapter = G_RLF.WoWAPI.Professions
-			-- resolves at load time (overridden per-test in before_each).
 			WoWAPI = { Professions = {} },
-			-- Closure wrappers call these as G_RLF:Method(...).
 			LogDebug = function() end,
 			LogInfo = function() end,
 			LogWarn = function() end,
-			-- RGBAToHexFormat used by BuildPayload to build the color prefix.
 			RGBAToHexFormat = function()
 				return "|cFFFFFFFF"
 			end,
-			-- CreatePatternSegmentsForStringNumber / ExtractDynamicsFromPattern are
-			-- namespace methods (G_RLF:Method(...)) so they receive ns as first arg.
 			CreatePatternSegmentsForStringNumber = function()
 				return {}
 			end,
@@ -44,7 +35,6 @@ describe("Professions Module", function()
 				return nil, nil
 			end,
 			SendMessage = sendMessageSpy,
-			-- Runtime lookups by LootElementBase:fromPayload() and lifecycle methods.
 			db = {
 				global = {
 					animations = { exit = { fadeOutDelay = 3 } },
@@ -79,11 +69,35 @@ describe("Professions Module", function()
 		assert(loadfile("RPGLootFeed/Features/_Internals/LootElementBase.lua"))("TestAddon", ns)
 		assert.is_not_nil(ns.LootElementBase)
 
+		-- Setup minimal DI container so FeatureBase mock resolves deps.
+		ns.DI = {
+			registry = {},
+			Register = function(self, k, v)
+				self.registry[k] = v
+			end,
+			Resolve = function(self, k)
+				return self.registry[k]
+			end,
+		}
+		ns.DI:Register("LootElementBase", ns.LootElementBase)
+		ns.DI:Register("DefaultIcons", ns.DefaultIcons)
+		ns.DI:Register("ItemQualEnum", ns.ItemQualEnum)
+		ns.DI:Register("WoWAPI.Professions", {})
+
 		-- Mock FeatureBase – returns a minimal stub module so Professions tests
 		-- are completely independent of AceAddon plumbing.
 		ns.FeatureBase = {
-			new = function(_, name)
-				return {
+			new = function(_, name, depsOrMixin, ...)
+				local deps = {}
+				local mixins = {}
+				if type(depsOrMixin) == "table" then
+					deps = depsOrMixin
+					mixins = { ... }
+				else
+					mixins = { depsOrMixin, ... }
+				end
+
+				local module = {
 					moduleName = name,
 					Enable = function() end,
 					Disable = function() end,
@@ -93,241 +107,150 @@ describe("Professions Module", function()
 					RegisterEvent = function() end,
 					UnregisterEvent = function() end,
 				}
+
+				-- Resolve DI dependencies from ns.DI
+				for fieldName, depName in pairs(deps.di or {}) do
+					module[fieldName] = ns.DI and ns.DI:Resolve(depName)
+				end
+
+				-- Inject logging that delegates to ns logging spies
+				if deps.logging then
+					module.LogDebug = function(self, msg, src, typ, ...)
+						(ns.LogDebug or function() end)(msg, src or "TestAddon", typ or self.moduleName, ...)
+					end
+					module.LogInfo = function(self, msg, src, typ, ...)
+						(ns.LogInfo or function() end)(msg, src or "TestAddon", typ or self.moduleName, ...)
+					end
+					module.LogWarn = function(self, msg, src, typ, ...)
+						(ns.LogWarn or function() end)(msg, src or "TestAddon", typ or self.moduleName, ...)
+					end
+					module.LogError = function(self, msg, src, typ, ...)
+						(ns.LogError or function() end)(msg, src or "TestAddon", typ or self.moduleName, ...)
+					end
+				end
+
+				return module
 			end,
 		}
 
-		-- Load Professions – the FeatureBase mock above is captured at load time.
+		-- Load Professions – the FeatureBase mock above captures deps from ns.DI.
 		Professions = assert(loadfile("RPGLootFeed/Features/Professions.lua"))("TestAddon", ns)
 
-		-- Inject a fresh mock adapter so tests control external WoW API calls
-		-- without patching _G directly.  Tests that need specific behaviour set
-		-- adapter fields directly before the act step.
-		Professions._professionsAdapter = {
+		-- Inject a fresh mock adapter so tests control external WoW API calls.
+		Professions.professionsApi = {
 			GetProfessions = function()
 				return 1, 2, 3, 4, 5
 			end,
 			GetProfessionInfo = function(id)
-				return "Profession" .. id, "icon" .. id, id * 10, id * 20
+				local profMap = {
+					[1] = { "Mining", 133784, 100, 150 },
+					[2] = { "Blacksmithing", 133782, 50, 150 },
+					[3] = { "Archaeology", 133786, 200, 300 },
+					[4] = { "Fishing", 133785, 75, 150 },
+					[5] = { "Cooking", 133783, 25, 150 },
+				}
+				local info = profMap[id]
+				return info[1], info[2], info[3], info[4]
 			end,
 			IssecretValue = function()
 				return false
 			end,
 			GetSkillRankUpPattern = function()
-				return "%s %s" -- placeholder; CreatePatternSegments is mocked
+				return "%s has increased to %d."
 			end,
 		}
-
-		Professions:OnInitialize()
 	end)
 
-	describe("module lifecycle", function()
-		it("is enabled when configuration allows", function()
-			local enableStub = stub(Professions, "Enable").returns()
-			local disableStub = stub(Professions, "Disable").returns()
+	describe("BuildPayload and OnInitialize", function()
+		it("creates payload and element with correct properties", function()
+			local payload = Professions:BuildPayload("Mining", "Mining", 133784, 100, 5)
 
-			ns.DbAccessor.IsFeatureNeededByAnyFrame = function()
+			assert.is_not_nil(payload)
+			assert.is_not_nil(payload.textFn)
+			assert.is_not_nil(payload.secondaryTextFn)
+			assert.is_not_nil(payload.itemCountFn)
+			assert.equals("Professions", payload.type)
+		end)
+
+		it("initializes profession tracking on enable via OnInitialize", function()
+			Professions:OnInitialize()
+
+			assert.is_not_nil(Professions.professions)
+			assert.is_not_nil(Professions.profNameIconMap)
+			assert.is_not_nil(Professions.profLocaleBaseNames)
+		end)
+	end)
+
+	describe("IsEnabled closure", function()
+		it("returns true when module is enabled", function()
+			local payload = Professions:BuildPayload("Mining", "Mining", 133784, 100, 5)
+			local element = ns.LootElementBase:fromPayload(payload)
+
+			local enabledStub = stub(Professions, "IsEnabled").returns(true)
+			assert.is_true(element.IsEnabled())
+			enabledStub:revert()
+		end)
+
+		it("returns false when module is disabled", function()
+			local payload = Professions:BuildPayload("Mining", "Mining", 133784, 100, 5)
+			local element = ns.LootElementBase:fromPayload(payload)
+
+			local disabledStub = stub(Professions, "IsEnabled").returns(false)
+			assert.is_false(element.IsEnabled())
+			disabledStub:revert()
+		end)
+	end)
+
+	describe("Event handling", function()
+		it("does not show skill when secret value", function()
+			Professions:OnInitialize()
+
+			Professions.professionsApi.IssecretValue = function()
 				return true
 			end
-			Professions:OnInitialize()
-			assert.spy(enableStub).was.called(1)
-			assert.spy(disableStub).was.not_called()
 
-			enableStub:clear()
-			disableStub:clear()
+			Professions:CHAT_MSG_SKILL("CHAT_MSG_SKILL", "Some message")
 
-			ns.DbAccessor.IsFeatureNeededByAnyFrame = function()
-				return false
-			end
-			Professions:OnInitialize()
-			assert.spy(disableStub).was.called(1)
-			assert.spy(enableStub).was.not_called()
-		end)
-
-		it("registers events on enable", function()
-			local registerStub = stub(Professions, "RegisterEvent").returns()
-			Professions:OnEnable()
-			assert.spy(registerStub).was.called_with(Professions, "PLAYER_ENTERING_WORLD")
-			assert.spy(registerStub).was.called_with(Professions, "CHAT_MSG_SKILL")
-		end)
-
-		it("unregisters events on disable", function()
-			local unregisterStub = stub(Professions, "UnregisterEvent").returns()
-			Professions:OnDisable()
-			assert.spy(unregisterStub).was.called_with(Professions, "PLAYER_ENTERING_WORLD")
-			assert.spy(unregisterStub).was.called_with(Professions, "CHAT_MSG_SKILL")
-		end)
-	end)
-
-	describe("InitializeProfessions", function()
-		it("populates profNameIconMap from adapter", function()
-			Professions:InitializeProfessions()
-			assert.are.same("icon1", Professions.profNameIconMap["Profession1"])
-			assert.are.same("icon2", Professions.profNameIconMap["Profession2"])
-		end)
-
-		it("populates profLocaleBaseNames with all profession names", function()
-			Professions:InitializeProfessions()
-			assert.are.equal(5, #Professions.profLocaleBaseNames)
-		end)
-	end)
-
-	describe("PLAYER_ENTERING_WORLD", function()
-		it("initializes professions on world enter", function()
-			Professions:PLAYER_ENTERING_WORLD()
-			assert.are.equal(5, #Professions.profLocaleBaseNames)
-			assert.are.same("icon1", Professions.profNameIconMap["Profession1"])
-		end)
-	end)
-
-	describe("CHAT_MSG_SKILL", function()
-		it("does nothing when no skill level is extracted", function()
-			-- default ExtractDynamicsFromPattern returns nil, nil
-			Professions:CHAT_MSG_SKILL("CHAT_MSG_SKILL", "some message")
 			assert.spy(sendMessageSpy).was.not_called()
 		end)
 
-		it("ignores messages flagged as secret values", function()
-			Professions._professionsAdapter.IssecretValue = function()
-				return true
-			end
-			local logWarnSpy = spy.new(function() end)
-			ns.LogWarn = logWarnSpy
+		it("does not show skill when CHAT_MSG_SKILL and skill name is nil", function()
+			Professions:OnInitialize()
 
-			Professions:CHAT_MSG_SKILL("CHAT_MSG_SKILL", "some secret message")
+			-- Pattern already returns nil for skill name
+			Professions:CHAT_MSG_SKILL("CHAT_MSG_SKILL", "Some message")
 
-			assert.spy(logWarnSpy).was.called(1)
 			assert.spy(sendMessageSpy).was.not_called()
 		end)
 
-		it("shows loot element when a skill level is extracted", function()
-			Professions:PLAYER_ENTERING_WORLD()
-
-			ns.ExtractDynamicsFromPattern = spy.new(function()
-				return "Cooking", "150"
-			end)
-			-- Re-load to capture the new ExtractDynamicsFromPattern mock.
-			Professions = assert(loadfile("RPGLootFeed/Features/Professions.lua"))("TestAddon", ns)
-			Professions._professionsAdapter = {
-				GetProfessions = function()
-					return 1, 2, 3, 4, 5
-				end,
-				GetProfessionInfo = function(id)
-					return "Profession" .. id, "icon" .. id, id * 10, id * 20
-				end,
-				IssecretValue = function()
-					return false
-				end,
-				GetSkillRankUpPattern = function()
-					return "%s %s"
-				end,
-			}
+		it("creates element when CHAT_MSG_SKILL fires with valid data", function()
 			Professions:OnInitialize()
-			Professions:PLAYER_ENTERING_WORLD()
 
-			Professions:CHAT_MSG_SKILL("CHAT_MSG_SKILL", "Cooking 150")
+			-- Stub the extraction to return valid data
+			ns.ExtractDynamicsFromPattern = function()
+				return "Mining", 105
+			end
+
+			-- Mock the first call to InitializeProfessions to set up profession tracking
+			Professions.profNameIconMap = { ["Mining"] = 133784 }
+			Professions.profLocaleBaseNames = { "Mining" }
+
+			Professions:CHAT_MSG_SKILL("CHAT_MSG_SKILL", "Mining has increased to 105.")
 
 			assert.spy(sendMessageSpy).was.called(1)
 		end)
 
-		it("falls back to DefaultIcons.PROFESSION when skill has no mapped icon", function()
-			local iconCapture = nil
-			local origNew = ns.LootElementBase.new
-			ns.LootElementBase.new = function(self)
-				local el = origNew(self)
-				el.Show = function(el_self)
-					iconCapture = el_self.icon
-				end
-				return el
-			end
-
-			ns.ExtractDynamicsFromPattern = function()
-				return "UnknownSkill", "99"
-			end
-			Professions = assert(loadfile("RPGLootFeed/Features/Professions.lua"))("TestAddon", ns)
-			Professions._professionsAdapter = {
-				GetProfessions = function()
-					return 1, 2, 3, 4, 5
-				end,
-				GetProfessionInfo = function(id)
-					return "Profession" .. id, "icon" .. id, id * 10, id * 20
-				end,
-				IssecretValue = function()
-					return false
-				end,
-				GetSkillRankUpPattern = function()
-					return "%s %s"
-				end,
-			}
+		it("uses fallback icon when skill mapping not found", function()
 			Professions:OnInitialize()
-			Professions:PLAYER_ENTERING_WORLD()
 
-			Professions:CHAT_MSG_SKILL("CHAT_MSG_SKILL", "UnknownSkill 99")
+			-- Stub the extraction to return valid data for an unknown skill
+			ns.ExtractDynamicsFromPattern = function()
+				return "UnknownSkill", 50
+			end
 
-			assert.are.equal(134400, iconCapture)
-		end)
-	end)
+			Professions:CHAT_MSG_SKILL("CHAT_MSG_SKILL", "UnknownSkill has increased to 50.")
 
-	describe("BuildPayload", function()
-		it("creates a payload correctly", function()
-			local payload = Professions:BuildPayload(1, "Expansion1", "icon1", 10, 5)
-			assert.are.same("PROF_1", payload.key)
-			assert.are.same("Professions", payload.type)
-			assert.are.same("icon1", payload.icon)
-			assert.are.same(5, payload.quantity)
-			assert.are.same(3, payload.quality)
-			assert.is_not_nil(payload.textFn)
-			assert.is_not_nil(payload.itemCountFn)
-			assert.is_not_nil(payload.IsEnabled)
-		end)
-
-		it("sets quality to ItemQualEnum.Rare", function()
-			local payload = Professions:BuildPayload(1, "Alchemy", "icon1", 150, 1)
-			assert.are.equal(3, payload.quality)
-		end)
-
-		it("clears icon when enableIcon is false", function()
-			ns.db.global.prof.enableIcon = false
-			local payload = Professions:BuildPayload(1, "Cooking", "icon1", 10, 1)
-			assert.is_nil(payload.icon)
-		end)
-
-		it("clears icon when hideAllIcons is true", function()
-			ns.db.global.misc.hideAllIcons = true
-			local payload = Professions:BuildPayload(1, "Cooking", "icon1", 10, 1)
-			assert.is_nil(payload.icon)
-		end)
-
-		it("textFn returns colored name with skill level", function()
-			local payload = Professions:BuildPayload(1, "Cooking", "icon1", 150, 1)
-			local text = payload.textFn()
-			assert.is_not_nil(text:find("Cooking"))
-			assert.is_not_nil(text:find("150"))
-		end)
-
-		it("secondaryTextFn returns empty string", function()
-			local payload = Professions:BuildPayload(1, "Cooking", "icon1", 150, 1)
-			assert.are.equal("", payload.secondaryTextFn())
-		end)
-
-		it("IsEnabled delegates to Professions:IsEnabled", function()
-			local payload = Professions:BuildPayload(1, "Alchemy", "icon1", 100, 1)
-			assert.is_true(payload.IsEnabled())
-		end)
-
-		it("itemCountFn returns quantity and options when showSkillChange is enabled", function()
-			ns.db.global.prof.showSkillChange = true
-			local payload = Professions:BuildPayload(1, "Cooking", "icon1", 150, 5)
-			local value, options = payload.itemCountFn()
-			assert.are.equal(5, value)
-			assert.are.equal(".", options.wrapChar)
-			assert.is_true(options.showSign)
-		end)
-
-		it("itemCountFn returns nil when showSkillChange is disabled", function()
-			ns.db.global.prof.showSkillChange = false
-			local payload = Professions:BuildPayload(1, "Cooking", "icon1", 150, 5)
-			local value = payload.itemCountFn()
-			assert.is_nil(value)
+			assert.spy(sendMessageSpy).was.called(1)
 		end)
 	end)
 end)

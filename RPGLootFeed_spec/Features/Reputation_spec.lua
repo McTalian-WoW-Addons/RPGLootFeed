@@ -21,10 +21,10 @@ describe("Reputation Module", function()
 			FeatureModule = { Reputation = "Reputation" },
 			DefaultIcons = { REPUTATION = 236681 },
 			Expansion = { TWW = 10 },
-			LogDebug = function() end,
-			LogInfo = function() end,
-			LogWarn = function() end,
-			LogError = function() end,
+			LogDebug = spy.new(function() end),
+			LogInfo = spy.new(function() end),
+			LogWarn = spy.new(function() end),
+			LogError = spy.new(function() end),
 			IsRetail = function()
 				return false
 			end,
@@ -38,7 +38,6 @@ describe("Reputation Module", function()
 				return nil, nil
 			end,
 			SendMessage = sendMessageSpy,
-			-- Shared adapter namespace; tests override Rep._repAdapter directly.
 			WoWAPI = { Reputation = {} },
 			DbAccessor = {
 				IsFeatureNeededByAnyFrame = function()
@@ -208,10 +207,52 @@ describe("Reputation Module", function()
 
 	local function loadRepModule(customNs)
 		local n = customNs or ns
-		-- FeatureBase stub – returns a minimal module; adapter injected after load.
+
+		-- DI container for dependency injection
+		n.DI = {
+			_registry = {},
+			Register = function(self, name, instance)
+				self._registry[name] = instance
+			end,
+			Resolve = function(self, name)
+				return self._registry[name]
+			end,
+		}
+
+		-- Load real LootElementBase so elements are fully constructed.
+		if not n.LootElementBase then
+			assert(loadfile("RPGLootFeed/Features/_Internals/LootElementBase.lua"))("TestAddon", n)
+			assert.is_not_nil(n.LootElementBase)
+		end
+
+		-- Load TextTemplateEngine so DI can resolve it for Reputation.
+		if not n.TextTemplateEngine then
+			assert(loadfile("RPGLootFeed/Features/_Internals/TextTemplateEngine.lua"))("TestAddon", n)
+			assert.is_not_nil(n.TextTemplateEngine)
+		end
+
+		-- Register DI dependencies before loading Reputation
+		n.DI:Register("LootElementBase", n.LootElementBase)
+		n.DI:Register("TextTemplateEngine", n.TextTemplateEngine)
+		n.DI:Register("ItemQualEnum", n.ItemQualEnum)
+		n.DI:Register("WoWAPI.Reputation", {})
+		n.DI:Register("IsRetail", function()
+			return n.IsRetail()
+		end)
+
+		-- FeatureBase stub – supports DI deps table and logging injection.
 		n.FeatureBase = {
-			new = function(_, name)
-				return {
+			new = function(_, name, depsOrMixin, ...)
+				local deps = {}
+				local mixins = {}
+				if type(depsOrMixin) == "table" then
+					deps = depsOrMixin
+					mixins = { ... }
+				else
+					mixins = { depsOrMixin, ... }
+				end
+
+				local module = {
 					moduleName = name,
 					Enable = function() end,
 					Disable = function() end,
@@ -225,20 +266,41 @@ describe("Reputation Module", function()
 					ScheduleTimer = function() end,
 					CancelTimer = function() end,
 				}
+
+				-- Resolve DI dependencies
+				for fieldName, depName in pairs(deps.di or {}) do
+					module[fieldName] = n.DI:Resolve(depName)
+				end
+
+				-- Inject logging methods
+				if deps.logging then
+					module.LogDebug = function(self, message, source, type_, id, content, amount, isNew)
+						n.LogDebug(message, source or "TestAddon", type_ or self.moduleName, id, content, amount, isNew)
+					end
+					module.LogInfo = function(self, message, source, type_, id, content, amount, isNew)
+						n.LogInfo(message, source or "TestAddon", type_ or self.moduleName, id, content, amount, isNew)
+					end
+					module.LogWarn = function(self, message, source, type_, id, content, amount, isNew)
+						n.LogWarn(message, source or "TestAddon", type_ or self.moduleName, id, content, amount, isNew)
+					end
+					module.LogError = function(self, message, source, type_, id, content, amount, isNew)
+						n.LogError(message, source or "TestAddon", type_ or self.moduleName, id, content, amount, isNew)
+					end
+				end
+
+				return module
 			end,
 		}
-		-- LootElementBase must exist for Rep:BuildPayload -> fromPayload.
-		if not n.LootElementBase then
-			assert(loadfile("RPGLootFeed/Features/_Internals/LootElementBase.lua"))("TestAddon", n)
-			assert.is_not_nil(n.LootElementBase)
-		end
-		return assert(loadfile("RPGLootFeed/Features/Reputation/Reputation.lua"))("TestAddon", n)
+
+		local mod = assert(loadfile("RPGLootFeed/Features/Reputation/Reputation.lua"))("TestAddon", n)
+		assert(loadfile("RPGLootFeed/Features/Reputation/ReputationDelversJourney.lua"))("TestAddon", n)
+		return mod
 	end
 
 	before_each(function()
 		ns = makeNs()
 		RepModule = loadRepModule(ns)
-		RepModule._repAdapter = makeClassicAdapter()
+		RepModule.reputationApi = makeClassicAdapter()
 	end)
 
 	-- ── Lifecycle ─────────────────────────────────────────────────────────────
@@ -287,10 +349,10 @@ describe("Reputation Module", function()
 
 	describe("OnEnable", function()
 		it("Classic: registers PLAYER_ENTERING_WORLD and CHAT_MSG_COMBAT_FACTION_CHANGE", function()
-			RepModule._repAdapter.IsEventValid = function()
+			RepModule.reputationApi.IsEventValid = function()
 				return false
 			end
-			RepModule._repAdapter.GetExpansionLevel = function()
+			RepModule.reputationApi.GetExpansionLevel = function()
 				return 8
 			end
 			local registerSpy = spy.on(RepModule, "RegisterEvent")
@@ -304,10 +366,10 @@ describe("Reputation Module", function()
 		end)
 
 		it("Retail (FACTION_STANDING_CHANGED): registers bucket event instead of chat msg", function()
-			RepModule._repAdapter.IsEventValid = function(event)
+			RepModule.reputationApi.IsEventValid = function(event)
 				return event == "FACTION_STANDING_CHANGED"
 			end
-			RepModule._repAdapter.GetExpansionLevel = function()
+			RepModule.reputationApi.GetExpansionLevel = function()
 				return 9
 			end
 			local registerSpy = spy.on(RepModule, "RegisterEvent")
@@ -321,7 +383,7 @@ describe("Reputation Module", function()
 		end)
 
 		it("TWW: also registers bucket event for Delvers Journey polling", function()
-			RepModule._repAdapter = makeTWWAdapter()
+			RepModule.reputationApi = makeTWWAdapter()
 			local bucketSpy = spy.on(RepModule, "RegisterBucketEvent")
 
 			RepModule:OnEnable()
@@ -333,10 +395,10 @@ describe("Reputation Module", function()
 
 	describe("OnDisable", function()
 		it("Classic: unregisters PLAYER_ENTERING_WORLD and CHAT_MSG_COMBAT_FACTION_CHANGE", function()
-			RepModule._repAdapter.IsEventValid = function()
+			RepModule.reputationApi.IsEventValid = function()
 				return false
 			end
-			RepModule._repAdapter.GetExpansionLevel = function()
+			RepModule.reputationApi.GetExpansionLevel = function()
 				return 8
 			end
 			local unregSpy = spy.on(RepModule, "UnregisterEvent")
@@ -346,10 +408,10 @@ describe("Reputation Module", function()
 		end)
 
 		it("Retail: calls UnregisterAllBuckets for FACTION_STANDING_CHANGED", function()
-			RepModule._repAdapter.IsEventValid = function(event)
+			RepModule.reputationApi.IsEventValid = function(event)
 				return event == "FACTION_STANDING_CHANGED"
 			end
-			RepModule._repAdapter.GetExpansionLevel = function()
+			RepModule.reputationApi.GetExpansionLevel = function()
 				return 9
 			end
 			local bucketSpy = spy.on(RepModule, "UnregisterAllBuckets")
@@ -360,7 +422,7 @@ describe("Reputation Module", function()
 		end)
 
 		it("TWW: calls UnregisterAllBuckets twice (once per expansion guard)", function()
-			RepModule._repAdapter = makeTWWAdapter()
+			RepModule.reputationApi = makeTWWAdapter()
 			local bucketSpy = spy.on(RepModule, "UnregisterAllBuckets")
 			RepModule:OnDisable()
 			assert.spy(bucketSpy).was.called(2)
@@ -371,7 +433,7 @@ describe("Reputation Module", function()
 
 	describe("CHAT_MSG_COMBAT_FACTION_CHANGE", function()
 		it("returns early when the message is a secret value", function()
-			RepModule._repAdapter.IssecretValue = function()
+			RepModule.reputationApi.IssecretValue = function()
 				return true
 			end
 			local parseStub = stub(RepModule, "ParseFactionChangeMessage")
@@ -535,17 +597,17 @@ describe("Reputation Module", function()
 		before_each(function()
 			ns = makeNs()
 			RepModule = loadRepModule(ns)
-			RepModule._repAdapter = makeTWWAdapter()
+			RepModule.reputationApi = makeTWWAdapter()
 		end)
 
 		it("returns early without calling GetMajorFactionRenownInfo when no season faction found", function()
-			RepModule._repAdapter.GetDelvesFactionForSeason = function()
+			RepModule.reputationApi.GetDelvesFactionForSeason = function()
 				return 0
 			end
 			local getMajorSpy = spy.new(function()
 				return nil
 			end)
-			RepModule._repAdapter.GetMajorFactionRenownInfo = getMajorSpy
+			RepModule.reputationApi.GetMajorFactionRenownInfo = getMajorSpy
 
 			RepModule:CheckForHiddenRenownFactions({})
 
@@ -554,13 +616,13 @@ describe("Reputation Module", function()
 
 		it("returns early when GetDelveReputationBarTitle returns nil", function()
 			-- Season will be set on first call; label fetch should return early.
-			RepModule._repAdapter.GetDelveReputationBarTitle = function()
+			RepModule.reputationApi.GetDelveReputationBarTitle = function()
 				return nil
 			end
 			local getMajorSpy = spy.new(function()
 				return nil
 			end)
-			RepModule._repAdapter.GetMajorFactionRenownInfo = getMajorSpy
+			RepModule.reputationApi.GetMajorFactionRenownInfo = getMajorSpy
 
 			RepModule:CheckForHiddenRenownFactions({})
 
@@ -568,13 +630,13 @@ describe("Reputation Module", function()
 		end)
 
 		it("returns early when locale string has no opening parenthesis", function()
-			RepModule._repAdapter.GetDelveReputationBarTitle = function()
+			RepModule.reputationApi.GetDelveReputationBarTitle = function()
 				return "Delver Journey No Parens"
 			end
 			local getMajorSpy = spy.new(function()
 				return nil
 			end)
-			RepModule._repAdapter.GetMajorFactionRenownInfo = getMajorSpy
+			RepModule.reputationApi.GetMajorFactionRenownInfo = getMajorSpy
 
 			RepModule:CheckForHiddenRenownFactions({})
 
@@ -582,7 +644,7 @@ describe("Reputation Module", function()
 		end)
 
 		it("returns early when renown info is nil", function()
-			RepModule._repAdapter.GetMajorFactionRenownInfo = function()
+			RepModule.reputationApi.GetMajorFactionRenownInfo = function()
 				return nil
 			end
 			local insertSpy = spy.on(ns.RepUtils, "InsertNewCacheEntry")
