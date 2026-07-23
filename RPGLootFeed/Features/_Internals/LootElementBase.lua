@@ -276,4 +276,9 @@ end
 --- Union of all concrete loot element types used by the LootDisplay engine.
 --- @alias RLF_LootElement RLF_BaseLootElement
 
+-- ── Self-register in DI container ─────────────────────────────────────────────
+if G_RLF.DI then
+	G_RLF.DI:Register("LootElementBase", G_RLF.LootElementBase)
+end
+
 return {}

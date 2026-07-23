@@ -227,3 +227,9 @@ G_RLF.VersionCompare = {
 	SAME = 0,
 	NEWER = 1,
 }
+
+-- ── Register DI entries for shared enums/constants ──────────────────────────
+if G_RLF.DI then
+	G_RLF.DI:Register("DefaultIcons", G_RLF.DefaultIcons)
+	G_RLF.DI:Register("ItemQualEnum", G_RLF.ItemQualEnum)
+end
