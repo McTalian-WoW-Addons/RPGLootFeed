@@ -11,6 +11,9 @@
   <Script file="GameVersionHelpers.lua"/>
   <Script file="IconSkin.lua"/>
   <Script file="ItemInfo.lua"/>
+  <Script file="ItemInfoKeystone.lua"/>
+  <Script file="ItemInfoTransmog.lua"/>
+  <Script file="ItemInfoEquipment.lua"/>
   <Script file="Logger.lua"/>
   <Script file="Maps.lua"/>
   <Script file="Queue.lua"/>
