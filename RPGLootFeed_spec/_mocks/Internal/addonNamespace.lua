@@ -285,6 +285,7 @@ function addonNamespaceMocks:unitLoadedAfter(loadSection)
 		addonNamespaceMocks.retryHook = stub(ns, "retryHook")
 	end
 	if loadSection >= addonNamespaceMocks.LoadSections.FeatureInternals then
+		assert(loadfile("RPGLootFeed/utils/DI.lua"))("TestAddon", ns)
 		ns.LootElementBase = {}
 		addonNamespaceMocks.LootElementBase = {}
 		addonNamespaceMocks.LootElementBase.new = stub(ns.LootElementBase, "new").returns({})
@@ -333,6 +334,7 @@ function addonNamespaceMocks:unitLoadedAfter(loadSection)
 			---@type RLF_DBGlobal
 			global = {
 				lastVersionLoaded = "v1.0.0",
+				interactions = {},
 				logger = {},
 				migrationVersion = 0,
 				about = {},

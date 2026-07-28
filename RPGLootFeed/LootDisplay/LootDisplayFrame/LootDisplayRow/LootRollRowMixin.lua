@@ -89,6 +89,9 @@ function RLF_LootRollRowMixin:_CreateRollButton(label, id, enabled, reason)
 
 	-- Tooltip — matches Blizzard's LootRollButtonTemplate OnEnter/OnLeave
 	btn:SetScript("OnEnter", function()
+		if G_RLF.db.global.interactions.disableAllInteraction then
+			return
+		end
 		GameTooltip:SetOwner(btn, "ANCHOR_RIGHT")
 		GameTooltip_SetTitle(GameTooltip, label)
 		if reason then
@@ -100,11 +103,17 @@ function RLF_LootRollRowMixin:_CreateRollButton(label, id, enabled, reason)
 		GameTooltip:Show()
 	end)
 	btn:SetScript("OnLeave", function()
+		if G_RLF.db.global.interactions.disableAllInteraction then
+			return
+		end
 		GameTooltip:Hide()
 	end)
 
 	-- Click — only fires when enabled (Blizzard disables non-eligible buttons)
 	btn:SetScript("OnClick", function()
+		if G_RLF.db.global.interactions.disableAllInteraction then
+			return
+		end
 		RollOnLoot(self.rollID, id)
 		self:OnRollCast(label, id)
 	end)
@@ -365,9 +374,15 @@ end
 --- Setup tooltip on the secondary text for detailed roll info.
 function RLF_LootRollRowMixin:_SetupRollTooltip()
 	self.SecondaryText:SetScript("OnEnter", function()
+		if G_RLF.db.global.interactions.disableAllInteraction then
+			return
+		end
 		self:_ShowRollTooltip()
 	end)
 	self.SecondaryText:SetScript("OnLeave", function()
+		if G_RLF.db.global.interactions.disableAllInteraction then
+			return
+		end
 		self:_HideRollTooltip()
 	end)
 end

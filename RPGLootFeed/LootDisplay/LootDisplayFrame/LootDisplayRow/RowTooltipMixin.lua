@@ -14,10 +14,15 @@ function RLF_RowTooltipMixin:SetupTooltip(isHistoryFrame)
 	-- ClickableButton geometry (anchor + size) is set by LayoutPrimaryLine(),
 	-- which is called from ShowText() / ShowItemCountText() before SetupTooltip()
 	-- runs in the row lifecycle.  Only Show() is needed here.
-	self.ClickableButton:Show()
+	if not self.isClickThrough then
+		self.ClickableButton:Show()
+	end
 	-- Add Tooltip
 	-- Tooltip logic
 	local function showTooltip()
+		if G_RLF.db.global.interactions.disableAllInteraction then
+			return
+		end
 		---@type RLF_ConfigTooltips
 		local tooltipDb = G_RLF.db.global.tooltips
 		if not tooltipDb.hover.enabled then
@@ -46,6 +51,9 @@ function RLF_RowTooltipMixin:SetupTooltip(isHistoryFrame)
 
 	-- OnEnter: Show tooltip or listen for Shift changes
 	self.ClickableButton:SetScript("OnEnter", function()
+		if G_RLF.db.global.interactions.disableAllInteraction then
+			return
+		end
 		if not isHistoryFrame and not self._isLootRollRow then
 			self.ExitAnimation:Stop()
 			self:StopTimerBar()
@@ -65,6 +73,9 @@ function RLF_RowTooltipMixin:SetupTooltip(isHistoryFrame)
 
 	-- OnLeave: Hide tooltip and stop listening for Shift changes
 	self.ClickableButton:SetScript("OnLeave", function()
+		if G_RLF.db.global.interactions.disableAllInteraction then
+			return
+		end
 		if not isHistoryFrame and not self._isLootRollRow then
 			-- Only restart exit animation and release pin if mouse has truly left
 			-- the row, not merely moved from button to another part of the row.
@@ -104,6 +115,9 @@ function RLF_RowTooltipMixin:SetupTooltip(isHistoryFrame)
 	end)
 
 	local function handleClick(button)
+		if G_RLF.db.global.interactions.disableAllInteraction then
+			return
+		end
 		if button == "LeftButton" and not IsModifiedClick() then
 			if not self.link then
 				return
@@ -173,6 +187,9 @@ function RLF_RowTooltipMixin:SetupTooltip(isHistoryFrame)
 
 	if self.Icon then
 		self.Icon:SetScript("OnEnter", function()
+			if G_RLF.db.global.interactions.disableAllInteraction then
+				return
+			end
 			if not isHistoryFrame and not self._isLootRollRow then
 				self.ExitAnimation:Stop()
 				self:StopTimerBar()
@@ -188,6 +205,9 @@ function RLF_RowTooltipMixin:SetupTooltip(isHistoryFrame)
 			self.Icon:RegisterEvent("MODIFIER_STATE_CHANGED")
 		end)
 		self.Icon:SetScript("OnLeave", function()
+			if G_RLF.db.global.interactions.disableAllInteraction then
+				return
+			end
 			if not isHistoryFrame and not self._isLootRollRow then
 				-- Only restart exit animation and release pin if mouse has truly left
 				-- the row, not merely moved from icon to another part of the row.
