@@ -339,3 +339,4 @@ function ItemInfo:IsEligibleEquipment()
 end
 
 G_RLF.ItemInfo = ItemInfo
+G_RLF.DI:Register("ItemInfo", G_RLF.ItemInfo)
