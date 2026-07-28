@@ -116,6 +116,14 @@ function G_RLF.ItemLoot:BuildConfigArgs(frameId, order)
 		name = G_RLF.L["Item Loot Config"],
 		order = order,
 		args = {
+			interactionsWarning = {
+				type = "description",
+				name = "|cFFFFAA00" .. G_RLF.L["DisableAllInteractionFeatureWarning"] .. "|r",
+				order = 0.9,
+				hidden = function()
+					return not G_RLF.db.global.interactions.disableAllInteraction
+				end,
+			},
 			enableItemLoot = {
 				type = "toggle",
 				name = G_RLF.L["Enable Item Loot in Feed"],

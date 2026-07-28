@@ -134,6 +134,9 @@ local function mockItemButton()
 		"SetPoint",
 		"ClearAllPoints",
 		"SetShown",
+		"Hide",
+		"Show",
+		"EnableMouse",
 		-- Event handling (used by RowTooltipMixin)
 		"SetScript",
 		"RegisterEvent",

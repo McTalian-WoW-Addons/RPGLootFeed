@@ -163,6 +163,15 @@ function LootDisplay:OnEnable()
 	end
 end
 
+function LootDisplay:OnDisableAllInteractionChange()
+	local disabled = G_RLF.db.global.interactions.disableAllInteraction
+	for _, frame in pairs(lootFrames) do
+		if frame then
+			frame:SetDisableAllInteraction(disabled)
+		end
+	end
+end
+
 function LootDisplay:OnPlayerCombatChange()
 	local inCombat = UnitAffectingCombat("player")
 	for _, frame in pairs(lootFrames) do
