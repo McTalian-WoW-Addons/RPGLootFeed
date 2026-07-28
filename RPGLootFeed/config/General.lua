@@ -6,6 +6,23 @@ local G_RLF = ns
 
 local General = {}
 
+StaticPopupDialogs["RLF_DISABLE_ALL_INTERACTION_CONFIRM"] = {
+	text = G_RLF.L["DisableAllInteractionConfirm"],
+	button1 = G_RLF.L["DisableAllInteractionConfirmAccept"],
+	button2 = G_RLF.L["DisableAllInteractionConfirmCancel"],
+	OnAccept = function()
+		G_RLF.db.global.interactions.disableAllInteraction = true
+		G_RLF.LootDisplay:OnDisableAllInteractionChange()
+	end,
+	OnCancel = function()
+		G_RLF:NotifyChange(addonName)
+	end,
+	timeout = 0,
+	whileDead = true,
+	hideOnEscape = true,
+	preferredIndex = 3,
+}
+
 G_RLF.options.args.general = {
 	type = "group",
 	handler = General,
@@ -467,11 +484,22 @@ G_RLF.options.args.general = {
 			inline = true,
 			order = 5,
 			args = {
+				tooltipInteractionsWarning = {
+					type = "description",
+					name = "|cFFFFAA00" .. G_RLF.L["DisableAllInteractionFeatureWarning"] .. "|r",
+					order = 0.5,
+					hidden = function()
+						return not G_RLF.db.global.interactions.disableAllInteraction
+					end,
+				},
 				enableTooltip = {
 					type = "toggle",
 					name = G_RLF.L["Enable Item/Currency Tooltips"],
 					desc = G_RLF.L["EnableTooltipsDesc"],
 					width = "double",
+					disabled = function()
+						return G_RLF.db.global.interactions.disableAllInteraction
+					end,
 					get = function(info, value)
 						return G_RLF.db.global.tooltips.hover.enabled
 					end,
@@ -505,11 +533,32 @@ G_RLF.options.args.general = {
 			inline = true,
 			order = 6,
 			args = {
+				disableAllInteraction = {
+					type = "toggle",
+					name = G_RLF.L["Disable All Interaction With Rows"],
+					desc = G_RLF.L["DisableAllInteractionDesc"],
+					width = "double",
+					get = function()
+						return G_RLF.db.global.interactions.disableAllInteraction
+					end,
+					set = function(info, value)
+						if value then
+							StaticPopup_Show("RLF_DISABLE_ALL_INTERACTION_CONFIRM")
+						else
+							G_RLF.db.global.interactions.disableAllInteraction = false
+							G_RLF.LootDisplay:OnDisableAllInteractionChange()
+						end
+					end,
+					order = 1,
+				},
 				disableMouseInCombat = {
 					type = "toggle",
 					name = G_RLF.L["Disable Mouse Interactions In Combat"],
 					desc = G_RLF.L["DisableMouseInCombatDesc"],
 					width = "double",
+					disabled = function()
+						return G_RLF.db.global.interactions.disableAllInteraction
+					end,
 					get = function()
 						return G_RLF.db.global.interactions.disableMouseInCombat
 					end,
@@ -517,20 +566,23 @@ G_RLF.options.args.general = {
 						G_RLF.db.global.interactions.disableMouseInCombat = value
 						G_RLF.LootDisplay:OnPlayerCombatChange()
 					end,
-					order = 1,
+					order = 2,
 				},
 				pinOnHover = {
 					type = "toggle",
 					name = G_RLF.L["Lock Row Position On Hover"],
 					desc = G_RLF.L["LockRowPositionOnHoverDesc"],
 					width = "double",
+					disabled = function()
+						return G_RLF.db.global.interactions.disableAllInteraction
+					end,
 					get = function()
 						return G_RLF.db.global.interactions.pinOnHover
 					end,
 					set = function(info, value)
 						G_RLF.db.global.interactions.pinOnHover = value
 					end,
-					order = 2,
+					order = 3,
 				},
 			},
 		},

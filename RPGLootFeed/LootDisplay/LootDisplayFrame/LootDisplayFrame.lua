@@ -289,10 +289,22 @@ end
 --- @param inCombat boolean
 function LootDisplayFrameMixin:SetCombatClickThrough(inCombat)
 	local shouldBeClickThrough = inCombat and G_RLF.db.global.interactions.disableMouseInCombat
-	self.isClickThrough = shouldBeClickThrough
+	self.isClickThrough = shouldBeClickThrough or G_RLF.db.global.interactions.disableAllInteraction
 	for row in self.rows:iterate() do
 		---@cast row RLF_LootDisplayRow
-		row:SetClickThrough(shouldBeClickThrough)
+		row:SetClickThrough(self.isClickThrough)
+	end
+end
+
+function LootDisplayFrameMixin:SetDisableAllInteraction(disabled)
+	local inCombat = UnitAffectingCombat("player")
+	self.isClickThrough = disabled or (inCombat and G_RLF.db.global.interactions.disableMouseInCombat)
+	for row in self.rows:iterate() do
+		---@cast row RLF_LootDisplayRow
+		row:SetClickThrough(self.isClickThrough)
+	end
+	if self.scrollWheelTarget then
+		self.scrollWheelTarget:EnableMouse(not disabled)
 	end
 end
 

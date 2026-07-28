@@ -87,10 +87,13 @@ function PartyLoot:BuildPayload(info, amount, unit)
 		return payload.secondaryText
 	end
 
-	if self.partyLootApi.GetExpansionLevel() >= G_RLF.Expansion.BFA then
-		payload.secondaryTextColor = self.partyLootApi.GetClassColor(select(2, self.partyLootApi.UnitClass(unit)))
-	else
-		payload.secondaryTextColor = self.partyLootApi.GetRaidClassColor(select(2, self.partyLootApi.UnitClass(unit)))
+	local _, className = self.partyLootApi.UnitClass(unit)
+	if className then
+		if self.partyLootApi.GetExpansionLevel() >= G_RLF.Expansion.BFA then
+			payload.secondaryTextColor = self.partyLootApi.GetClassColor(className)
+		else
+			payload.secondaryTextColor = self.partyLootApi.GetRaidClassColor(className)
+		end
 	end
 
 	payload.moduleRef = PartyLoot
