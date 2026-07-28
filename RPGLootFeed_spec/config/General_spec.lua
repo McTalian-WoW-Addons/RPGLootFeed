@@ -16,6 +16,7 @@ describe("General module", function()
 
 	local ns
 	before_each(function()
+		_G.StaticPopupDialogs = _G.StaticPopupDialogs or {}
 		ns = nsMocks:unitLoadedAfter(nsMocks.LoadSections.All)
 		assert(loadfile("RPGLootFeed/config/General.lua"))("TestAddon", ns)
 	end)
