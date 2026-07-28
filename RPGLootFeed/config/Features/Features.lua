@@ -48,9 +48,11 @@ G_RLF.defaults.global.tooltips = {
 ---@class RLF_ConfigInteractions
 ---@field disableMouseInCombat boolean
 ---@field pinOnHover boolean
+---@field disableAllInteraction boolean
 G_RLF.defaults.global.interactions = {
 	disableMouseInCombat = true,
 	pinOnHover = true,
+	disableAllInteraction = false,
 }
 ---@class RLF_ConfigMinimap : LibDBIcon.button.DB
 ---@field hide boolean

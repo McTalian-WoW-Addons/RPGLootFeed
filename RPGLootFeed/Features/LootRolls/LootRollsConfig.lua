@@ -18,6 +18,14 @@ function G_RLF.LootRolls:BuildConfigArgs(frameId, order)
 		name = G_RLF.L["Loot Rolls Config"],
 		order = order,
 		args = {
+			interactionsWarning = {
+				type = "description",
+				name = "|cFFFFAA00" .. G_RLF.L["DisableAllInteractionFeatureWarning"] .. "|r",
+				order = 0.9,
+				hidden = function()
+					return not G_RLF.db.global.interactions.disableAllInteraction
+				end,
+			},
 			enableLootRolls = {
 				type = "toggle",
 				name = G_RLF.L["Enable Loot Rolls in Feed"],

@@ -739,7 +739,7 @@ describe("LootDisplayFrameMixin", function()
 		it(
 			"sets isClickThrough=true and calls SetClickThrough(true) on rows when in combat and setting enabled",
 			function()
-				ns.db.global.interactions = { disableMouseInCombat = true }
+				ns.db.global.interactions = { disableMouseInCombat = true, disableAllInteraction = false }
 				local mockRow = { SetClickThrough = spy.new(function() end) }
 				frame.rows = makeIterableRows({ mockRow })
 
@@ -751,7 +751,7 @@ describe("LootDisplayFrameMixin", function()
 		)
 
 		it("sets isClickThrough=false when leaving combat", function()
-			ns.db.global.interactions = { disableMouseInCombat = true }
+			ns.db.global.interactions = { disableMouseInCombat = true, disableAllInteraction = false }
 			local mockRow = { SetClickThrough = spy.new(function() end) }
 			frame.rows = makeIterableRows({ mockRow })
 
@@ -762,7 +762,7 @@ describe("LootDisplayFrameMixin", function()
 		end)
 
 		it("does not set isClickThrough when setting is disabled", function()
-			ns.db.global.interactions = { disableMouseInCombat = false }
+			ns.db.global.interactions = { disableMouseInCombat = false, disableAllInteraction = false }
 			local mockRow = { SetClickThrough = spy.new(function() end) }
 			frame.rows = makeIterableRows({ mockRow })
 

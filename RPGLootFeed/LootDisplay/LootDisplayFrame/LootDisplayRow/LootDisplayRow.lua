@@ -225,6 +225,10 @@ function LootDisplayRowMixin:SetClickThrough(enabled)
 		self.Icon:EnableMouse(not enabled)
 	end
 	if enabled then
+		self.ClickableButton:Hide()
+		if self.Icon then
+			self.Icon:Hide()
+		end
 		-- Unpin before the hasMouseOver cleanup.  OnLeave will not fire
 		-- when EnableMouse is toggled, so we must unpin explicitly.
 		if self.isPinned then
@@ -248,6 +252,13 @@ function LootDisplayRowMixin:SetClickThrough(enabled)
 				self:StartTimerBar()
 			end
 			GameTooltip:Hide()
+		end
+	else
+		if self.link then
+			self.ClickableButton:Show()
+		end
+		if self.icon then
+			self.Icon:Show()
 		end
 	end
 end
