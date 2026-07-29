@@ -8,14 +8,14 @@ local G_RLF = ns
 ---@field rollID number|nil
 ---@field _rolled boolean
 ---@field _rollButtons table[]
----@field _rollResultText FontString|nil
+---@field _rollDropInfo table|nil
 ---@field _rollTimerFrame Frame|nil
----@field _rollGreedBtn Button|nil
----@field _rollTransmogBtn Button|nil
+---@field _resolved boolean|nil
 RLF_LootRollRowMixin = {}
 
 local BUTTON_GAP = 4
 local PADDING_RIGHT = 8
+local RESULTS_DISPLAY_SECONDS = 60
 
 --- Atlas name suffix table matching Blizzard's loot roll button textures.
 local ROLL_BUTTON_ATLAS = {
@@ -25,9 +25,6 @@ local ROLL_BUTTON_ATLAS = {
 	[4] = { base = "lootroll-toast-icon-transmog" }, -- Transmog
 }
 
---- Create a single roll button matching Blizzard's LootRollButtonTemplate.
---- Uses atlas textures and tooltip mirroring the built-in group loot frame.
---- Resolve the button size from the frame's lootRolls config, falling back to 18.
 ---@return number
 function RLF_LootRollRowMixin:_GetButtonSize()
 	local frameConfig = G_RLF.db.global.frames[self.frameType]
@@ -37,10 +34,10 @@ function RLF_LootRollRowMixin:_GetButtonSize()
 	return 18
 end
 
----@param label string  Button label text (tooltip title)
----@param id number  Roll type id passed to RollOnLoot
----@param enabled boolean  Whether the button starts enabled
----@param reason number|nil  Ineligibility reason key suffix
+---@param label string
+---@param id number
+---@param enabled boolean
+---@param reason number|nil
 ---@return Button
 function RLF_LootRollRowMixin:_CreateRollButton(label, id, enabled, reason)
 	local btnSize = self:_GetButtonSize()
@@ -48,7 +45,6 @@ function RLF_LootRollRowMixin:_CreateRollButton(label, id, enabled, reason)
 	btn:SetSize(btnSize, btnSize)
 	btn:SetMotionScriptsWhileDisabled(true)
 
-	-- Normal texture (atlas)
 	local nt = btn:CreateTexture(nil, "BACKGROUND")
 	local atlasInfo = ROLL_BUTTON_ATLAS[id]
 	if atlasInfo then
@@ -57,7 +53,6 @@ function RLF_LootRollRowMixin:_CreateRollButton(label, id, enabled, reason)
 	nt:SetAllPoints()
 	btn:SetNormalTexture(nt)
 
-	-- Pushed texture
 	local pt = btn:CreateTexture(nil, "BACKGROUND")
 	if atlasInfo then
 		pt:SetAtlas(atlasInfo.base .. "-down", TextureKitConstants.IgnoreAtlasSize)
@@ -65,7 +60,6 @@ function RLF_LootRollRowMixin:_CreateRollButton(label, id, enabled, reason)
 	pt:SetAllPoints()
 	btn:SetPushedTexture(pt)
 
-	-- Highlight texture (ADD blend mode)
 	local ht = btn:CreateTexture(nil, "HIGHLIGHT")
 	if atlasInfo then
 		ht:SetAtlas(atlasInfo.base .. "-highlight", TextureKitConstants.IgnoreAtlasSize)
@@ -74,7 +68,6 @@ function RLF_LootRollRowMixin:_CreateRollButton(label, id, enabled, reason)
 	ht:SetBlendMode("ADD")
 	btn:SetHighlightTexture(ht)
 
-	-- Fallback for buttons without atlas (e.g. Disenchant in Classic)
 	if not atlasInfo then
 		btn:SetBackdrop({
 			bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
@@ -87,7 +80,6 @@ function RLF_LootRollRowMixin:_CreateRollButton(label, id, enabled, reason)
 		txt:SetTextColor(1, 1, 1)
 	end
 
-	-- Tooltip — matches Blizzard's LootRollButtonTemplate OnEnter/OnLeave
 	btn:SetScript("OnEnter", function()
 		if G_RLF.db.global.interactions.disableAllInteraction then
 			return
@@ -109,7 +101,6 @@ function RLF_LootRollRowMixin:_CreateRollButton(label, id, enabled, reason)
 		GameTooltip:Hide()
 	end)
 
-	-- Click — only fires when enabled (Blizzard disables non-eligible buttons)
 	btn:SetScript("OnClick", function()
 		if G_RLF.db.global.interactions.disableAllInteraction then
 			return
@@ -126,15 +117,12 @@ function RLF_LootRollRowMixin:_CreateRollButton(label, id, enabled, reason)
 	return btn
 end
 
---- Position roll buttons along the right edge of the row.
 function RLF_LootRollRowMixin:_LayoutRollButtons()
 	if not self._rollButtons or #self._rollButtons == 0 then
 		return
 	end
 
 	local btnSize = self:_GetButtonSize()
-	local rowWidth = self:GetWidth() or 256
-
 	local count = #self._rollButtons
 	for i = count, 1, -1 do
 		local btn = self._rollButtons[i]
@@ -144,47 +132,92 @@ function RLF_LootRollRowMixin:_LayoutRollButtons()
 	end
 end
 
---- Update the timer bar from GetLootRollTimeLeft (or static display for samples).
-function RLF_LootRollRowMixin:_UpdateRollTimer()
-	if not self.rollID then
-		return
-	end
-	if not GetLootRollTimeLeft then
-		return
-	end
-
-	local left = GetLootRollTimeLeft(self.rollID)
-	if not left then
+--- Start hardware-accelerated timer bar countdown using C_DurationUtil.
+--- Sets the bar once; no per-frame polling needed.
+---@param rollDuration number Total roll duration in seconds (from element.rollDuration)
+function RLF_LootRollRowMixin:_SetupRollTimerBar(rollDuration)
+	if not self.TimerBar then
 		return
 	end
 
-	local minVal, maxVal = self.TimerBar:GetMinMaxValues()
-	if left <= 0 or left > maxVal then
-		self.TimerBar:SetValue(0)
-	elseif minVal ~= maxVal then
-		-- Add 1s padding so bar doesn't hit 0 before CANCEL_LOOT_ROLL fires
-		local padded = math.max(left, 1)
-		self.TimerBar:SetValue(padded)
+	local animCfg = G_RLF.DbAccessor:Animations(self.frameType)
+	if animCfg and animCfg.timerBar then
+		local cfg = animCfg.timerBar
+		if cfg.height then
+			self.TimerBar:SetHeight(cfg.height)
+		end
+		if cfg.color then
+			self.TimerBar:SetStatusBarColor(cfg.color[1], cfg.color[2], cfg.color[3], cfg.alpha or 0.7)
+		end
 	end
+
+	-- Use remaining time from GetLootRollTimeLeft, fall back to total duration
+	local remaining = (self.rollID and GetLootRollTimeLeft and GetLootRollTimeLeft(self.rollID)) or rollDuration
+
+	if C_DurationUtil and C_DurationUtil.CreateDuration then
+		if not self._timerBarDuration then
+			self._timerBarDuration = C_DurationUtil.CreateDuration()
+		end
+		self._timerBarDuration:SetTimeFromStart(GetTime(), remaining)
+		self.TimerBar:SetTimerDuration(
+			self._timerBarDuration,
+			Enum.StatusBarInterpolation.Immediate,
+			Enum.StatusBarTimerDirection.RemainingTime
+		)
+		self.TimerBar:Show()
+	else
+		-- Fallback: static bar
+		self.TimerBar:SetMinMaxValues(0, rollDuration)
+		self.TimerBar:SetValue(remaining)
+		self.TimerBar:Show()
+	end
+
+	self._rollTimerBarActive = true
 end
 
---- Handle cancel for this roll row.
 function RLF_LootRollRowMixin:OnCancelRoll()
-	-- The LootRolls module calls this, then releases the row via ReleaseRow
+	-- Timer bar is managed by per-stage setup; no action needed here.
+end
+
+--- Transition to resolved results row. Enables normal row behaviors:
+--- auto-hide (60s), hover pause, right-click dismiss.
+function RLF_LootRollRowMixin:OnRollResolved()
+	if self._resolved then
+		return
+	end
+	self._resolved = true
+
+	-- Clear roll-row flag so normal hover/exit/right-click behaviors work
+	self._isLootRollRow = false
+
+	self.showForSeconds = RESULTS_DISPLAY_SECONDS
+	self.hasElementFadeOverride = true
+	self:StyleExitAnimation()
+	self:ResetFadeOut()
+
+	G_RLF:LogDebug(("OnRollResolved rollID=%s"):format(tostring(self.rollID or "?")), addonName, "LootRolls")
+end
+
+--- Helper: set ItemCountText and reflow primary line layout.
+--- Without LayoutPrimaryLine, ItemCountText overlaps PrimaryText.
+---@param text string
+local function _ShowRollText(self, text)
+	self.ItemCountText:SetText(text)
+	self.ItemCountText:Show()
+	self:LayoutPrimaryLine()
 end
 
 --- Handle MAIN_SPEC_NEED_ROLL — show local player's need roll result.
----@param roll number  The roll value
----@param isWinning boolean  Whether this is currently the winning roll
+---@param roll number
+---@param isWinning boolean
 function RLF_LootRollRowMixin:OnMainSpecNeedRoll(roll, isWinning)
 	if self._rolled then
 		local color = isWinning and "ff00ff00" or "ffb0b0b0"
-		self.ItemCountText:SetFormattedText("|c%sNeed (%d)|r", color, roll)
-		self.ItemCountText:Show()
+		_ShowRollText(self, ("|c%sNeed (%d)|r"):format(color, roll))
 	end
 end
 
---- Handle LOOT_ITEM_ROLL_WON — update row to show win state in ItemCountText.
+--- Handle LOOT_ITEM_ROLL_WON — update row to show win state.
 ---@param rollType number
 ---@param roll number
 ---@param isUpgraded? boolean
@@ -192,46 +225,44 @@ function RLF_LootRollRowMixin:OnRollWon(rollType, roll, isUpgraded)
 	local rollTypeNames = {
 		[1] = NEED,
 		[2] = GREED,
-		[3] = DISENCHANT,
+		[3] = ROLL_DISENCHANT,
 		[4] = TRANSMOGRIFICATION,
 	}
 	local typeName = rollTypeNames[rollType] or ""
 	local upgradeText = isUpgraded and " (Upgraded!)" or ""
-	self.ItemCountText:SetFormattedText("|cff00ff00%s Won! (%d)%s|r", typeName, roll, upgradeText)
-	self.ItemCountText:Show()
+	_ShowRollText(self, ("|cff00ff00%s Won! (%d)%s|r"):format(typeName, roll, upgradeText))
 end
 
 ---@class RLF_RollTooltipIcons
 local ROLL_TOOLTIP_ICONS = {
-	-- Need Main Spec (0) and Need Off Spec (1) both use the dice icon
 	[0] = "|TInterface\\Buttons\\UI-GroupLoot-Dice-Up:16:16|t",
 	[1] = "|TInterface\\Buttons\\UI-GroupLoot-Dice-Up:16:16|t",
-	-- Transmog (atlas from group loot toast)
 	[2] = "|A:lootroll-toast-icon-transmog-up:16:16|a",
-	-- Greed
 	[3] = "|TInterface\\Buttons\\UI-GroupLoot-Coin-Up:16:16|t",
-	-- Pass
 	[5] = "|TInterface\\Buttons\\UI-GroupLoot-Pass-Up:16:16|t",
+	[6] = "|TInterface\\Buttons\\UI-GroupLoot-DE-Up:16:16|t",
 }
 
---- Build grouped roll tooltip lines: sections for Waiting, Need, Greed, Transmog, Pass.
---- Each section shows a header with count, then player lines sorted by roll value descending.
 ---@param dropInfo table
----@param lines table  Output: list of {text, r, g, b} tuples
+---@param lines table
 function RLF_LootRollRowMixin:_BuildRollTooltipLines(dropInfo, lines)
-	-- Group players by state
 	local groups = {
-		waiting = {}, -- state 4
-		need = {}, -- states 0, 1
-		greed = {}, -- state 3
-		transmog = {}, -- state 2
-		pass = {}, -- state 5
+		waiting = {},
+		need = {},
+		greed = {},
+		disenchant = {},
+		transmog = {},
+		pass = {},
 	}
-	local order = { "waiting", "need", "greed", "transmog", "pass" }
+	local order = { "waiting", "need", "greed", "disenchant", "transmog", "pass" }
 	local sectionLabels = {
-		waiting = LOOT_HISTORY_WAITING_ON,
+		-- LOOT_HISTORY_WAITING_ON only exists on Retail; Classic Era, TBC
+		-- Anniversary, and MoP Classic don't ship it, so fall back to a
+		-- plain label there.
+		waiting = LOOT_HISTORY_WAITING_ON or "Waiting on",
 		need = NEED,
 		greed = GREED,
+		disenchant = ROLL_DISENCHANT,
 		transmog = TRANSMOGRIFICATION,
 		pass = PASS,
 	}
@@ -239,6 +270,7 @@ function RLF_LootRollRowMixin:_BuildRollTooltipLines(dropInfo, lines)
 		waiting = { 1, 1, 0.5 },
 		need = { 1, 1, 1 },
 		greed = { 1, 1, 1 },
+		disenchant = { 1, 1, 1 },
 		transmog = { 1, 1, 1 },
 		pass = { 0.7, 0.7, 0.7 },
 	}
@@ -249,9 +281,7 @@ function RLF_LootRollRowMixin:_BuildRollTooltipLines(dropInfo, lines)
 		if classColor then
 			r, g, b = classColor.r, classColor.g, classColor.b
 		end
-		if ri.isSelf then
-			r, g, b = 0.3, 1, 0.3
-		end
+		-- ri.isSelf uses class color, <YOU> appended in display
 
 		local playerData = {
 			name = ri.playerName,
@@ -265,6 +295,10 @@ function RLF_LootRollRowMixin:_BuildRollTooltipLines(dropInfo, lines)
 			state = ri.state,
 		}
 
+		-- state follows retail's Enum.EncounterLootDropRollState (0=NeedMainSpec,
+		-- 1=NeedOffSpec, 2=Transmog, 3=Greed, 4=NoRoll/waiting, 5=Pass), which
+		-- has no Disenchant value since Retail doesn't have that roll option.
+		-- 6=Disenchant is an addon-internal extension for Classic, which does.
 		if ri.state == 4 then
 			table.insert(groups.waiting, playerData)
 		elseif ri.state == 0 or ri.state == 1 then
@@ -276,10 +310,11 @@ function RLF_LootRollRowMixin:_BuildRollTooltipLines(dropInfo, lines)
 			table.insert(groups.transmog, playerData)
 		elseif ri.state == 5 then
 			table.insert(groups.pass, playerData)
+		elseif ri.state == 6 then
+			table.insert(groups.disenchant, playerData)
 		end
 	end
 
-	-- Sort sections with rolls by value descending (nil = no roll, sorts last)
 	local function sortByRoll(a, b)
 		if a.roll and b.roll then
 			return a.roll > b.roll
@@ -294,9 +329,9 @@ function RLF_LootRollRowMixin:_BuildRollTooltipLines(dropInfo, lines)
 	end
 	table.sort(groups.need, sortByRoll)
 	table.sort(groups.greed, sortByRoll)
+	table.sort(groups.disenchant, sortByRoll)
 	table.sort(groups.transmog, sortByRoll)
 
-	-- Build lines per section
 	for _, section in ipairs(order) do
 		local players = groups[section]
 		if #players > 0 then
@@ -306,7 +341,7 @@ function RLF_LootRollRowMixin:_BuildRollTooltipLines(dropInfo, lines)
 			for _, p in ipairs(players) do
 				local iconTex = ROLL_TOOLTIP_ICONS[p.state] or ""
 				local winnerMark = p.isWinner and " |cff00ff00<-- Winner|r" or ""
-				local selfMark = p.isSelf and " *" or ""
+				local selfMark = p.isSelf and " <YOU>" or ""
 				if p.roll then
 					local specStr = p.spec and format(", %s", p.spec) or ""
 					table.insert(lines, {
@@ -323,7 +358,6 @@ function RLF_LootRollRowMixin:_BuildRollTooltipLines(dropInfo, lines)
 	end
 end
 
---- Show a tooltip with detailed per-player roll info in grouped sections.
 function RLF_LootRollRowMixin:_ShowRollTooltip()
 	local dropInfo = self._rollDropInfo
 	if not dropInfo or not dropInfo.rollInfos then
@@ -349,7 +383,6 @@ function RLF_LootRollRowMixin:_HideRollTooltip()
 	GameTooltip:Hide()
 end
 
---- Append grouped roll info lines to the existing item tooltip.
 function RLF_LootRollRowMixin:_AppendRollTooltipToItem()
 	local dropInfo = self._rollDropInfo
 	if not dropInfo or not dropInfo.rollInfos then
@@ -371,7 +404,6 @@ function RLF_LootRollRowMixin:_AppendRollTooltipToItem()
 	GameTooltip:Show()
 end
 
---- Setup tooltip on the secondary text for detailed roll info.
 function RLF_LootRollRowMixin:_SetupRollTooltip()
 	self.SecondaryText:SetScript("OnEnter", function()
 		if G_RLF.db.global.interactions.disableAllInteraction then
@@ -388,36 +420,45 @@ function RLF_LootRollRowMixin:_SetupRollTooltip()
 end
 
 --- Update the row's display with per-player roll results from loot history.
---- Secondary text shows "Waiting on N player(s)" while unresolved.
---- Primary text shows winner, all passed, or current leader when player has rolled.
+--- Shows winner, all passed, or current leader in ItemCountText on the primary line.
 ---@param dropInfo table EncounterLootDropInfo from C_LootHistory
 function RLF_LootRollRowMixin:SetRollResults(dropInfo)
 	if not dropInfo or not dropInfo.rollInfos then
 		return
 	end
 
-	-- Store for tooltip access
 	self._rollDropInfo = dropInfo
 
-	-- Count states
 	local waitingCount = 0
 	local allPassed = true
+	local stateSummary = {}
 	for _, ri in ipairs(dropInfo.rollInfos) do
-		if ri.state == 4 then -- NoRoll
+		if ri.state == 4 then
 			waitingCount = waitingCount + 1
 		end
-		if ri.state ~= 5 and ri.state ~= 4 then -- Not Pass and not NoRoll
+		if ri.state ~= 5 then
 			allPassed = false
 		end
+		stateSummary[ri.state] = (stateSummary[ri.state] or 0) + 1
 	end
+	local summaryStr = ""
+	for s, c in pairs(stateSummary) do
+		summaryStr = summaryStr .. s .. "=" .. c .. " "
+	end
+	G_RLF:LogDebug(
+		("SetRollResults rollID=%s waiting=%d allPassed=%s winner=%s rolled=%s states=%s"):format(
+			tostring(self.rollID or "?"),
+			waitingCount,
+			tostring(allPassed),
+			tostring(dropInfo.winner ~= nil),
+			tostring(self._rolled),
+			summaryStr
+		),
+		addonName,
+		self.moduleName
+	)
 
-	-- Secondary text: waiting count with tooltip, or blank.
-	-- Only shown on the secondary line when the user has enabled secondary row text.
-	-- When disabled, the waiting info is still available via hover tooltip.
-	--
-	-- NOTE: StyleText() skips anchoring SecondaryLineLayout when secondaryText is nil
-	-- (which it always is during BootstrapFromElement — UpdateSecondaryText clears it).
-	-- Call _LayoutRowLines() directly to anchor both lines with the vertical split.
+	-- Secondary text: waiting count with tooltip
 	local stylingDb = G_RLF.DbAccessor:Styling(self.frameType)
 	if waitingCount > 0 and stylingDb.enabledSecondaryRowText then
 		self.secondaryText = format("Waiting on %d player(s)", waitingCount)
@@ -438,6 +479,15 @@ function RLF_LootRollRowMixin:SetRollResults(dropInfo)
 		self.secondaryText = nil
 		self.SecondaryText:Hide()
 		self.SecondaryLineLayout:Hide()
+		-- Re-center primary line now that secondary text is gone
+		local sizingDb = G_RLF.DbAccessor:Sizing(self.frameType)
+		local spacing = (stylingDb.rowTextSpacing or 0) == 0 and (sizingDb.iconSize / 4) or stylingDb.rowTextSpacing
+		self:_LayoutRowLines(
+			stylingDb.textAlignment,
+			stylingDb.textAlignment ~= G_RLF.TextAlignment.RIGHT,
+			sizingDb.padding,
+			spacing
+		)
 	end
 
 	-- ItemCountText: show winner, all passed, or current leader on the primary line
@@ -450,48 +500,67 @@ function RLF_LootRollRowMixin:SetRollResults(dropInfo)
 			rollTypeStr = TRANSMOGRIFICATION
 		elseif dropInfo.winner.state == 3 then
 			rollTypeStr = GREED
+		elseif dropInfo.winner.state == 6 then
+			rollTypeStr = ROLL_DISENCHANT
 		end
 
 		if dropInfo.winner.isSelf then
-			self.ItemCountText:SetFormattedText("|cff00ff00You won! (%s, %d)|r", rollTypeStr, dropInfo.winner.roll)
+			_ShowRollText(self, ("|cff00ff00You won! (%s, %d)|r"):format(rollTypeStr, dropInfo.winner.roll))
 		else
 			local name = classColor and classColor:WrapTextInColorCode(dropInfo.winner.playerName)
 				or dropInfo.winner.playerName
-			self.ItemCountText:SetFormattedText("%s won (%s, %d)", name, rollTypeStr, dropInfo.winner.roll)
+			_ShowRollText(self, ("%s won (%s, %d)"):format(name, rollTypeStr, dropInfo.winner.roll))
 		end
-		self.ItemCountText:Show()
 	elseif allPassed then
-		self.ItemCountText:SetFormattedText("|cffb0b0b0%s|r", LOOT_HISTORY_ALL_PASSED)
-		self.ItemCountText:Show()
+		_ShowRollText(self, ("|cffb0b0b0%s|r"):format(LOOT_HISTORY_ALL_PASSED))
 	elseif self._rolled and dropInfo.currentLeader then
-		-- Only show leader text if the player has already rolled
 		local classColor = RAID_CLASS_COLORS[dropInfo.currentLeader.playerClass]
 		local name = classColor and classColor:WrapTextInColorCode(dropInfo.currentLeader.playerName)
 			or dropInfo.currentLeader.playerName
-		self.ItemCountText:SetFormattedText("%s leads (%d)", name, dropInfo.currentLeader.roll)
-		self.ItemCountText:Show()
+		_ShowRollText(self, ("%s leads (%d)"):format(name, dropInfo.currentLeader.roll))
+	end
+
+	-- Transition: resolved (winner/allPassed) vs unresolved (waiting)
+	if dropInfo.winner or allPassed or (waitingCount == 0 and self._rolled) then
+		-- Fully resolved results row
+		self:OnRollResolved()
+	elseif waitingCount > 0 and dropInfo.duration and not self._rollTimerBarActive then
+		-- Unresolved and the roll-action phase never set up a timer bar
+		-- (e.g. replayed after reload) — show a static bar at full duration.
+		-- If _SetupRollTimerBar already started a countdown, leave it alone:
+		-- it's tracking the same roll duration and clobbering it here would
+		-- reset an in-progress countdown back to full on every history update.
+		G_RLF:LogDebug(
+			("SetRollResults_unresolved rollID=%s waiting=%d duration=%s"):format(
+				tostring(self.rollID or "?"),
+				waitingCount,
+				tostring(dropInfo.duration)
+			),
+			addonName,
+			self.moduleName
+		)
+		self.TimerBar:SetMinMaxValues(0, dropInfo.duration)
+		self.TimerBar:SetValue(dropInfo.duration)
+		self.TimerBar:Show()
 	end
 end
 
 --- Called after the player clicks a roll button.
---- Shows roll selection in ItemCountText (primary line, right of item link).
+--- Shows roll selection in ItemCountText with proper primary line reflow.
 ---@param label string
 ---@param id number
 function RLF_LootRollRowMixin:OnRollCast(label, id)
 	self._rolled = true
 
-	-- Hide all roll buttons
 	for _, btn in ipairs(self._rollButtons or {}) do
 		btn:Hide()
 	end
 
-	-- Show roll selection in ItemCountText on the primary line
 	if id == LOOT_ROLL_TYPE_PASS then
-		self.ItemCountText:SetFormattedText("|cffb0b0b0%s|r", PASS)
+		_ShowRollText(self, ("|cffb0b0b0%s|r"):format(PASS))
 	else
-		self.ItemCountText:SetText(label)
+		_ShowRollText(self, label)
 	end
-	self.ItemCountText:Show()
 end
 
 ---@param element RLF_BaseLootElement
@@ -504,7 +573,6 @@ function RLF_LootRollRowMixin:PostBootstrapFromElement(element)
 	self._rolled = false
 	self._isLootRollRow = true
 
-	-- Fetch eligibility: element provides its own for sample rows; real rows call API
 	local canNeed, canGreed, canTransmog
 	local reasonNeed, reasonGreed
 	local canDisenchant, reasonDisenchant
@@ -522,17 +590,13 @@ function RLF_LootRollRowMixin:PostBootstrapFromElement(element)
 		reasonNeed, reasonGreed = rn, rg
 		canDisenchant, reasonDisenchant = cd, rd
 	else
-		-- No eligibility data and no rollID — nothing to show
 		return
 	end
 
-	-- Build button list
 	self._rollButtons = {}
 
-	-- For sample/test rows (no real rollID), buttons are shown but disabled
 	local hasRealRoll = self.rollID ~= nil
 
-	-- Need button
 	local needBtn = self:_CreateRollButton(
 		NEED,
 		LOOT_ROLL_TYPE_NEED,
@@ -541,7 +605,6 @@ function RLF_LootRollRowMixin:PostBootstrapFromElement(element)
 	)
 	table.insert(self._rollButtons, needBtn)
 
-	-- Greed or Transmog (mutually exclusive, Transmog replaces Greed)
 	if canTransmog then
 		local transmogBtn = self:_CreateRollButton(TRANSMOGRIFICATION, 4, hasRealRoll and true or false, nil)
 		table.insert(self._rollButtons, transmogBtn)
@@ -555,53 +618,31 @@ function RLF_LootRollRowMixin:PostBootstrapFromElement(element)
 		table.insert(self._rollButtons, greedBtn)
 	end
 
-	-- Disenchant button (Classic only: no DE atlas, use text label)
 	if not G_RLF:IsRetail() and canDisenchant then
-		local deEnabled = hasRealRoll and canDisenchant or false
-		local deReason = hasRealRoll and reasonDisenchant or nil
-		local deBtn = self:_CreateRollButton(DISENCHANT, LOOT_ROLL_TYPE_DISENCHANT, deEnabled, deReason)
+		local deBtn = self:_CreateRollButton(
+			ROLL_DISENCHANT,
+			LOOT_ROLL_TYPE_DISENCHANT,
+			hasRealRoll and canDisenchant or false,
+			hasRealRoll and reasonDisenchant or nil
+		)
 		table.insert(self._rollButtons, deBtn)
 	end
 
-	-- Pass button (shown disabled for sample/test rows)
 	local passBtn = self:_CreateRollButton(PASS, LOOT_ROLL_TYPE_PASS, hasRealRoll, nil)
 	table.insert(self._rollButtons, passBtn)
 
 	self:_LayoutRollButtons()
 
-	-- Auto-hide after roll duration + 1s padding (CANCEL_LOOT_ROLL dismisses earlier)
-	-- Note: StyleExitAnimation overrides showForSeconds for isSampleRow, so restore after
-	self.showForSeconds = (element.rollDuration or 60) + 1
+	-- Never auto-fade; dismissed by CANCEL_LOOT_ROLL/LOOT_ROLLS_COMPLETE
+	local infinity = math.pow(2, 19)
+	self.showForSeconds = infinity
 	self.hasElementFadeOverride = true
 	self:StyleExitAnimation()
-	self.showForSeconds = (element.rollDuration or 60) + 1
+	self.showForSeconds = infinity
 
-	-- Setup timer bar — use custom OnUpdate polling GetLootRollTimeLeft
-	-- Apply height/color/alpha from animation config but force-show regardless of enabled state
-	local animCfg = G_RLF.DbAccessor:Animations(self.frameType)
-	if animCfg and animCfg.timerBar then
-		local cfg = animCfg.timerBar
-		if cfg.height then
-			self.TimerBar:SetHeight(cfg.height)
-		end
-		if cfg.color then
-			self.TimerBar:SetStatusBarColor(cfg.color[1], cfg.color[2], cfg.color[3], cfg.alpha or 0.7)
-		end
-	end
-	self.TimerBar:SetMinMaxValues(0, element.rollDuration or 60)
-	self.TimerBar:SetValue(element.rollDuration or 60)
-	self.TimerBar:Show()
-
-	-- Custom OnUpdate for polling GetLootRollTimeLeft
-	self._rollTimerFrame = CreateFrame("Frame")
-	self._rollTimerFrame:SetScript("OnUpdate", function()
-		self:_UpdateRollTimer()
-	end)
-
-	-- Phase 2 enrichment: mock drop info for sample/test rows to showcase the feature
-	if element.mockDropInfo then
-		self:SetRollResults(element.mockDropInfo)
-	end
+	-- Timer bar: use hardware-accelerated countdown from C_DurationUtil.
+	-- Set once, no polling needed — bar counts down automatically.
+	self._SetupRollTimerBar(self, element.rollDuration)
 
 	-- Hook the ClickableButton tooltip to append roll info after the item tooltip
 	if self.ClickableButton then
@@ -611,7 +652,6 @@ function RLF_LootRollRowMixin:PostBootstrapFromElement(element)
 			if origOnEnter then
 				origOnEnter()
 			end
-			-- Append roll info lines after item tooltip
 			if self._rollDropInfo then
 				self:_AppendRollTooltipToItem()
 			end
@@ -622,12 +662,17 @@ function RLF_LootRollRowMixin:PostBootstrapFromElement(element)
 	end
 end
 
---- Cleanup all loot roll state (called from Reset).
 function RLF_LootRollRowMixin:CleanupLootRoll()
+	-- Notify module to drop tracking now that row is being released
+	if self.rollID ~= nil and self.moduleRef then
+		self.moduleRef:_UntrackRoll(self.rollID)
+	end
+
 	self.rollID = nil
 	self._rolled = false
+	self._resolved = nil
+	self._rollTimerBarActive = nil
 
-	-- Destroy roll buttons
 	if self._rollButtons then
 		for _, btn in ipairs(self._rollButtons) do
 			btn:Hide()
@@ -638,22 +683,18 @@ function RLF_LootRollRowMixin:CleanupLootRoll()
 		self._rollButtons = nil
 	end
 
-	-- Reset roll status text on primary line
 	self.ItemCountText:SetText(nil)
 	self.ItemCountText:Hide()
 
-	-- Clear loot history data and tooltip hooks
 	self._rollDropInfo = nil
 	self.SecondaryText:SetScript("OnEnter", nil)
 	self.SecondaryText:SetScript("OnLeave", nil)
 
-	-- Stop timer frame
 	if self._rollTimerFrame then
 		self._rollTimerFrame:SetScript("OnUpdate", nil)
 		self._rollTimerFrame = nil
 	end
 
-	-- Reset timer bar to default hidden state
 	self:ResetTimerBar()
 end
 
