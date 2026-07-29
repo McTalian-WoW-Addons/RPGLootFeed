@@ -993,7 +993,9 @@ function RLF_RowAnimationMixin:ResetFadeOut()
 			end
 			self.ExitAnimation:Play()
 		end
-		self:StartTimerBar()
+		if not self._isLootRollRow then
+			self:StartTimerBar()
+		end
 	end)
 end
 
