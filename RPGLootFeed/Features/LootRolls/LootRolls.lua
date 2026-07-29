@@ -159,8 +159,13 @@ end
 ---@param rollID number
 function LootRolls:CANCEL_LOOT_ROLL(eventName, rollID)
 	self:LogDebug(eventName, G_RLF.LogEventSource.WOWEVENT, self.moduleName, rollID)
-	self:ReleaseRollRows(rollID)
-	self:_UntrackRoll(rollID)
+
+	-- Stop timer polling. Row stays as unresolved results row until
+	-- SetRollResults or LOOT_ROLLS_COMPLETE triggers OnRollResolved.
+	local rows = self:FindRollRows(rollID)
+	for _, entry in ipairs(rows) do
+		entry.row:OnCancelRoll()
+	end
 end
 
 function LootRolls:CANCEL_ALL_LOOT_ROLLS(eventName)
@@ -208,10 +213,20 @@ function LootRolls:LOOT_ROLLS_COMPLETE(eventName, lootHandle)
 	for rollID in pairs(rollIDs) do
 		table.insert(ids, rollID)
 	end
+
+	-- Stop timer polling and extend row lifetime for result display
+	-- Tracking stays alive so pending HandleHistoryDropUpdate events can still
+	-- reach the row during the exit animation fade window. _UntrackRoll runs
+	-- when the row is released (CleanupLootRoll).
 	for _, rollID in ipairs(ids) do
-		self:ReleaseRollRows(rollID)
-		self:_UntrackRoll(rollID)
+		local rows = self:FindRollRows(rollID)
+		for _, entry in ipairs(rows) do
+			entry.row:OnCancelRoll()
+			entry.row:OnRollResolved()
+		end
 	end
+
+	self:LogDebug("LOOT_ROLLS_COMPLETE_resolved", addonName, self.moduleName, nil, nil, #ids)
 end
 
 -- ── Loot History Polling ─────────────────────────────────────────────────────
@@ -311,12 +326,32 @@ function LootRolls:PollLootHistory()
 
 				-- Push results to row
 				local rows = self:FindRollRows(rollID)
+				self:LogDebug("PollLootHistory_match", addonName, self.moduleName, rollID, nil, claimed.encounterID)
 				for _, entry in ipairs(rows) do
 					entry.row:SetRollResults(claimed.dropInfo)
 				end
 			end
 		end
 	end
+end
+
+--- Map a Retail EncounterLootDropRollState (dropInfo.winner.state: 0/1=need,
+--- 2=transmog, 3=greed) to the LOOT_ROLL_TYPE_*-shaped numbering
+--- RLF_LootRollRowMixin:OnRollWon expects (matching the real
+--- LOOT_ITEM_ROLL_WON event's rollType argument: 1=need, 2=greed,
+--- 3=disenchant, 4=transmog). These are different enums — passing .state
+--- straight through mislabels wins (a Greed win renders as "Disenchant Won!").
+---@param state number
+---@return number?
+local function encounterLootStateToRollType(state)
+	if state == 0 or state == 1 then
+		return 1 -- NEED
+	elseif state == 2 then
+		return 4 -- TRANSMOGRIFICATION
+	elseif state == 3 then
+		return 2 -- GREED
+	end
+	return nil
 end
 
 --- Update a specific drop when LOOT_HISTORY_UPDATE_DROP fires.
@@ -341,11 +376,12 @@ function LootRolls:HandleHistoryDropUpdate(encounterID, lootListID)
 	end
 
 	local rows = self:FindRollRows(rollID)
+	self:LogDebug("HandleHistoryDropUpdate_push", addonName, self.moduleName, rollID, nil, encounterID)
 	for _, entry in ipairs(rows) do
 		entry.row:SetRollResults(dropInfo)
 		-- If there's a winner and the local player won, also update result text
 		if dropInfo.winner and dropInfo.winner.isSelf then
-			local rollType = dropInfo.winner.state
+			local rollType = encounterLootStateToRollType(dropInfo.winner.state)
 			local roll = dropInfo.winner.roll
 			entry.row:OnRollWon(rollType, roll, false)
 		end
@@ -402,86 +438,114 @@ function LootRolls:LOOT_HISTORY_UPDATE_ENCOUNTER(eventName, encounterID)
 	self:PollLootHistory()
 end
 
--- ── Classic Era: CHAT_MSG_LOOT Parsing ────────────────────────────────────
--- Classic Era has no C_LootHistory API. Roll results are parsed from chat.
--- Each entry tracks per-item roll state as EncounterLootDropInfo-like data.
+-- ── Classic Era / TBC Anniversary / MoP Classic: C_LootHistory Polling ───────
+-- All three ship the same older, index-based C_LootHistory shape
+-- (GetNumItems/GetItem/GetPlayerInfo) that Blizzard's own Classic loot
+-- history frame calls directly — verified against wow-ui-source's
+-- classic_era, classic_anniversary, and classic branches, and against
+-- wago.tools' GlobalStrings export per flavor. Not a chat-parsing problem.
+--
+-- GetItem(itemIdx) returns rollID as its first value — the same rollID
+-- space START_LOOT_ROLL/CANCEL_LOOT_ROLL/LOOT_ROLLS_COMPLETE already use —
+-- so active rolls correlate directly, unlike Retail's GetAllEncounterInfos
+-- API, which requires matching drops to rolls by itemLink/itemID.
 
---- Pattern cache for converting GlobalString format strings to Lua match patterns.
----@type table<string, string>
-local _classicPatterns = nil
-
---- Convert a printf-style GlobalString like "%s rolls a %d on: %s" to a Lua pattern.
---- Replaces %d with (%d+), %s with (.+), and escapes Lua pattern magic chars.
----@param fmt string
----@return string
-local function fmtToPattern(fmt)
-	-- Escape Lua pattern magic characters first (except % which we handle next)
-	local p = fmt:gsub("([%.%[%]%(%)%^%$%*%+%-%?])", "%%%1")
-	-- Convert format specifiers: %d → capture digits, %s → capture anything, %% → literal %
-	p = p:gsub("%%d", "(%d+)")
-	p = p:gsub("%%s", "(.+)")
-	p = p:gsub("%%%%", "%%")
-	return p
+--- Map a Classic LOOT_ROLL_TYPE_* roll type (nil meaning "hasn't rolled
+--- yet") to the addon's internal rollInfo state convention used throughout
+--- LootRollRowMixin.lua (see the comment above the state ladder in
+--- _BuildRollTooltipLines): 0/1=need, 2=transmog, 3=greed, 4=waiting,
+--- 5=pass, 6=disenchant. 6 is an addon-internal extension — Retail's real
+--- Enum.EncounterLootDropRollState only defines 0-5 and has no Disenchant
+--- roll option, but Classic does.
+---@param rollType number?
+---@return number
+local function classicRollTypeToState(rollType)
+	if rollType == nil then
+		return 4
+	elseif rollType == LOOT_ROLL_TYPE_NEED then
+		return 0
+	elseif rollType == LOOT_ROLL_TYPE_GREED then
+		return 3
+	elseif rollType == LOOT_ROLL_TYPE_DISENCHANT then
+		return 6
+	end
+	return 5 -- LOOT_ROLL_TYPE_PASS
 end
 
---- Build a pseudo-dropInfo-like table from classic roll data for SetRollResults.
----@param itemLink string
----@return table?
-function LootRolls:_BuildClassicDropInfo(itemLink)
-	if not self._classicRollData or not self._classicRollData[itemLink] then
-		return nil
-	end
-	local data = self._classicRollData[itemLink]
-	if not data.players or not next(data.players) then
-		return nil
+--- Build an EncounterLootDropInfo-shaped table for SetRollResults from the
+--- Classic-shape C_LootHistory API.
+---@param itemIdx number
+---@return number? rollID
+---@return table? dropInfo
+function LootRolls:_BuildClassicDropInfoFromHistory(itemIdx)
+	local rollID, itemLink, numPlayers, isDone, winnerIdx = self._adapter.GetItem(itemIdx)
+	if not rollID then
+		return nil, nil
 	end
 
 	local rollInfos = {}
-	local waitingCount = 0
-	local allPassed = true
-	for name, info in pairs(data.players) do
-		local ri = {
+	local bestRoll, bestPlayerIdx = nil, nil
+	for i = 1, numPlayers or 0 do
+		local name, class, rollType, roll, isWinner, isMe = self._adapter.GetPlayerInfo(itemIdx, i)
+		table.insert(rollInfos, {
 			playerName = name,
-			playerClass = info.playerClass or "UNKNOWN",
-			state = info.state,
-			roll = info.roll,
-			isWinner = info.isWinner or false,
-			isSelf = info.isSelf or false,
-		}
-		table.insert(rollInfos, ri)
-		if info.state ~= 5 and info.state ~= 4 then
-			allPassed = false
-		end
-		if info.state == 4 then
-			waitingCount = waitingCount + 1
+			playerClass = class or "UNKNOWN",
+			state = classicRollTypeToState(rollType),
+			roll = roll,
+			isWinner = isWinner or false,
+			isSelf = isMe or false,
+		})
+		if roll and (bestRoll == nil or roll > bestRoll) then
+			bestRoll = roll
+			bestPlayerIdx = i
 		end
 	end
 
-	return {
-		lootListID = 0,
-		itemHyperlink = itemLink,
-		rollInfos = rollInfos,
-		winner = data.winner,
-		currentLeader = data.currentLeader,
-		allPassed = allPassed or data.allPassed,
-		startTime = data.startTime or 0,
-		duration = data.duration or 60,
-	}
+	local winner = nil
+	if winnerIdx then
+		local name, class, rollType, roll, _, isMe = self._adapter.GetPlayerInfo(itemIdx, winnerIdx)
+		winner = {
+			playerName = name,
+			playerClass = class or "UNKNOWN",
+			roll = roll,
+			isSelf = isMe or false,
+			state = classicRollTypeToState(rollType),
+			-- Raw LOOT_ROLL_TYPE_* value for OnRollWon, which uses that
+			-- numbering, not the `state` convention above.
+			rollType = rollType,
+		}
+	end
+
+	local currentLeader = nil
+	if not isDone and bestPlayerIdx then
+		local name, class = self._adapter.GetPlayerInfo(itemIdx, bestPlayerIdx)
+		currentLeader = { playerName = name, playerClass = class or "UNKNOWN", roll = bestRoll }
+	end
+
+	return rollID,
+		{
+			lootListID = itemIdx,
+			itemHyperlink = itemLink,
+			rollInfos = rollInfos,
+			winner = winner,
+			currentLeader = currentLeader,
+		}
 end
 
---- Push classic roll data to matching rows.
----@param itemLink string
-function LootRolls:_PushClassicRollUpdate(itemLink)
-	if not self._activeRolls then
+--- Poll C_LootHistory for all active rolls and push updates to rows.
+--- No claim-tracking needed here, unlike PollLootHistory: GetItem(itemIdx)
+--- returns the exact rollID directly, so there's no itemLink-matching
+--- ambiguity to resolve.
+function LootRolls:PollClassicLootHistory()
+	if not self._activeRolls or not next(self._activeRolls) then
 		return
 	end
-	local dropInfo = self:_BuildClassicDropInfo(itemLink)
-	if not dropInfo then
-		return
-	end
-	for rollID, info in pairs(self._activeRolls) do
-		if info.itemLink == itemLink or info.itemID == self._adapter.GetItemInfoInstant(itemLink) then
+	local numItems = self._adapter.GetNumItems()
+	for itemIdx = 1, numItems do
+		local rollID, dropInfo = self:_BuildClassicDropInfoFromHistory(itemIdx)
+		if rollID and self._activeRolls[rollID] then
 			local rows = self:FindRollRows(rollID)
+			self:LogDebug("PollClassicLootHistory_match", addonName, self.moduleName, rollID, nil, itemIdx)
 			for _, entry in ipairs(rows) do
 				entry.row:SetRollResults(dropInfo)
 			end
@@ -490,196 +554,34 @@ function LootRolls:_PushClassicRollUpdate(itemLink)
 end
 
 ---@param eventName string
----@param msg string  The formatted chat message
----@param playerName string  Sender name
----@param ... string  Additional args per CHAT_MSG_LOOT signature
-function LootRolls:CHAT_MSG_LOOT(eventName, msg, playerName, _, _, playerName2, _, _, _, _, _, guid)
-	-- Only used on Classic Era (no C_LootHistory)
-	if G_RLF:IsRetail() then
-		return
-	end
+---@param itemIdx number
+---@param playerIdx number
+function LootRolls:LOOT_HISTORY_ROLL_CHANGED(eventName, itemIdx, playerIdx)
+	self:LogDebug(eventName, G_RLF.LogEventSource.WOWEVENT, self.moduleName, itemIdx, nil, playerIdx)
 	if not self._activeRolls or not next(self._activeRolls) then
 		return
 	end
 
-	-- Build pattern cache on first use
-	if not _classicPatterns then
-		_classicPatterns = {}
-		local globalStrings = {
-			{ key = "ROLLED_NEED_SELF", fmt = LOOT_ROLL_ROLLED_NEED_SELF, state = 0 },
-			{ key = "ROLLED_GREED_SELF", fmt = LOOT_ROLL_ROLLED_GREED_SELF, state = 3 },
-			{ key = "ROLLED_NEED", fmt = LOOT_ROLL_ROLLED_NEED, state = 0 },
-			{ key = "ROLLED_GREED", fmt = LOOT_ROLL_ROLLED_GREED, state = 3 },
-			{ key = "ROLLED_SELF", fmt = LOOT_ROLL_ROLLED_SELF, state = -1 },
-			{ key = "ROLLED", fmt = LOOT_ROLL_ROLLED, state = -1 },
-			{ key = "PASSED_SELF", fmt = LOOT_ROLL_PASSED_SELF, state = 5 },
-			{ key = "PASSED", fmt = LOOT_ROLL_PASSED, state = 5 },
-			{ key = "WON", fmt = LOOT_ROLL_WON, state = -2 },
-			{ key = "YOU_WON", fmt = LOOT_ROLL_YOU_WON, state = -2 },
-			{ key = "ALL_PASSED", fmt = LOOT_ROLL_ALL_PASSED, state = -3 },
-		}
-		for _, gs in ipairs(globalStrings) do
-			_classicPatterns[gs.key] = {
-				pattern = fmtToPattern(gs.fmt),
-				state = gs.state,
-			}
-		end
+	local rollID, dropInfo = self:_BuildClassicDropInfoFromHistory(itemIdx)
+	if not rollID or not self._activeRolls[rollID] then
+		return
 	end
 
-	-- Try to match against each known roll pattern
-	for key, cp in pairs(_classicPatterns) do
-		local captures = { msg:match(cp.pattern) }
-		if #captures > 0 then
-			self:LogDebug(eventName, G_RLF.LogEventSource.WOWEVENT, self.moduleName, nil, key .. ": " .. msg)
-
-			if key == "ROLLED_NEED_SELF" then
-				-- captures: rollValue, itemLinkRest...
-				local rollValue = tonumber(captures[1])
-				-- Extract item link from the message fragment
-				local itemLink = msg:match("|Hitem:(%d+):(%d+):(%d+):(%d+)|h%[(.-)%]|h")
-				if itemLink then
-					self:_RecordClassicRoll(UnitName("player"), 0, rollValue, true, itemLink)
-				end
-			elseif key == "ROLLED_GREED_SELF" then
-				local rollValue = tonumber(captures[1])
-				local itemLink = msg:match("|Hitem:(%d+):(%d+):(%d+):(%d+)|h%[(.-)%]|h")
-				if itemLink then
-					self:_RecordClassicRoll(UnitName("player"), 3, rollValue, true, itemLink)
-				end
-			elseif key == "ROLLED_NEED" then
-				-- captures: lootHistoryID, rollValue, itemName, rollerName (from "Need Roll - %d for %s by %s")
-				local rollValue = tonumber(captures[2])
-				local rollerName = captures[4]
-				local itemLink = msg:match("|Hitem:(%d+):(%d+):(%d+):(%d+)|h%[(.-)%]|h")
-				if itemLink and rollerName then
-					self:_RecordClassicRoll(rollerName, 0, rollValue, false, itemLink)
-				end
-			elseif key == "ROLLED_GREED" then
-				local rollValue = tonumber(captures[2])
-				local rollerName = captures[4]
-				local itemLink = msg:match("|Hitem:(%d+):(%d+):(%d+):(%d+)|h%[(.-)%]|h")
-				if itemLink and rollerName then
-					self:_RecordClassicRoll(rollerName, 3, rollValue, false, itemLink)
-				end
-			elseif key == "PASSED_SELF" then
-				-- captures: lootHistoryID, itemName
-				local itemLink = msg:match("|Hitem:(%d+):(%d+):(%d+):(%d+)|h%[(.-)%]|h")
-				if itemLink then
-					self:_RecordClassicRoll(UnitName("player"), 5, nil, true, itemLink)
-				end
-			elseif key == "PASSED" then
-				-- captures: lootHistoryID, playerName, itemName
-				local passedName = captures[2]
-				local itemLink = msg:match("|Hitem:(%d+):(%d+):(%d+):(%d+)|h%[(.-)%]|h")
-				if itemLink and passedName then
-					self:_RecordClassicRoll(passedName, 5, nil, false, itemLink)
-				end
-			elseif key == "YOU_WON" then
-				local itemLink = msg:match("|Hitem:(%d+):(%d+):(%d+):(%d+)|h%[(.-)%]|h")
-				if itemLink then
-					self:_RecordClassicWinner(UnitName("player"), true, itemLink)
-				end
-			elseif key == "WON" then
-				-- captures: lootHistoryID, winnerName, itemName
-				local winnerName = captures[2]
-				local itemLink = msg:match("|Hitem:(%d+):(%d+):(%d+):(%d+)|h%[(.-)%]|h")
-				if itemLink and winnerName then
-					self:_RecordClassicWinner(winnerName, false, itemLink)
-				end
-			elseif key == "ALL_PASSED" then
-				local itemLink = msg:match("|Hitem:(%d+):(%d+):(%d+):(%d+)|h%[(.-)%]|h")
-				if itemLink then
-					self:_RecordClassicAllPassed(itemLink)
-				end
-			end
-			break
+	local rows = self:FindRollRows(rollID)
+	for _, entry in ipairs(rows) do
+		entry.row:SetRollResults(dropInfo)
+		if dropInfo.winner and dropInfo.winner.isSelf then
+			entry.row:OnRollWon(dropInfo.winner.rollType, dropInfo.winner.roll, false)
 		end
 	end
 end
 
---- Record a player's roll selection on Classic.
-function LootRolls:_RecordClassicRoll(playerName, state, rollValue, isSelf, itemLink)
-	if not self._classicRollData then
-		self._classicRollData = {}
-	end
-	if not self._classicRollData[itemLink] then
-		self._classicRollData[itemLink] = {
-			players = {},
-			startTime = time(),
-			duration = 60,
-		}
-	end
-	local data = self._classicRollData[itemLink]
-	local _, classFile = UnitClass(playerName)
-	data.players[playerName] = {
-		state = state,
-		roll = rollValue,
-		isSelf = isSelf,
-		playerClass = classFile or "UNKNOWN",
-		isWinner = false,
-	}
-	self:_UpdateClassicLeader(itemLink)
-	self:_PushClassicRollUpdate(itemLink)
-end
-
---- Update the current leader for a classic roll.
-function LootRolls:_UpdateClassicLeader(itemLink)
-	local data = self._classicRollData and self._classicRollData[itemLink]
-	if not data then
-		return
-	end
-	local bestRoll, bestPlayer = nil, nil
-	for name, info in pairs(data.players) do
-		if info.roll and (bestRoll == nil or info.roll > bestRoll) then
-			bestRoll = info.roll
-			bestPlayer = name
-		end
-	end
-	if bestPlayer then
-		data.currentLeader = {
-			playerName = bestPlayer,
-			playerClass = data.players[bestPlayer].playerClass,
-			roll = bestRoll,
-		}
-	end
-end
-
-function LootRolls:_RecordClassicWinner(winnerName, isSelf, itemLink)
-	local data = self._classicRollData and self._classicRollData[itemLink]
-	if not data then
-		return
-	end
-	for name, info in pairs(data.players) do
-		info.isWinner = name == winnerName
-	end
-	-- Also add winner to players table if not already there
-	if not data.players[winnerName] then
-		local _, classFile = UnitClass(winnerName)
-		data.players[winnerName] = {
-			state = 0,
-			roll = 100,
-			isSelf = isSelf,
-			playerClass = classFile or "UNKNOWN",
-			isWinner = true,
-		}
-	end
-	data.winner = {
-		playerName = winnerName,
-		playerClass = data.players[winnerName].playerClass,
-		roll = data.players[winnerName].roll or 100,
-		isSelf = isSelf,
-		state = data.players[winnerName].state or 0,
-	}
-	self:_PushClassicRollUpdate(itemLink)
-end
-
-function LootRolls:_RecordClassicAllPassed(itemLink)
-	local data = self._classicRollData and self._classicRollData[itemLink]
-	if not data then
-		return
-	end
-	data.allPassed = true
-	self:_PushClassicRollUpdate(itemLink)
+---@param eventName string
+function LootRolls:LOOT_HISTORY_ROLL_COMPLETE(eventName)
+	self:LogDebug(eventName, G_RLF.LogEventSource.WOWEVENT, self.moduleName)
+	-- Full re-poll to catch any rolls whose final LOOT_HISTORY_ROLL_CHANGED
+	-- landed before this handler ran.
+	self:PollClassicLootHistory()
 end
 
 -- ── Module Lifecycle ─────────────────────────────────────────────────────────
@@ -703,7 +605,8 @@ function LootRolls:OnDisable()
 	self:UnregisterEvent("LOOT_HISTORY_UPDATE_DROP")
 	self:UnregisterEvent("LOOT_HISTORY_UPDATE_ENCOUNTER")
 	if not G_RLF:IsRetail() then
-		self:UnregisterEvent("CHAT_MSG_LOOT")
+		self:UnregisterEvent("LOOT_HISTORY_ROLL_CHANGED")
+		self:UnregisterEvent("LOOT_HISTORY_ROLL_COMPLETE")
 	end
 
 	-- Stop poll ticker
@@ -714,7 +617,6 @@ function LootRolls:OnDisable()
 
 	-- Release any active roll rows
 	self:CANCEL_ALL_LOOT_ROLLS()
-	self._classicRollData = nil
 end
 
 function LootRolls:OnEnable()
@@ -726,20 +628,26 @@ function LootRolls:OnEnable()
 	self:RegisterEvent("MAIN_SPEC_NEED_ROLL")
 	self:RegisterEvent("LOOT_ROLLS_COMPLETE")
 	self:RegisterEvent("LOOT_ITEM_ROLL_WON")
+
+	local pollFn
 	if not G_RLF:IsRetail() then
-		-- Classic Era: parse roll results from chat (no C_LootHistory)
-		self:RegisterEvent("CHAT_MSG_LOOT")
+		-- Classic Era, TBC Anniversary, MoP Classic: same older, index-based
+		-- C_LootHistory shape (GetNumItems/GetItem/GetPlayerInfo).
+		self:RegisterEvent("LOOT_HISTORY_ROLL_CHANGED")
+		self:RegisterEvent("LOOT_HISTORY_ROLL_COMPLETE")
+		pollFn = self.PollClassicLootHistory
 	else
 		-- Retail: live updates via loot history events
 		self:RegisterEvent("LOOT_HISTORY_UPDATE_DROP")
 		self:RegisterEvent("LOOT_HISTORY_UPDATE_ENCOUNTER")
+		pollFn = self.PollLootHistory
+	end
 
-		-- Start periodic poll for loot history coalescing (1s interval)
-		if not self._pollTicker then
-			self._pollTicker = C_Timer.NewTicker(1, function()
-				self:PollLootHistory()
-			end)
-		end
+	-- Start periodic poll for loot history coalescing (1s interval)
+	if not self._pollTicker then
+		self._pollTicker = C_Timer.NewTicker(1, function()
+			pollFn(self)
+		end)
 	end
 
 	-- Replay any active rolls that exist from before (UI reload, etc.)
