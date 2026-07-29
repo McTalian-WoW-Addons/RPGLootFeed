@@ -159,8 +159,13 @@ end
 ---@param rollID number
 function LootRolls:CANCEL_LOOT_ROLL(eventName, rollID)
 	self:LogDebug(eventName, G_RLF.LogEventSource.WOWEVENT, self.moduleName, rollID)
-	self:ReleaseRollRows(rollID)
-	self:_UntrackRoll(rollID)
+
+	-- Stop timer polling. Row stays as unresolved results row until
+	-- SetRollResults or LOOT_ROLLS_COMPLETE triggers OnRollResolved.
+	local rows = self:FindRollRows(rollID)
+	for _, entry in ipairs(rows) do
+		entry.row:OnCancelRoll()
+	end
 end
 
 function LootRolls:CANCEL_ALL_LOOT_ROLLS(eventName)
@@ -208,10 +213,20 @@ function LootRolls:LOOT_ROLLS_COMPLETE(eventName, lootHandle)
 	for rollID in pairs(rollIDs) do
 		table.insert(ids, rollID)
 	end
+
+	-- Stop timer polling and extend row lifetime for result display
+	-- Tracking stays alive so pending HandleHistoryDropUpdate events can still
+	-- reach the row during the exit animation fade window. _UntrackRoll runs
+	-- when the row is released (CleanupLootRoll).
 	for _, rollID in ipairs(ids) do
-		self:ReleaseRollRows(rollID)
-		self:_UntrackRoll(rollID)
+		local rows = self:FindRollRows(rollID)
+		for _, entry in ipairs(rows) do
+			entry.row:OnCancelRoll()
+			entry.row:OnRollResolved()
+		end
 	end
+
+	self:LogDebug("LOOT_ROLLS_COMPLETE_resolved", addonName, self.moduleName, nil, nil, #ids)
 end
 
 -- ── Loot History Polling ─────────────────────────────────────────────────────
@@ -311,6 +326,7 @@ function LootRolls:PollLootHistory()
 
 				-- Push results to row
 				local rows = self:FindRollRows(rollID)
+				self:LogDebug("PollLootHistory_match", addonName, self.moduleName, rollID, nil, claimed.encounterID)
 				for _, entry in ipairs(rows) do
 					entry.row:SetRollResults(claimed.dropInfo)
 				end
@@ -341,6 +357,7 @@ function LootRolls:HandleHistoryDropUpdate(encounterID, lootListID)
 	end
 
 	local rows = self:FindRollRows(rollID)
+	self:LogDebug("HandleHistoryDropUpdate_push", addonName, self.moduleName, rollID, nil, encounterID)
 	for _, entry in ipairs(rows) do
 		entry.row:SetRollResults(dropInfo)
 		-- If there's a winner and the local player won, also update result text
