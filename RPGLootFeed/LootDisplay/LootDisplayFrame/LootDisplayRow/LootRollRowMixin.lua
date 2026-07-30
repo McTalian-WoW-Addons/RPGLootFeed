@@ -173,6 +173,9 @@ function RLF_LootRollRowMixin:_UpdateRollTimer()
 end
 
 function RLF_LootRollRowMixin:OnCancelRoll()
+	if self._resolved then
+		return
+	end
 	if self._rollTimerFrame then
 		self._rollTimerFrame:SetScript("OnUpdate", nil)
 		self._rollTimerFrame = nil
@@ -201,11 +204,17 @@ function RLF_LootRollRowMixin:OnRollResolved()
 	self.TimerBar:Show()
 	G_RLF:LogDebug(("OnRollResolved rollID=%s"):format(tostring(self.rollID or "?")), addonName, "LootRolls")
 
-	-- OnCancelRoll killed the old polling frame. Start a new one for display countdown.
+	-- Stop any existing timer frame before creating new one (guards against
+	-- orphaned closures from prior OnRollResolved calls)
+	if self._rollTimerFrame then
+		self._rollTimerFrame:SetScript("OnUpdate", nil)
+		self._rollTimerFrame = nil
+	end
+
 	self._displayStart = GetTime()
 	self._rollTimerFrame = CreateFrame("Frame")
 	self._rollTimerFrame:SetScript("OnUpdate", function()
-		if not self.TimerBar then
+		if not self.TimerBar or not self._displayStart then
 			return
 		end
 		local elapsed = GetTime() - self._displayStart
@@ -528,41 +537,6 @@ function RLF_LootRollRowMixin:SetRollResults(dropInfo)
 	if dropInfo.winner or allPassed or (waitingCount == 0 and self._rolled) then
 		-- Fully resolved results row
 		self:OnRollResolved()
-	elseif waitingCount > 0 and dropInfo.startTime and dropInfo.duration then
-		-- Unresolved: show remaining roll time from dropInfo data
-		local elapsed = GetTime() - (dropInfo.startTime / 1000)
-		local remaining = math.max(dropInfo.duration - elapsed, 0)
-		G_RLF:LogDebug(
-			("SetRollResults_unresolved rollID=%s startTime=%s duration=%s elapsed=%.1f remaining=%.1f"):format(
-				tostring(self.rollID or "?"),
-				tostring(dropInfo.startTime),
-				tostring(dropInfo.duration),
-				elapsed,
-				remaining
-			),
-			addonName,
-			self.moduleName
-		)
-		if remaining > 0 then
-			self.TimerBar:SetMinMaxValues(0, dropInfo.duration)
-			self.TimerBar:SetValue(remaining)
-			self.TimerBar:Show()
-			-- Set up a light OnUpdate to tick the timer down
-			self._displayStart = GetTime()
-			self._rollTimerFrame = CreateFrame("Frame")
-			self._rollTimerFrame:SetScript("OnUpdate", function()
-				if not self.TimerBar then
-					return
-				end
-				local e = GetTime() - self._displayStart
-				local r = math.max(remaining - e, 0)
-				self.TimerBar:SetValue(r)
-				if r <= 0 then
-					self._rollTimerFrame:SetScript("OnUpdate", nil)
-					self._rollTimerFrame = nil
-				end
-			end)
-		end
 	end
 end
 
