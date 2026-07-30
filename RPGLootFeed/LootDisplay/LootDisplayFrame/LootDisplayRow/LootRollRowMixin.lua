@@ -10,9 +10,7 @@ local G_RLF = ns
 ---@field _rollButtons table[]
 ---@field _rollDropInfo table|nil
 ---@field _rollTimerFrame Frame|nil
----@field _displayStart number|nil
 ---@field _resolved boolean|nil
----@field _timerLogNext number|nil
 RLF_LootRollRowMixin = {}
 
 local BUTTON_GAP = 4
@@ -134,53 +132,49 @@ function RLF_LootRollRowMixin:_LayoutRollButtons()
 	end
 end
 
-function RLF_LootRollRowMixin:_UpdateRollTimer()
-	if not self.rollID then
-		return
-	end
-	if not GetLootRollTimeLeft then
-		return
-	end
-
-	local left = GetLootRollTimeLeft(self.rollID)
-	if not left then
+--- Start hardware-accelerated timer bar countdown using C_DurationUtil.
+--- Sets the bar once; no per-frame polling needed.
+---@param rollDuration number Total roll duration in seconds (from element.rollDuration)
+function RLF_LootRollRowMixin:_SetupRollTimerBar(rollDuration)
+	if not self.TimerBar then
 		return
 	end
 
-	-- Only log once per second to avoid spam
-	if not self._timerLogNext or GetTime() >= self._timerLogNext then
-		local minVal, maxVal = self.TimerBar:GetMinMaxValues()
-		G_RLF:LogDebug(
-			("UpdateRollTimer rollID=%s left=%s min=%s max=%s"):format(
-				tostring(self.rollID),
-				tostring(left),
-				tostring(minVal),
-				tostring(maxVal)
-			),
-			addonName,
-			"LootRolls"
+	local animCfg = G_RLF.DbAccessor:Animations(self.frameType)
+	if animCfg and animCfg.timerBar then
+		local cfg = animCfg.timerBar
+		if cfg.height then
+			self.TimerBar:SetHeight(cfg.height)
+		end
+		if cfg.color then
+			self.TimerBar:SetStatusBarColor(cfg.color[1], cfg.color[2], cfg.color[3], cfg.alpha or 0.7)
+		end
+	end
+
+	-- Use remaining time from GetLootRollTimeLeft, fall back to total duration
+	local remaining = (self.rollID and GetLootRollTimeLeft and GetLootRollTimeLeft(self.rollID)) or rollDuration
+
+	if C_DurationUtil and C_DurationUtil.CreateDuration then
+		if not self._timerBarDuration then
+			self._timerBarDuration = C_DurationUtil.CreateDuration()
+		end
+		self._timerBarDuration:SetTimeFromStart(GetTime(), remaining)
+		self.TimerBar:SetTimerDuration(
+			self._timerBarDuration,
+			Enum.StatusBarInterpolation.Immediate,
+			Enum.StatusBarTimerDirection.RemainingTime
 		)
-		self._timerLogNext = GetTime() + 1
-	end
-
-	local minVal, maxVal = self.TimerBar:GetMinMaxValues()
-	if left <= 0 then
-		self.TimerBar:SetValue(0)
-	elseif minVal ~= maxVal then
-		local padded = math.min(math.max(left, 1), maxVal)
-		self.TimerBar:SetValue(padded)
+		self.TimerBar:Show()
+	else
+		-- Fallback: static bar
+		self.TimerBar:SetMinMaxValues(0, rollDuration)
+		self.TimerBar:SetValue(remaining)
+		self.TimerBar:Show()
 	end
 end
 
 function RLF_LootRollRowMixin:OnCancelRoll()
-	if self._resolved then
-		return
-	end
-	if self._rollTimerFrame then
-		self._rollTimerFrame:SetScript("OnUpdate", nil)
-		self._rollTimerFrame = nil
-	end
-	self:ResetTimerBar()
+	-- Timer bar is managed by per-stage setup; no action needed here.
 end
 
 --- Transition to resolved results row. Enables normal row behaviors:
@@ -197,34 +191,9 @@ function RLF_LootRollRowMixin:OnRollResolved()
 	self.showForSeconds = RESULTS_DISPLAY_SECONDS
 	self.hasElementFadeOverride = true
 	self:StyleExitAnimation()
+	self:ResetFadeOut()
 
-	-- Timer bar: show countdown for the display period
-	self.TimerBar:SetMinMaxValues(0, RESULTS_DISPLAY_SECONDS)
-	self.TimerBar:SetValue(RESULTS_DISPLAY_SECONDS)
-	self.TimerBar:Show()
 	G_RLF:LogDebug(("OnRollResolved rollID=%s"):format(tostring(self.rollID or "?")), addonName, "LootRolls")
-
-	-- Stop any existing timer frame before creating new one (guards against
-	-- orphaned closures from prior OnRollResolved calls)
-	if self._rollTimerFrame then
-		self._rollTimerFrame:SetScript("OnUpdate", nil)
-		self._rollTimerFrame = nil
-	end
-
-	self._displayStart = GetTime()
-	self._rollTimerFrame = CreateFrame("Frame")
-	self._rollTimerFrame:SetScript("OnUpdate", function()
-		if not self.TimerBar or not self._displayStart then
-			return
-		end
-		local elapsed = GetTime() - self._displayStart
-		local remaining = math.max(RESULTS_DISPLAY_SECONDS - elapsed, 0)
-		self.TimerBar:SetValue(remaining)
-		if remaining <= 0 then
-			self._rollTimerFrame:SetScript("OnUpdate", nil)
-			self._rollTimerFrame = nil
-		end
-	end)
 end
 
 --- Helper: set ItemCountText and reflow primary line layout.
@@ -537,6 +506,25 @@ function RLF_LootRollRowMixin:SetRollResults(dropInfo)
 	if dropInfo.winner or allPassed or (waitingCount == 0 and self._rolled) then
 		-- Fully resolved results row
 		self:OnRollResolved()
+	elseif waitingCount > 0 and dropInfo.duration then
+		-- Unresolved: show timer bar at remaining duration (static display)
+		G_RLF:LogDebug(
+			("SetRollResults_unresolved rollID=%s waiting=%d duration=%s"):format(
+				tostring(self.rollID or "?"),
+				waitingCount,
+				tostring(dropInfo.duration)
+			),
+			addonName,
+			self.moduleName
+		)
+		self.TimerBar:SetMinMaxValues(0, dropInfo.duration)
+		-- If startTime available, try to compute remaining; otherwise show full
+		if dropInfo.startTime then
+			-- startTime is epoch ms, duration is ms. Show what we can.
+			-- Just show full bar - accurate countdown not possible without server time sync
+		end
+		self.TimerBar:SetValue(dropInfo.duration)
+		self.TimerBar:Show()
 	end
 end
 
@@ -628,34 +616,18 @@ function RLF_LootRollRowMixin:PostBootstrapFromElement(element)
 
 	self:_LayoutRollButtons()
 
-	self.showForSeconds = (element.rollDuration or 60) + 1
+	-- Never auto-fade; dismissed by CANCEL_LOOT_ROLL/LOOT_ROLLS_COMPLETE
+	local infinity = math.pow(2, 19)
+	self.showForSeconds = infinity
 	self.hasElementFadeOverride = true
 	self:StyleExitAnimation()
-	self.showForSeconds = (element.rollDuration or 60) + 1
+	self.showForSeconds = infinity
 
-	local animCfg = G_RLF.DbAccessor:Animations(self.frameType)
-	if animCfg and animCfg.timerBar then
-		local cfg = animCfg.timerBar
-		if cfg.height then
-			self.TimerBar:SetHeight(cfg.height)
-		end
-		if cfg.color then
-			self.TimerBar:SetStatusBarColor(cfg.color[1], cfg.color[2], cfg.color[3], cfg.alpha or 0.7)
-		end
-	end
-	self.TimerBar:SetMinMaxValues(0, element.rollDuration or 60)
-	self.TimerBar:SetValue(element.rollDuration or 60)
-	self.TimerBar:Show()
+	-- Timer bar: use hardware-accelerated countdown from C_DurationUtil.
+	-- Set once, no polling needed — bar counts down automatically.
+	self._SetupRollTimerBar(self, element.rollDuration)
 
-	self._rollTimerFrame = CreateFrame("Frame")
-	self._rollTimerFrame:SetScript("OnUpdate", function()
-		self:_UpdateRollTimer()
-	end)
-
-	if element.mockDropInfo then
-		self:SetRollResults(element.mockDropInfo)
-	end
-
+	-- Hook the ClickableButton tooltip to append roll info after the item tooltip
 	if self.ClickableButton then
 		local origOnEnter = self.ClickableButton:GetScript("OnEnter")
 		local origOnLeave = self.ClickableButton:GetScript("OnLeave")
@@ -682,8 +654,6 @@ function RLF_LootRollRowMixin:CleanupLootRoll()
 	self.rollID = nil
 	self._rolled = false
 	self._resolved = nil
-	self._displayStart = nil
-	self._timerLogNext = nil
 
 	if self._rollButtons then
 		for _, btn in ipairs(self._rollButtons) do
