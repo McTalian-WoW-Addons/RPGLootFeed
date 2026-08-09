@@ -20,6 +20,7 @@ function RLF_RowIconMixin:StyleIcon()
 	local iconSize = sizingDb.iconSize
 	local textAlignment = stylingDb.textAlignment
 	local iconOnLeft = textAlignment ~= G_RLF.TextAlignment.RIGHT
+	local iconSkin = G_RLF.IconSkinResolver:Resolve(stylingDb.iconSkin)
 
 	if self.cachedIconSize ~= iconSize then
 		self.cachedIconSize = iconSize
@@ -28,6 +29,11 @@ function RLF_RowIconMixin:StyleIcon()
 
 	if self.cachedIconTextAlignment ~= textAlignment then
 		self.cachedIconTextAlignment = textAlignment
+		changed = true
+	end
+
+	if self.cachedIconSkin ~= iconSkin then
+		self.cachedIconSkin = iconSkin
 		changed = true
 	end
 
@@ -40,7 +46,11 @@ function RLF_RowIconMixin:StyleIcon()
 		if not iconOnLeft then
 			anchor, xOffset = "RIGHT", -xOffset
 		end
-		if G_RLF.Masque and G_RLF.iconGroup then
+		-- Masque group membership is sticky -- a button cannot cleanly leave a
+		-- group mid-session -- so only enroll when Masque is the active skin.
+		-- Rows are pooled and created lazily, so switching to Masque later
+		-- still enrolls newly created rows.
+		if iconSkin == G_RLF.IconSkin.MASQUE then
 			G_RLF.iconGroup:AddButton(self.Icon)
 		end
 		self.Icon:SetPoint(anchor, xOffset, 0)
@@ -88,13 +98,34 @@ function RLF_RowIconMixin:UpdateIcon(key, icon, quality)
 		self.Icon:ClearPushedTexture()
 		self.Icon:ClearHighlightTexture()
 
-		-- Masque reskinning (may be costly, consider reducing frequency)
-		if G_RLF.Masque and G_RLF.iconGroup then
-			G_RLF.iconGroup:ReSkin(self.Icon)
+		-- Exactly one skinner runs.  Resolve guarantees the branch's dependency
+		-- is loaded, so no re-guarding is needed here.
+		local iconSkin = G_RLF.IconSkinResolver:Resolve(stylingDb.iconSkin)
+
+		-- Rows are pooled and SetTexture does not reset texture coordinates, so
+		-- a crop outlives both the loot event and the row's trip through the
+		-- pool.  Undo it when Square is no longer active -- but only ever undo
+		-- our own crop; Masque and ElvUI manage their texcoords themselves.
+		if iconSkin ~= G_RLF.IconSkin.SQUARE and self.squareCropApplied then
+			self.Icon.icon:SetTexCoord(0, 1, 0, 1)
+			self.squareCropApplied = false
 		end
-		if G_RLF.ElvSkins then
+
+		if iconSkin == G_RLF.IconSkin.MASQUE then
+			-- Masque reskinning (may be costly, consider reducing frequency)
+			G_RLF.iconGroup:ReSkin(self.Icon)
+		elseif iconSkin == G_RLF.IconSkin.ELVUI then
 			G_RLF.ElvSkins:HandleItemButton(self.Icon, true)
 			G_RLF.ElvSkins:HandleIconBorder(self.Icon.IconBorder)
+		elseif iconSkin == G_RLF.IconSkin.SQUARE then
+			-- Crop the baked bevel.  A masked texture rejects SetTexCoord
+			-- outright (hard Lua error), so leave those native -- we do not
+			-- mask row icons today, but the guard is one call.
+			local icon = self.Icon.icon
+			if icon and not (icon.GetNumMaskTextures and icon:GetNumMaskTextures() > 0) then
+				icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+				self.squareCropApplied = true
+			end
 		end
 	end)
 end

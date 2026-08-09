@@ -225,6 +225,21 @@ function Styling:SetTopLeftIconTextColor(_, r, g, b, a)
 	G_RLF.LootDisplay:UpdateRowStyles(self.frameId)
 end
 
+function Styling:GetIconSkin()
+	return G_RLF.DbAccessor:Styling(self.frameId).iconSkin
+end
+
+function Styling:SetIconSkin(_, value)
+	-- The dropdown lists every skinner, including ones that are not installed,
+	-- so the write has to be refused here rather than by the widget.
+	if not G_RLF.IconSkinResolver:Available()[value] then
+		G_RLF:LogWarn(G_RLF.L["IconSkinUnavailableWarning"], addonName)
+		return
+	end
+	G_RLF.DbAccessor:Styling(self.frameId).iconSkin = value
+	G_RLF.LootDisplay:UpdateRowStyles(self.frameId)
+end
+
 function Styling:GetUseFontObjects()
 	return G_RLF.DbAccessor:Styling(self.frameId).useFontObjects
 end

@@ -36,6 +36,19 @@ G_RLF.FontFlags = {
 	MONOCHROME = "MONOCHROME",
 }
 
+--- Which addon (if any) skins the row icon button.  AUTO defers to whichever
+--- supported skinning addon is loaded; every other value is an explicit
+--- override.  Exactly one skinner ever runs -- see G_RLF.IconSkinResolver.
+---@enum G_RLF.IconSkin
+G_RLF.IconSkin = {
+	AUTO = "AUTO",
+	NONE = "NONE",
+	SQUARE = "SQUARE",
+	MASQUE = "MASQUE",
+	ELVUI = "ELVUI",
+	ELLESMERE = "ELLESMERE",
+}
+
 ---@enum G_RLF.ItemQualEnum
 G_RLF.ItemQualEnum = {}
 

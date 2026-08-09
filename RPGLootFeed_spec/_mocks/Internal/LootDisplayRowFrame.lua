@@ -140,6 +140,11 @@ local function mockItemButton()
 		return mockFontString()
 	end)
 	btn.topLeftText = mockFontString()
+	-- .icon is the ItemButton's own art region (ItemButtonTemplate's icon
+	-- texture).  RowIconMixin crops it for the built-in Square skin.
+	-- GetNumMaskTextures is deliberately absent, matching an unmasked icon;
+	-- tests that need the masked path add it themselves.
+	btn.icon = stubMethods(mockTexture(), { "SetTexCoord" })
 	btn.IconBorder = mockTexture()
 	-- IconOverlay and ProfessionQualityOverlay are optional in-game (may be nil).
 	-- Provide them here so tests that exercise UpdateIcon don't need to special-case.
