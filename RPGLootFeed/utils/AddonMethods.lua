@@ -261,13 +261,64 @@ function G_RLF:TableToCommaSeparatedString(tbl)
 	return table.concat(result, ", ")
 end
 
+--- Ask the client whether the SLUG font flag is accepted.
+---
+--- Blizzard exposes Slug rendering declaratively (the `slug` attribute on
+--- `<Font>` in UI.xsd) and never passes the token to SetFont in its own Lua,
+--- so the flag string cannot be confirmed from the UI source -- TBFFlags is an
+--- opaque intrinsic type with no enumerated values.  Probing beats a hardcoded
+--- interface-version table, which would only tell us the XML attribute exists.
+---
+--- Two steps, because not every client reports SetFont success: OUTLINE is
+--- accepted everywhere, so if it does not report true this client cannot answer
+--- the question at all and we report unsupported rather than guess.
+--- @return boolean
+function G_RLF:ProbeSlugSupport()
+	local lsm = G_RLF.lsm
+	local fontPath = lsm and lsm:Fetch(lsm.MediaType.FONT, "Friz Quadrata TT")
+	if not fontPath then
+		return false
+	end
+
+	local probe = UIParent:CreateFontString(nil, "BACKGROUND")
+	if not (probe and probe.SetFont) then
+		return false
+	end
+
+	local reportsSuccess = probe:SetFont(fontPath, 10, G_RLF.FontFlags.OUTLINE) == true
+	local slugAccepted = probe:SetFont(fontPath, 10, G_RLF.FontFlags.SLUG) == true
+	if probe.Hide then
+		probe:Hide()
+	end
+
+	return reportsSuccess and slugAccepted
+end
+
 --- Get the frame's font flags as a string
+---
+--- SLUG is derived here rather than picked from the saved flags.  It sharpens
+--- an outline and does little on its own, which is how Blizzard uses it too --
+--- SystemFont_NamePlate_Outlined pairs slug with an outline
+--- (Blizzard_Fonts_Shared/Shared/GameFonts.xml:317) -- so an outline turns it
+--- on, styling.disableSlug turns it back off, and the saved table is never
+--- written to.  A saved SLUG from an earlier build is ignored for the same
+--- reason: the flag has no checkbox of its own any more.
 --- @param frame? G_RLF.Frames
 --- @return string
 function G_RLF:FontFlagsToString(frame)
 	frame = frame or G_RLF.Frames.MAIN
 	local stylingDb = G_RLF.DbAccessor:Styling(frame)
-	local flags = stylingDb.fontFlags
+	local flags = {}
+	for key, enabled in pairs(stylingDb.fontFlags) do
+		flags[key] = enabled
+	end
+	flags[G_RLF.FontFlags.SLUG] = nil
+
+	local outlined = flags[G_RLF.FontFlags.OUTLINE] or flags[G_RLF.FontFlags.THICKOUTLINE]
+	if outlined and G_RLF.supportsSlug and not stylingDb.disableSlug then
+		flags[G_RLF.FontFlags.SLUG] = true
+	end
+
 	return self:TableToCommaSeparatedString(flags)
 end
 

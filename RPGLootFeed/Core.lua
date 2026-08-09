@@ -136,6 +136,13 @@ function RLF:OnInitialize()
 	-- Details also provides this, but in case someone doesn't have it installed
 	-- RLF will register it as well.
 	lsm:Register("border", "1 Pixel", [[Interface\Buttons\WHITE8X8]])
+
+	-- Blizzard exposes Slug rendering declaratively (the slug attribute on
+	-- <Font> in UI.xsd), and the SetFont flag token is documented but appears
+	-- nowhere in the UI source -- TBFFlags is an opaque intrinsic type.  So ask
+	-- the client instead of trusting a version table: SetFont reports success,
+	-- and a rejected flag string returns false.
+	G_RLF.supportsSlug = G_RLF:ProbeSlugSupport()
 	G_RLF.DBIcon:Register(addonName, rlfLDB, G_RLF.db.global.minimap)
 	G_RLF.DBIcon:AddButtonToCompartment(addonName)
 	self:Hook(G_RLF.acd, "Open", "OnOptionsOpen")

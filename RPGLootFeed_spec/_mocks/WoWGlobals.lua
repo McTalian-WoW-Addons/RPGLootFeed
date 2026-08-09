@@ -164,6 +164,9 @@ _G.UIParent = {
 stub(_G.UIParent, "CreateFontString", function()
 	local fontString = {}
 	stub(fontString, "SetFontObject")
+	-- SetFont reports success in-game; the default stub returns nil, which
+	-- reads as "this client does not report", so probes fail closed.
+	stub(fontString, "SetFont")
 	stub(fontString, "SetText")
 	stub(fontString, "SetPoint")
 	stub(fontString, "Hide")

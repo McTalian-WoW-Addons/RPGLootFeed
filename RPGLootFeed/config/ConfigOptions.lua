@@ -100,7 +100,10 @@ G_RLF.defaults = {
 						["OUTLINE"] = false,
 						["THICKOUTLINE"] = false,
 						["MONOCHROME"] = false,
+						-- No SLUG entry: G_RLF:FontFlagsToString derives it from
+						-- the outline flags and disableSlug.
 					},
+					disableSlug = false,
 					fontShadowColor = { 0, 0, 0, 1 },
 					fontShadowOffsetX = 1,
 					fontShadowOffsetY = -1,
@@ -355,7 +358,10 @@ G_RLF.defaults = {
 						["OUTLINE"] = false,
 						["THICKOUTLINE"] = false,
 						["MONOCHROME"] = false,
+						-- No SLUG entry: G_RLF:FontFlagsToString derives it from
+						-- the outline flags and disableSlug.
 					},
+					disableSlug = false,
 					fontShadowColor = { 0, 0, 0, 1 },
 					fontShadowOffsetX = 1,
 					fontShadowOffsetY = -1,
