@@ -10,11 +10,17 @@ describe("IconSkin resolver", function()
 
 	--- Attach (or detach) the third-party handles the resolver inspects.
 	--- Core.lua sets these at runtime; the namespace mock leaves them nil.
+	---
+	--- `ellesmere` models the normal case: the addon is loaded and it dispatched
+	--- our RegisterSkin callback, so both handles exist.  `ellesmereSkinningOff`
+	--- models the addon being loaded with third-party skinning disabled in its
+	--- own options, where the facade never arrives.
 	local function loaded(addons)
 		ns.Masque = addons.masque and {} or nil
 		ns.iconGroup = addons.masque and {} or nil
 		ns.ElvSkins = addons.elvui and {} or nil
-		ns.EllesmereUI = addons.ellesmere and {} or nil
+		ns.EllesmereUI = (addons.ellesmere or addons.ellesmereSkinningOff) and {} or nil
+		ns.EUISkin = addons.ellesmere and {} or nil
 	end
 
 	before_each(function()
@@ -61,6 +67,32 @@ describe("IconSkin resolver", function()
 			ns.iconGroup = nil
 			assert.is_false(IconSkin:Available()[Skin.MASQUE])
 		end)
+
+		it("keeps EllesmereUI selectable while its skinning is switched off", function()
+			-- The user can flip EllesmereUI's own option back on; refusing the
+			-- choice here would make them come back and re-pick it.
+			loaded({ ellesmereSkinningOff = true })
+			assert.is_true(IconSkin:Available()[Skin.ELLESMERE])
+		end)
+	end)
+
+	describe("IsApplicable", function()
+		it("reports EllesmereUI as inapplicable until its facade arrives", function()
+			loaded({ ellesmereSkinningOff = true })
+			assert.is_false(IconSkin:IsApplicable(Skin.ELLESMERE))
+		end)
+
+		it("reports EllesmereUI as applicable once its facade arrives", function()
+			loaded({ ellesmere = true })
+			assert.is_true(IconSkin:IsApplicable(Skin.ELLESMERE))
+		end)
+
+		it("tracks availability for every other skinner", function()
+			loaded({ elvui = true })
+			assert.is_true(IconSkin:IsApplicable(Skin.ELVUI))
+			assert.is_true(IconSkin:IsApplicable(Skin.SQUARE))
+			assert.is_false(IconSkin:IsApplicable(Skin.MASQUE))
+		end)
 	end)
 
 	describe("Resolve with AUTO", function()
@@ -86,6 +118,19 @@ describe("IconSkin resolver", function()
 		it("picks EllesmereUI when it is the only one loaded", function()
 			loaded({ ellesmere = true })
 			assert.equal(Skin.ELLESMERE, IconSkin:Resolve(Skin.AUTO))
+		end)
+
+		it("falls back to SQUARE when EllesmereUI has its skinning switched off", function()
+			-- SQUARE applies the identical crop EllesmereUI's SquareIcon would,
+			-- so the user gets the look they installed EllesmereUI for instead
+			-- of round icons and no explanation.
+			loaded({ ellesmereSkinningOff = true })
+			assert.equal(Skin.SQUARE, IconSkin:Resolve(Skin.AUTO))
+		end)
+
+		it("still prefers a working skinner over the EllesmereUI stand-in", function()
+			loaded({ elvui = true, ellesmereSkinningOff = true })
+			assert.equal(Skin.ELVUI, IconSkin:Resolve(Skin.AUTO))
 		end)
 
 		it("picks Masque when it is the only one loaded", function()
@@ -131,6 +176,18 @@ describe("IconSkin resolver", function()
 			-- ElvUI, so they get no skinning rather than a surprise.
 			loaded({ masque = true })
 			assert.equal(Skin.NONE, IconSkin:Resolve(Skin.ELVUI))
+		end)
+
+		it("falls back to SQUARE for an explicit EllesmereUI with its skinning off", function()
+			loaded({ ellesmereSkinningOff = true })
+			assert.equal(Skin.SQUARE, IconSkin:Resolve(Skin.ELLESMERE))
+		end)
+
+		it("falls back to NONE for EllesmereUI when the addon is gone entirely", function()
+			-- Uninstalled degrades like every other skinner; only the
+			-- installed-but-inert case gets the SQUARE stand-in.
+			loaded({})
+			assert.equal(Skin.NONE, IconSkin:Resolve(Skin.ELLESMERE))
 		end)
 
 		it("falls back to NONE for an unrecognized value", function()

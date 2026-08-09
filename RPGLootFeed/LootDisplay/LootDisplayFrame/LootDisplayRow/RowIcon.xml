@@ -4,7 +4,56 @@
     <Script file="RowIconMixin.lua"/>
     <Frame name="RLF_RowIconTemplate" mixin="RLF_RowIconMixin" virtual="true">
         <Frames>
-            <ItemButton parentKey="Icon" />
+            <ItemButton parentKey="Icon">
+                <!-- Square quality border. Blizzard's IconBorder is the rounded
+                     WhiteIconFrame; the Square and EllesmereUI skins hide it and
+                     paint these four edges with the item quality color instead.
+                     textureSubLevel 2 keeps them above IconBorder (0) and
+                     IconOverlay (1). Thickness is set in StyleIcon via PScale. -->
+                <Layers>
+                    <Layer level="OVERLAY" textureSubLevel="2">
+                        <Texture parentKey="SquareBorderTop" hidden="true">
+                            <Anchors>
+                                <Anchor point="TOPLEFT" relativePoint="TOPLEFT" />
+                                <Anchor point="TOPRIGHT" relativePoint="TOPRIGHT" />
+                            </Anchors>
+                            <Size>
+                                <AbsDimension x="0" y="1" />
+                            </Size>
+                        </Texture>
+
+                        <Texture parentKey="SquareBorderRight" hidden="true">
+                            <Anchors>
+                                <Anchor point="TOPRIGHT" relativePoint="TOPRIGHT" />
+                                <Anchor point="BOTTOMRIGHT" relativePoint="BOTTOMRIGHT" />
+                            </Anchors>
+                            <Size>
+                                <AbsDimension x="1" y="0" />
+                            </Size>
+                        </Texture>
+
+                        <Texture parentKey="SquareBorderBottom" hidden="true">
+                            <Anchors>
+                                <Anchor point="BOTTOMLEFT" relativePoint="BOTTOMLEFT" />
+                                <Anchor point="BOTTOMRIGHT" relativePoint="BOTTOMRIGHT" />
+                            </Anchors>
+                            <Size>
+                                <AbsDimension x="0" y="1" />
+                            </Size>
+                        </Texture>
+
+                        <Texture parentKey="SquareBorderLeft" hidden="true">
+                            <Anchors>
+                                <Anchor point="TOPLEFT" relativePoint="TOPLEFT" />
+                                <Anchor point="BOTTOMLEFT" relativePoint="BOTTOMLEFT" />
+                            </Anchors>
+                            <Size>
+                                <AbsDimension x="1" y="0" />
+                            </Size>
+                        </Texture>
+                    </Layer>
+                </Layers>
+            </ItemButton>
         </Frames>
     </Frame>
 </Ui>

@@ -16,7 +16,7 @@
 ## Category-ruRU: Добыча
 ## Category-zhCN: 战利品
 ## Category-zhTW: 戰利品
-## OptionalDeps: Masque, Auctionator, TradeSkillMaster, ElvUI
+## OptionalDeps: Masque, Auctionator, TradeSkillMaster, ElvUI, EllesmereUI
 ## X-GitHub: https://github.com/Mctalian-WoW-Addons/RPGLootFeed
 ## X-Discord: https://discord.gg/czRYVWhe33
 ## X-Curse-Project-ID: 1082791
