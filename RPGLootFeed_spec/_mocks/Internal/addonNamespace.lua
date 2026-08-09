@@ -14,6 +14,7 @@ addonNamespaceMocks.LoadSections = {
 	UtilsList = 2.03,
 	UtilsEnums = 2.04,
 	UtilsGameVersionHelpers = 2.05,
+	UtilsIconSkin = 2.055,
 	UtilsItemInfo = 2.06,
 	UtilsLogger = 2.06,
 	UtilsMaps = 2.08,
@@ -162,6 +163,13 @@ function addonNamespaceMocks:unitLoadedAfter(loadSection)
 		addonNamespaceMocks.ClassicToRetail.ConvertFactionInfoByID = stub(ns.ClassicToRetail, "ConvertFactionInfoByID")
 		addonNamespaceMocks.ClassicToRetail.ConvertFactionInfoByIndex =
 			stub(ns.ClassicToRetail, "ConvertFactionInfoByIndex")
+	end
+	if loadSection >= addonNamespaceMocks.LoadSections.UtilsIconSkin then
+		-- Real resolver, not a stub -- it is pure logic over ns.Masque /
+		-- ns.iconGroup / ns.ElvSkins / ns.EllesmereUI.  Those handles are left
+		-- unset here (nil == "addon not loaded"); specs assign the ones they
+		-- need, the same way they wire up ns.iconGroup.
+		assert(loadfile("RPGLootFeed/utils/IconSkin.lua"))("TestAddon", ns)
 	end
 	if loadSection >= addonNamespaceMocks.LoadSections.UtilsItemInfo then
 		ns.ItemInfo = {}

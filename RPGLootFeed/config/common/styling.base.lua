@@ -41,6 +41,7 @@ StylingBase.defaultDb = {
 	rowBorderColor = { 0, 0, 0, 1 },
 	rowBorderClassColors = false,
 	rowBorderTexture = "None",
+	iconSkin = G_RLF.IconSkin.AUTO,
 	useFontObjects = false,
 	font = "GameFontNormalSmall",
 	fontFace = "Friz Quadrata TT",
@@ -107,6 +108,8 @@ end
 ---@field SetRowBorderColor fun(info: any, r: number, g: number, b: number, a: number)
 ---@field GetRowBorderClassColors fun(): boolean
 ---@field SetRowBorderClassColors fun(info: any, value: boolean)
+---@field GetIconSkin fun(): string
+---@field SetIconSkin fun(info: any, value: string)
 ---@field GetEnabledSecondaryRowText fun(): boolean
 ---@field SetEnabledSecondaryRowText fun(info: any, value: boolean)
 ---@field GetEnableTopLeftIconText fun(): boolean
@@ -438,6 +441,55 @@ function StylingBase.CreateRowBordersGroup()
 	return group
 end
 
+--- Labels for the icon skin dropdown.  Addon names are proper nouns and stay
+--- untranslated; only the built-in modes and the unavailable suffix are
+--- localized.
+---@private
+function StylingBase.IconSkinLabels()
+	return {
+		[G_RLF.IconSkin.AUTO] = G_RLF.L["Automatic"],
+		[G_RLF.IconSkin.NONE] = G_RLF.L["None"],
+		[G_RLF.IconSkin.SQUARE] = G_RLF.L["Square"],
+		[G_RLF.IconSkin.MASQUE] = "Masque",
+		[G_RLF.IconSkin.ELVUI] = "ElvUI",
+		[G_RLF.IconSkin.ELLESMERE] = "EllesmereUI",
+	}
+end
+
+---@private
+function StylingBase.CreateIconSkinSelect()
+	return G_RLF.ConfigCommon.CreateSelect({
+		name = G_RLF.L["Icon Skin"],
+		desc = G_RLF.L["IconSkinDesc"],
+		-- Every skinner is listed whether or not it is installed, so the
+		-- feature is discoverable.  AceConfigDialog has no per-item disable
+		-- for selects, so unavailable entries are labeled and refused by
+		-- SetIconSkin instead of being grayed out.
+		values = function()
+			local available = G_RLF.IconSkinResolver:Available()
+			local values = {}
+			for key, label in pairs(StylingBase.IconSkinLabels()) do
+				values[key] = available[key] and label or (label .. G_RLF.L["NotInstalledSuffix"])
+			end
+			return values
+		end,
+		sorting = function()
+			return {
+				G_RLF.IconSkin.AUTO,
+				G_RLF.IconSkin.NONE,
+				G_RLF.IconSkin.SQUARE,
+				G_RLF.IconSkin.MASQUE,
+				G_RLF.IconSkin.ELVUI,
+				G_RLF.IconSkin.ELLESMERE,
+			}
+		end,
+		get = "GetIconSkin",
+		set = "SetIconSkin",
+		width = "double",
+		order = 4.5,
+	})
+end
+
 ---@private
 function StylingBase.CreateEnableSecondaryRowTextToggle()
 	return G_RLF.ConfigCommon.CreateToggle({
@@ -747,6 +799,7 @@ function StylingBase.CreateStylingGroup(handler, order)
 	group.args.flow = StylingBase.CreateFlowGroup(handler)
 	group.args.background = StylingBase.CreateBackgroundGroup()
 	group.args.rowBorders = StylingBase.CreateRowBordersGroup()
+	group.args.iconSkin = StylingBase.CreateIconSkinSelect()
 	group.args.topLeftIconTextOptions = StylingBase.CreateTopLeftIconTextOptionsGroup()
 	group.args.useFontObjects = StylingBase.CreateUseFontObjectsToggle()
 	group.args.font = StylingBase.CreateFontObjectSelect()

@@ -15,6 +15,15 @@ end
 --- You may translate these comments, but do not translate "region" or "endregion" as they are used by the localization tool to determine where to place the translations.
 --- To add translations, simply uncomment the line(s) and replace the English text after the equal sign (=) with the translated value.
 
+--#region 1.34.0
+-- L["Automatic"] = "Automatic"
+-- L["Icon Skin"] = "Icon Skin"
+-- L["IconSkinDesc"] = "Choose which addon skins the loot row icons. Automatic uses whichever supported addon you have loaded. Square crops the icon border without needing any other addon."
+-- L["IconSkinUnavailableWarning"] = "That icon skin is not available because the addon that provides it is not loaded."
+-- L["NotInstalledSuffix"] = " (not installed)"
+-- L["Square"] = "Square"
+--#endregion
+
 --#region 1.33.0
 -- L["Background Override"] = "Background Override"
 -- L["BackgroundOverrideDesc"] = "Override row background colors for this loot feed type while using the frame's selected background mode."
