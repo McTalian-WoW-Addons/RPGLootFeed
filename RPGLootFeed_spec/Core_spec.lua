@@ -179,4 +179,64 @@ describe("Core module", function()
 			end)
 		end)
 	end)
+
+	describe("EllesmereUI skin registration", function()
+		local after_each = busted.after_each
+
+		local function loadCoreWithEllesmereUI(ellesmereUI)
+			_G.EllesmereUI = ellesmereUI
+			---@type test_G_RLF
+			ns = nsMocks:unitLoadedAfter(nsMocks.LoadSections.All)
+			RLF = assert(loadfile("RPGLootFeed/Core.lua"))("TestAddon", ns)
+			return ns
+		end
+
+		after_each(function()
+			_G.EllesmereUI = nil
+		end)
+
+		it("leaves both handles nil when EllesmereUI is absent", function()
+			loadCoreWithEllesmereUI(nil)
+			assert.is_nil(ns.EllesmereUI)
+			assert.is_nil(ns.EUISkin)
+		end)
+
+		it("registers under the addon name when EllesmereUI is present", function()
+			local eui = { RegisterSkin = function() end }
+			stub(eui, "RegisterSkin")
+			loadCoreWithEllesmereUI(eui)
+			assert.stub(eui.RegisterSkin).was.called(1)
+			assert.equal("TestAddon", eui.RegisterSkin.calls[1].vals[1])
+		end)
+
+		it("captures the facade when the callback is dispatched", function()
+			local facade = { SquareIcon = function() end }
+			local eui = {
+				-- EllesmereUI dispatches at PLAYER_LOGIN; calling straight
+				-- through models a late/LoD registration.
+				RegisterSkin = function(_, applyFn)
+					applyFn(facade)
+				end,
+			}
+			loadCoreWithEllesmereUI(eui)
+			assert.equal(eui, ns.EllesmereUI)
+			assert.equal(facade, ns.EUISkin)
+		end)
+
+		it("exposes EllesmereUI but no facade until the callback runs", function()
+			-- Queued registration, or third-party skinning disabled in
+			-- EllesmereUI's own options: the callback never fires.
+			local eui = { RegisterSkin = function() end }
+			loadCoreWithEllesmereUI(eui)
+			assert.equal(eui, ns.EllesmereUI)
+			assert.is_nil(ns.EUISkin)
+		end)
+
+		it("does not register when EllesmereUI predates the skinning API", function()
+			local eui = {}
+			loadCoreWithEllesmereUI(eui)
+			assert.equal(eui, ns.EllesmereUI)
+			assert.is_nil(ns.EUISkin)
+		end)
+	end)
 end)

@@ -59,6 +59,19 @@ if ElvUI then
 		G_RLF.ElvSkins = S
 	end
 end
+---@type EllesmereUIApp?
+G_RLF.EllesmereUI = EllesmereUI
+---@type EllesmereUISkinFacade?
+G_RLF.EUISkin = nil
+if EllesmereUI and EllesmereUI.RegisterSkin then
+	-- Registration is free: EllesmereUI queues it and only dispatches at
+	-- PLAYER_LOGIN, and never at all if the user turned third-party skinning
+	-- off in its options.  So the facade may stay nil -- call sites guard on
+	-- G_RLF.EUISkin rather than on G_RLF.EllesmereUI.
+	EllesmereUI.RegisterSkin(addonName, function(S)
+		G_RLF.EUISkin = S
+	end)
+end
 G_RLF.iconGroup = G_RLF.Masque and G_RLF.Masque:Group(addonName)
 local dbName = addonName .. "DB"
 G_RLF.acd = LibStub("AceConfigDialog-3.0") --[[@as AceConfigDialog-3.0]]

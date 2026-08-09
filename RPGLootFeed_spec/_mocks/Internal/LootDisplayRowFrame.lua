@@ -79,8 +79,22 @@ local function mockFontString()
 end
 
 --- Creates a mock Texture/Frame element with layout stubs.
+--- IsShown defaults to false; tests that need a shown texture override it.
 local function mockTexture()
-	return stubMethods({}, LAYOUT)
+	local tex = stubMethods({}, LAYOUT)
+	stubMethods(tex, {
+		"SetColorTexture",
+		"SetVertexColor",
+		"GetVertexColor",
+		"IsShown",
+		"SetWidth",
+		"SetHeight",
+	})
+	-- Dot call, not colon: `stub:returns(v)` passes the stub itself as the
+	-- first return value, which would shift every real return one slot right.
+	tex.IsShown.returns(false)
+	tex.GetVertexColor.returns(1, 1, 1, 1)
+	return tex
 end
 
 --- Creates a mock layout container that mimics the PrimaryLineLayout / SecondaryLineLayout
@@ -150,6 +164,12 @@ local function mockItemButton()
 	-- Provide them here so tests that exercise UpdateIcon don't need to special-case.
 	btn.IconOverlay = mockTexture()
 	btn.ProfessionQualityOverlay = mockTexture()
+	-- Square quality border edges (RowIcon.xml), used by the Square and
+	-- EllesmereUI icon skins in place of the rounded IconBorder.
+	btn.SquareBorderTop = mockTexture()
+	btn.SquareBorderRight = mockTexture()
+	btn.SquareBorderBottom = mockTexture()
+	btn.SquareBorderLeft = mockTexture()
 	return btn
 end
 

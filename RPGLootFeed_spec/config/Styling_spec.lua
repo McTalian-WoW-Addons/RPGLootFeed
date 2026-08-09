@@ -52,6 +52,15 @@ describe("Styling module", function()
 			assert.equal(ns.IconSkin.ELVUI, stylingDb.iconSkin)
 		end)
 
+		it("accepts EllesmereUI on the addon being loaded, not on the facade", function()
+			-- The facade only arrives at PLAYER_LOGIN, well after the user
+			-- could open the options; gating the write on it would make the
+			-- option unselectable during that window.
+			ns.EllesmereUI = {}
+			handler:SetIconSkin(nil, ns.IconSkin.ELLESMERE)
+			assert.equal(ns.IconSkin.ELLESMERE, stylingDb.iconSkin)
+		end)
+
 		it("refuses a skinner whose addon is not loaded", function()
 			-- The dropdown lists every skinner so the feature is discoverable,
 			-- which means the write has to be refused here.
