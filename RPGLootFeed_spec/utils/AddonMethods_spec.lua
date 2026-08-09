@@ -280,6 +280,35 @@ describe("AddonMethods", function()
 			end)
 		end)
 
+		describe("ApplyFontStyle", function()
+			local function makeFontString()
+				local fs = {
+					SetFont = function() end,
+					SetShadowColor = function() end,
+					SetShadowOffset = function() end,
+				}
+				stub(fs, "SetFont")
+				stub(fs, "SetShadowColor")
+				stub(fs, "SetShadowOffset")
+				return fs
+			end
+
+			it("passes path, size and flags straight through to SetFont", function()
+				local fs = makeFontString()
+				ns:ApplyFontStyle(fs, "Fonts\\FRIZQT__.TTF", 14, "OUTLINE, SLUG", { 0.1, 0.2, 0.3, 0.4 }, 2, -3)
+				assert.stub(fs.SetFont).was.called_with(fs, "Fonts\\FRIZQT__.TTF", 14, "OUTLINE, SLUG")
+				assert.stub(fs.SetShadowColor).was.called_with(fs, 0.1, 0.2, 0.3, 0.4)
+				assert.stub(fs.SetShadowOffset).was.called_with(fs, 2, -3)
+			end)
+
+			it("falls back to an opaque black shadow at (1, -1)", function()
+				local fs = makeFontString()
+				ns:ApplyFontStyle(fs, "Fonts\\FRIZQT__.TTF", 14, "", {})
+				assert.stub(fs.SetShadowColor).was.called_with(fs, 0, 0, 0, 1)
+				assert.stub(fs.SetShadowOffset).was.called_with(fs, 1, -1)
+			end)
+		end)
+
 		describe("ProbeSlugSupport", function()
 			local function probeReturning(outlineResult, slugResult)
 				local fontString = { Hide = function() end }

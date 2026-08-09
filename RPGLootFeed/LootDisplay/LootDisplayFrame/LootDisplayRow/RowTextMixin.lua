@@ -102,25 +102,6 @@ function RLF_RowTextMixin:CreateSecondaryLineLayout()
 	self.SecondaryLineLayout = layout
 end
 
-local function ApplyFontStyle(
-	fontString,
-	fontPath,
-	fontSize,
-	fontFlagsString,
-	fontShadowColor,
-	fontShadowOffsetX,
-	fontShadowOffsetY
-)
-	fontString:SetFont(fontPath, fontSize, fontFlagsString)
-	fontString:SetShadowColor(
-		fontShadowColor[1] or 0,
-		fontShadowColor[2] or 0,
-		fontShadowColor[3] or 0,
-		fontShadowColor[4] or 1
-	)
-	fontString:SetShadowOffset(fontShadowOffsetX or 1, fontShadowOffsetY or -1)
-end
-
 --- Setup font styling for top left text
 --- @param stylingDb? RLF_ConfigStyling
 function RLF_RowTextMixin:StyleTopLeftText(stylingDb)
@@ -129,7 +110,7 @@ function RLF_RowTextMixin:StyleTopLeftText(stylingDb)
 	local fontFace = stylingDb.fontFace
 	local useFontObjects = stylingDb.useFontObjects
 	local font = stylingDb.font
-	local fontFlagsString = G_RLF:FontFlagsToString()
+	local fontFlagsString = G_RLF:FontFlagsToString(self.frameType)
 	local fontShadowColor = stylingDb.fontShadowColor
 	local fontShadowOffsetX = stylingDb.fontShadowOffsetX
 	local fontShadowOffsetY = stylingDb.fontShadowOffsetY
@@ -139,7 +120,7 @@ function RLF_RowTextMixin:StyleTopLeftText(stylingDb)
 		self.Icon.topLeftText:SetFontObject(font)
 	else
 		local fontPath = G_RLF.lsm:Fetch(G_RLF.lsm.MediaType.FONT, fontFace)
-		ApplyFontStyle(
+		G_RLF:ApplyFontStyle(
 			self.Icon.topLeftText,
 			fontPath,
 			topLeftIconFontSize,
@@ -161,7 +142,7 @@ function RLF_RowTextMixin:StyleText()
 	local useFontObjects = stylingDb.useFontObjects
 	local font = stylingDb.font
 	local fontSize = stylingDb.fontSize
-	local fontFlagsString = G_RLF:FontFlagsToString()
+	local fontFlagsString = G_RLF:FontFlagsToString(self.frameType)
 	local fontShadowColor = stylingDb.fontShadowColor
 	local fontShadowOffsetX = stylingDb.fontShadowOffsetX
 	local fontShadowOffsetY = stylingDb.fontShadowOffsetY
@@ -200,7 +181,7 @@ function RLF_RowTextMixin:StyleText()
 			self.Icon.topLeftText:SetFontObject(font)
 		else
 			local fontPath = G_RLF.lsm:Fetch(G_RLF.lsm.MediaType.FONT, fontFace)
-			ApplyFontStyle(
+			G_RLF:ApplyFontStyle(
 				self.PrimaryText,
 				fontPath,
 				fontSize,
@@ -209,7 +190,7 @@ function RLF_RowTextMixin:StyleText()
 				fontShadowOffsetX,
 				fontShadowOffsetY
 			)
-			ApplyFontStyle(
+			G_RLF:ApplyFontStyle(
 				self.AmountText,
 				fontPath,
 				fontSize,
@@ -218,7 +199,7 @@ function RLF_RowTextMixin:StyleText()
 				fontShadowOffsetX,
 				fontShadowOffsetY
 			)
-			ApplyFontStyle(
+			G_RLF:ApplyFontStyle(
 				self.ItemCountText,
 				fontPath,
 				fontSize,
@@ -227,7 +208,7 @@ function RLF_RowTextMixin:StyleText()
 				fontShadowOffsetX,
 				fontShadowOffsetY
 			)
-			ApplyFontStyle(
+			G_RLF:ApplyFontStyle(
 				self.SecondaryText,
 				fontPath,
 				secondaryFontSize,
@@ -691,7 +672,7 @@ function RLF_RowTextMixin:StyleCoinDisplay()
 				end
 			elseif self.cachedFontFace and G_RLF.lsm then
 				local fontPath = G_RLF.lsm:Fetch(G_RLF.lsm.MediaType.FONT, self.cachedFontFace)
-				ApplyFontStyle(
+				G_RLF:ApplyFontStyle(
 					group.amountText,
 					fontPath,
 					self.cachedFontSize,
@@ -873,7 +854,7 @@ function RLF_RowTextMixin:StyleSecondaryCoinDisplay()
 				end
 			elseif self.cachedFontFace and G_RLF.lsm then
 				local fontPath = G_RLF.lsm:Fetch(G_RLF.lsm.MediaType.FONT, self.cachedFontFace)
-				ApplyFontStyle(
+				G_RLF:ApplyFontStyle(
 					group.amountText,
 					fontPath,
 					self.cachedSecondaryFontSize,

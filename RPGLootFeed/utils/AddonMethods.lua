@@ -322,6 +322,38 @@ function G_RLF:FontFlagsToString(frame)
 	return self:TableToCommaSeparatedString(flags)
 end
 
+--- Apply a frame's custom-font styling to a FontString.
+---
+--- Shared by the row text elements and the queue ("Pending Items") label so
+--- both pick up font flags and shadow settings from the same place.  Only the
+--- custom-font path needs this; a FontString driven by SetFontObject carries
+--- the object's own flags and shadow.
+--- @param fontString FontString
+--- @param fontPath string
+--- @param fontSize number
+--- @param fontFlagsString string
+--- @param fontShadowColor number[]
+--- @param fontShadowOffsetX? number
+--- @param fontShadowOffsetY? number
+function G_RLF:ApplyFontStyle(
+	fontString,
+	fontPath,
+	fontSize,
+	fontFlagsString,
+	fontShadowColor,
+	fontShadowOffsetX,
+	fontShadowOffsetY
+)
+	fontString:SetFont(fontPath, fontSize, fontFlagsString)
+	fontString:SetShadowColor(
+		fontShadowColor[1] or 0,
+		fontShadowColor[2] or 0,
+		fontShadowColor[3] or 0,
+		fontShadowColor[4] or 1
+	)
+	fontString:SetShadowOffset(fontShadowOffsetX or 1, fontShadowOffsetY or -1)
+end
+
 function G_RLF:GenerateGUID()
 	local random = math.random
 	local template = "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx"

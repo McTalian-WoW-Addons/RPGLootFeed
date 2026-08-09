@@ -131,6 +131,23 @@ function addonNamespaceMocks:unitLoadedAfter(loadSection)
 		addonNamespaceMocks.OpenOptions = stub(ns, "OpenOptions")
 		addonNamespaceMocks.TableToCommaSeparatedString = stub(ns, "TableToCommaSeparatedString")
 		addonNamespaceMocks.FontFlagsToString = stub(ns, "FontFlagsToString")
+		-- Kept behavioural rather than inert: row and queue-label specs assert
+		-- on the SetFont/SetShadowColor/SetShadowOffset calls this makes.
+		addonNamespaceMocks.ApplyFontStyle = stub(
+			ns,
+			"ApplyFontStyle",
+			function(_, fontString, fontPath, fontSize, fontFlagsString, shadowColor, offsetX, offsetY)
+				shadowColor = shadowColor or {}
+				fontString:SetFont(fontPath, fontSize, fontFlagsString)
+				fontString:SetShadowColor(
+					shadowColor[1] or 0,
+					shadowColor[2] or 0,
+					shadowColor[3] or 0,
+					shadowColor[4] or 1
+				)
+				fontString:SetShadowOffset(offsetX or 1, offsetY or -1)
+			end
+		)
 		addonNamespaceMocks.ProbeSlugSupport = stub(ns, "ProbeSlugSupport").returns(false)
 		addonNamespaceMocks.GenerateGUID = stub(ns, "GenerateGUID").returns("1234567890")
 		addonNamespaceMocks.IsRLFStableRelease = stub(ns, "IsRLFStableRelease").returns(true)

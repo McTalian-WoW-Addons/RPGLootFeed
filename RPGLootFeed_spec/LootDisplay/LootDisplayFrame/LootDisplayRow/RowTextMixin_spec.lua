@@ -117,6 +117,13 @@ describe("RLF_RowTextMixin", function()
 			assert.stub(row.PrimaryText.SetFont).was.called(1)
 		end)
 
+		it("reads font flags for the row's own frame", function()
+			-- Frame IDs are plain integers; 2 is the first non-main frame.
+			row.frameType = 2
+			RLF_RowTextMixin.StyleText(row)
+			assert.stub(nsMocks.FontFlagsToString).was.called_with(ns, 2)
+		end)
+
 		describe("when useFontObjects is true", function()
 			before_each(function()
 				local db = makeDefaultStylingDb()
@@ -872,6 +879,102 @@ describe("RLF_RowTextMixin", function()
 				RLF_RowTextMixin.UpdateSecondaryCoinDisplay(row, 5, 0, 0)
 				assert.equal(row.SecondaryText, relFrame, "alignment=" .. alignment)
 			end
+		end)
+	end)
+
+	-- ── Coin display font styling ──────────────────────────────────────────
+	--
+	-- The custom-font branch of both styling methods routes through
+	-- G_RLF:ApplyFontStyle.  These cases exist because that branch was calling
+	-- a file-local helper that no longer existed, which only surfaced in game.
+
+	describe("coin display font styling", function()
+		local function makeAmountText()
+			return stubMethods({}, {
+				"SetText",
+				"SetPoint",
+				"ClearAllPoints",
+				"SetFont",
+				"SetFontObject",
+				"SetShadowColor",
+				"SetShadowOffset",
+				"SetTextColor",
+				"SetWordWrap",
+			})
+		end
+
+		local function makeCoinDisplay()
+			local display = {}
+			for _, denom in ipairs({ "gold", "silver", "copper" }) do
+				local group = stubMethods({}, { "SetSize", "SetPoint", "ClearAllPoints", "Show", "Hide" })
+				group.amountText = makeAmountText()
+				group.icon = stubMethods({}, { "SetSize", "SetPoint", "ClearAllPoints", "Show", "Hide", "SetAtlas" })
+				display[denom .. "Group"] = group
+			end
+			return display
+		end
+
+		before_each(function()
+			row.cachedFontFace = "Expressway"
+			row.cachedFontSize = 14
+			row.cachedSecondaryFontSize = 12
+			row.cachedFontFlags = "SLUG, OUTLINE"
+			row.cachedFontShadowColor = { 0, 0, 0, 1 }
+			row.cachedFontShadowOffsetX = 2
+			row.cachedFontShadowOffsetY = -2
+			row.cachedUseFontObject = false
+			nsMocks.lsm.Fetch.returns("Fonts/Expressway.TTF")
+		end)
+
+		describe("StyleCoinDisplay", function()
+			before_each(function()
+				row.CoinDisplay = makeCoinDisplay()
+			end)
+
+			it("returns early when CoinDisplay is absent", function()
+				row.CoinDisplay = nil
+				RLF_RowTextMixin.StyleCoinDisplay(row)
+				assert.stub(nsMocks.ApplyFontStyle).was_not.called()
+			end)
+
+			it("applies the row font to every denomination", function()
+				RLF_RowTextMixin.StyleCoinDisplay(row)
+				assert.stub(nsMocks.ApplyFontStyle).was.called(3)
+				local amountText = row.CoinDisplay.goldGroup.amountText
+				assert.stub(amountText.SetFont).was.called_with(amountText, "Fonts/Expressway.TTF", 14, "SLUG, OUTLINE")
+				assert.stub(amountText.SetShadowOffset).was.called_with(amountText, 2, -2)
+			end)
+
+			it("uses the primary font object when font objects are enabled", function()
+				row.cachedUseFontObject = true
+				local fontObj = {}
+				row.PrimaryText.GetFontObject = function()
+					return fontObj
+				end
+				RLF_RowTextMixin.StyleCoinDisplay(row)
+				assert.stub(nsMocks.ApplyFontStyle).was_not.called()
+				local amountText = row.CoinDisplay.goldGroup.amountText
+				assert.stub(amountText.SetFontObject).was.called_with(amountText, fontObj)
+			end)
+		end)
+
+		describe("StyleSecondaryCoinDisplay", function()
+			before_each(function()
+				row.SecondaryCoinDisplay = makeCoinDisplay()
+			end)
+
+			it("returns early when SecondaryCoinDisplay is absent", function()
+				row.SecondaryCoinDisplay = nil
+				RLF_RowTextMixin.StyleSecondaryCoinDisplay(row)
+				assert.stub(nsMocks.ApplyFontStyle).was_not.called()
+			end)
+
+			it("applies the secondary font size to every denomination", function()
+				RLF_RowTextMixin.StyleSecondaryCoinDisplay(row)
+				assert.stub(nsMocks.ApplyFontStyle).was.called(3)
+				local amountText = row.SecondaryCoinDisplay.goldGroup.amountText
+				assert.stub(amountText.SetFont).was.called_with(amountText, "Fonts/Expressway.TTF", 12, "SLUG, OUTLINE")
+			end)
 		end)
 	end)
 end)
