@@ -312,6 +312,16 @@ function Styling:SetFontFlags(_, key, value)
 	G_RLF.LootDisplay:ReInitQueueLabel(self.frameId)
 end
 
+function Styling:GetDisableSlug()
+	return G_RLF.DbAccessor:Styling(self.frameId).disableSlug
+end
+
+function Styling:SetDisableSlug(_, value)
+	G_RLF.DbAccessor:Styling(self.frameId).disableSlug = value
+	G_RLF.LootDisplay:UpdateRowStyles(self.frameId)
+	G_RLF.LootDisplay:ReInitQueueLabel(self.frameId)
+end
+
 function Styling:GetShadowColor()
 	local r, g, b, a = unpack(G_RLF.DbAccessor:Styling(self.frameId).fontShadowColor)
 	return r, g, b, a

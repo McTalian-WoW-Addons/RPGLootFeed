@@ -56,7 +56,10 @@ StylingBase.defaultDb = {
 		[G_RLF.FontFlags.OUTLINE] = false,
 		[G_RLF.FontFlags.THICKOUTLINE] = false,
 		[G_RLF.FontFlags.MONOCHROME] = false,
+		-- SLUG is deliberately absent: G_RLF:FontFlagsToString derives it from
+		-- the outline flags and disableSlug below.
 	},
+	disableSlug = false,
 	fontShadowColor = { 0, 0, 0, 1 },
 	fontShadowOffsetX = 1,
 	fontShadowOffsetY = -1,
@@ -675,17 +678,46 @@ end
 function StylingBase.CreateFontFlagsMultiSelect()
 	return G_RLF.ConfigCommon.CreateMultiSelect({
 		name = G_RLF.L["Font Flags"],
-		desc = G_RLF.L["FontFlagsDesc"],
-		values = {
-			[G_RLF.FontFlags.NONE] = G_RLF.L["None"],
-			[G_RLF.FontFlags.OUTLINE] = G_RLF.L["Outline"],
-			[G_RLF.FontFlags.THICKOUTLINE] = G_RLF.L["Thick Outline"],
-			[G_RLF.FontFlags.MONOCHROME] = G_RLF.L["Monochrome"],
-		},
+		-- The Slug caveat is appended rather than folded into FontFlagsDesc so
+		-- the existing translations of that key stay valid.  Resolved at display
+		-- time, not load time: the Slug probe runs in OnInitialize, which is
+		-- after this file is parsed.
+		desc = function()
+			if G_RLF.supportsSlug then
+				return G_RLF.L["FontFlagsDesc"] .. " " .. G_RLF.L["SlugFlagNote"]
+			end
+			return G_RLF.L["FontFlagsDesc"]
+		end,
+		values = function()
+			return {
+				[G_RLF.FontFlags.NONE] = G_RLF.L["None"],
+				[G_RLF.FontFlags.OUTLINE] = G_RLF.L["Outline"],
+				[G_RLF.FontFlags.THICKOUTLINE] = G_RLF.L["Thick Outline"],
+				[G_RLF.FontFlags.MONOCHROME] = G_RLF.L["Monochrome"],
+			}
+		end,
 		get = "GetFontFlags",
 		set = "SetFontFlags",
 		width = "double",
 		order = 4,
+	})
+end
+
+---@private
+function StylingBase.CreateDisableSlugToggle()
+	return G_RLF.ConfigCommon.CreateToggle({
+		name = G_RLF.L["Disable Slug"],
+		desc = G_RLF.L["DisableSlugDesc"],
+		-- Hidden rather than disabled on clients that reject the token: there is
+		-- nothing to opt out of there.  A function so the Slug probe (run in
+		-- OnInitialize) has answered by the time this is read.
+		hidden = function()
+			return not G_RLF.supportsSlug
+		end,
+		get = "GetDisableSlug",
+		set = "SetDisableSlug",
+		width = "double",
+		order = 4.5,
 	})
 end
 
@@ -778,6 +810,7 @@ function StylingBase.CreateCustomFontsGroup()
 	group.args.enableSecondaryRowText = StylingBase.CreateEnableSecondaryRowTextToggle()
 	group.args.secondaryFontSize = StylingBase.CreateSecondaryFontSizeRange()
 	group.args.fontFlags = StylingBase.CreateFontFlagsMultiSelect()
+	group.args.disableSlug = StylingBase.CreateDisableSlugToggle()
 	group.args.shadowColor = StylingBase.CreateFontShadowColor()
 	group.args.shadowHelp = StylingBase.CreateShadowHelpDescription()
 	group.args.shadowOffsetX = StylingBase.CreateFontShadowOffsetXRange()

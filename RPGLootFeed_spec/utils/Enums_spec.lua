@@ -25,6 +25,10 @@ describe("Enums", function()
 		assert.is_not_nil(ns.FontFlags)
 	end)
 
+	it("includes the SLUG font flag", function()
+		assert.are.equal("SLUG", ns.FontFlags.SLUG)
+	end)
+
 	it("defines ItemQualEnum enum", function()
 		assert.is_not_nil(ns.ItemQualEnum)
 	end)

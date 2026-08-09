@@ -34,6 +34,16 @@ G_RLF.FontFlags = {
 	OUTLINE = "OUTLINE",
 	THICKOUTLINE = "THICKOUTLINE",
 	MONOCHROME = "MONOCHROME",
+	--- Renders the font through the Slug library (GPU glyph rendering, crisp
+	--- at any scale).  Client feature added in 12.0.0.  Only reachable through
+	--- SetFont, so it has no effect on the font-object path; gated at runtime
+	--- on G_RLF.supportsSlug because the flag token is not in the UI source.
+	---
+	--- Never stored in the saved font flags -- G_RLF:FontFlagsToString derives
+	--- it, riding along with an outline the way Blizzard's own *_Outlined font
+	--- families do (Blizzard_Fonts_Shared/Shared/GameFonts.xml:317).  The user
+	--- opts out per frame with styling.disableSlug.
+	SLUG = "SLUG",
 }
 
 --- Which addon (if any) skins the row icon button.  AUTO defers to whichever

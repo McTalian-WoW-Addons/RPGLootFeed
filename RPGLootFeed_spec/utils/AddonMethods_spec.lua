@@ -202,7 +202,17 @@ describe("AddonMethods", function()
 		end)
 
 		describe("FontFlagsToString", function()
+			--- Split the result so assertions do not depend on pairs() order.
+			local function flagSet(result)
+				local set = {}
+				for flag in string.gmatch(result, "[^,%s]+") do
+					set[flag] = true
+				end
+				return set
+			end
+
 			it("converts font flags to a string", function()
+				ns.supportsSlug = false
 				nsMocks.DbAccessor.Styling.returns({
 					fontFlags = {
 						["OUTLINE"] = true,
@@ -211,11 +221,101 @@ describe("AddonMethods", function()
 				})
 				local result = ns:FontFlagsToString()
 				local count = select(2, string.gsub(result, ", ", ""))
-				---@diagnostic disable-next-line: redundant-parameter
-				assert.is_true(string.find(result, "%f[%a]OUTLINE%f[%A]") ~= nil, "Expected OUTLINE flag")
-				---@diagnostic disable-next-line: redundant-parameter
-				assert.is_true(string.find(result, "THICKOUTLINE") ~= nil, "Expected THICKOUTLINE flag")
+				local flags = flagSet(result)
+				assert.is_true(flags["OUTLINE"], "Expected OUTLINE flag")
+				assert.is_true(flags["THICKOUTLINE"], "Expected THICKOUTLINE flag")
 				assert.are.equal(1, count, "Expected a single occurrence of ', '")
+			end)
+
+			it("adds SLUG alongside OUTLINE when the client accepts the flag", function()
+				ns.supportsSlug = true
+				nsMocks.DbAccessor.Styling.returns({ fontFlags = { ["OUTLINE"] = true } })
+				local flags = flagSet(ns:FontFlagsToString())
+				assert.is_true(flags["OUTLINE"])
+				assert.is_true(flags["SLUG"])
+			end)
+
+			it("adds SLUG alongside THICKOUTLINE", function()
+				ns.supportsSlug = true
+				nsMocks.DbAccessor.Styling.returns({ fontFlags = { ["THICKOUTLINE"] = true } })
+				local flags = flagSet(ns:FontFlagsToString())
+				assert.is_true(flags["THICKOUTLINE"])
+				assert.is_true(flags["SLUG"])
+			end)
+
+			it("does not add SLUG without an outline", function()
+				ns.supportsSlug = true
+				nsMocks.DbAccessor.Styling.returns({ fontFlags = { ["MONOCHROME"] = true } })
+				assert.are.equal("MONOCHROME", ns:FontFlagsToString())
+			end)
+
+			it("does not add SLUG when the frame opts out", function()
+				ns.supportsSlug = true
+				nsMocks.DbAccessor.Styling.returns({
+					fontFlags = { ["OUTLINE"] = true },
+					disableSlug = true,
+				})
+				assert.are.equal("OUTLINE", ns:FontFlagsToString())
+			end)
+
+			it("does not add SLUG when the client does not accept the flag", function()
+				ns.supportsSlug = false
+				nsMocks.DbAccessor.Styling.returns({ fontFlags = { ["OUTLINE"] = true } })
+				assert.are.equal("OUTLINE", ns:FontFlagsToString())
+			end)
+
+			it("ignores a SLUG flag saved by an earlier build", function()
+				-- The flag lost its checkbox; an outline decides it now.
+				ns.supportsSlug = true
+				nsMocks.DbAccessor.Styling.returns({ fontFlags = { ["SLUG"] = true } })
+				assert.are.equal("", ns:FontFlagsToString())
+			end)
+
+			it("never writes to the saved flags", function()
+				ns.supportsSlug = true
+				local fontFlags = { ["OUTLINE"] = true }
+				nsMocks.DbAccessor.Styling.returns({ fontFlags = fontFlags })
+				ns:FontFlagsToString()
+				assert.is_nil(fontFlags["SLUG"])
+			end)
+		end)
+
+		describe("ProbeSlugSupport", function()
+			local function probeReturning(outlineResult, slugResult)
+				local fontString = { Hide = function() end }
+				fontString.SetFont = function(_, _, _, flags)
+					if flags == "SLUG" then
+						return slugResult
+					end
+					return outlineResult
+				end
+				stub(_G.UIParent, "CreateFontString", function()
+					return fontString
+				end)
+				nsMocks.lsm.Fetch.returns("Fonts\\FRIZQT__.TTF")
+			end
+
+			it("reports supported when the client accepts SLUG", function()
+				probeReturning(true, true)
+				assert.is_true(ns:ProbeSlugSupport())
+			end)
+
+			it("reports unsupported when the client rejects SLUG", function()
+				probeReturning(true, false)
+				assert.is_false(ns:ProbeSlugSupport())
+			end)
+
+			it("reports unsupported when the client never reports success", function()
+				-- OUTLINE is valid everywhere, so a non-true result there means
+				-- this client cannot answer the question at all.
+				probeReturning(nil, nil)
+				assert.is_false(ns:ProbeSlugSupport())
+			end)
+
+			it("reports unsupported when the font cannot be resolved", function()
+				probeReturning(true, true)
+				nsMocks.lsm.Fetch.returns(nil)
+				assert.is_false(ns:ProbeSlugSupport())
 			end)
 		end)
 

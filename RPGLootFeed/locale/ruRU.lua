@@ -15,10 +15,13 @@ end
 
 --#region 1.34.0
 -- L["Automatic"] = "Automatic"
+-- L["Disable Slug"] = "Disable Slug"
+-- L["DisableSlugDesc"] = "Turn off Slug rendering for this frame's outlined text, going back to the standard outline."
 -- L["Icon Skin"] = "Icon Skin"
 -- L["IconSkinDesc"] = "Choose which addon skins the loot row icons. Automatic uses whichever supported addon you have loaded. Square crops the icon border without needing any other addon."
 -- L["IconSkinUnavailableWarning"] = "That icon skin is not available because the addon that provides it is not loaded."
 -- L["NotInstalledSuffix"] = " (not installed)"
+-- L["SlugFlagNote"] = "Outlines are rendered through the Slug library for crisper glyphs at any size. It has no effect while Use Font Objects is on."
 -- L["Square"] = "Square"
 --#endregion
 
