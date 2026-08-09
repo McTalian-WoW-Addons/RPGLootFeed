@@ -1420,4 +1420,49 @@ describe("LootDisplayFrameMixin", function()
 			assert.spy(free.UpdatePosition).was.called_with(free, frame)
 		end)
 	end)
+
+	-- ── InitQueueLabel ─────────────────────────────────────────────────────
+	-- The "Pending Items" label is styled from the same per-frame font config
+	-- as the rows, so it has to read that frame's settings, not frame 1's.
+
+	describe("InitQueueLabel", function()
+		local stylingDb
+
+		before_each(function()
+			stylingDb = {
+				useFontObjects = false,
+				font = "GameFontNormalSmall",
+				fontFace = "Friz Quadrata TT",
+				fontSize = 12,
+				fontShadowColor = { 0.1, 0.2, 0.3, 0.4 },
+				fontShadowOffsetX = 3,
+				fontShadowOffsetY = -4,
+			}
+			ns.DbAccessor.Styling.returns(stylingDb)
+			nsMocks.lsm.Fetch.returns("Fonts\\FRIZQT__.TTF")
+			nsMocks.FontFlagsToString.returns("OUTLINE, SLUG")
+			-- Frame IDs are plain integers; 2 is the first non-main frame.
+			frame.frameType = 2
+			frame.vertDir, frame.opposite, frame.horizDir = "TOP", "BOTTOM", "LEFT"
+		end)
+
+		it("reads font flags for its own frame, not the main frame", function()
+			frame:InitQueueLabel()
+			assert.stub(nsMocks.FontFlagsToString).was.called_with(ns, 2)
+		end)
+
+		it("applies size, flags and shadow through the shared font helper", function()
+			frame:InitQueueLabel()
+			assert
+				.stub(nsMocks.ApplyFontStyle).was
+				.called_with(ns, frame.QueueLabel, "Fonts\\FRIZQT__.TTF", 12, "OUTLINE, SLUG", stylingDb.fontShadowColor, 3, -4)
+		end)
+
+		it("uses the font object path without the helper when useFontObjects is set", function()
+			stylingDb.useFontObjects = true
+			frame:InitQueueLabel()
+			assert.stub(frame.QueueLabel.SetFontObject).was.called_with(frame.QueueLabel, "GameFontNormalSmall")
+			assert.stub(nsMocks.ApplyFontStyle).was_not.called()
+		end)
+	end)
 end)

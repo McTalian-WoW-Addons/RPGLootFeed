@@ -438,7 +438,17 @@ function LootDisplayFrameMixin:InitQueueLabel()
 		if not fontPath then
 			error("Font not found: " .. tostring(stylingDb.fontFace))
 		end
-		self.QueueLabel:SetFont(fontPath, stylingDb.fontSize, G_RLF:FontFlagsToString())
+		-- Same helper the rows use, so the queue label picks up this frame's
+		-- font flags (Slug included) and shadow settings rather than diverging.
+		G_RLF:ApplyFontStyle(
+			self.QueueLabel,
+			fontPath,
+			stylingDb.fontSize,
+			G_RLF:FontFlagsToString(self.frameType),
+			stylingDb.fontShadowColor,
+			stylingDb.fontShadowOffsetX,
+			stylingDb.fontShadowOffsetY
+		)
 	end
 	self.QueueLabel:ClearAllPoints()
 	self.QueueLabel:SetPoint(anchorPoint, self, relativePoint, 0, 0)
