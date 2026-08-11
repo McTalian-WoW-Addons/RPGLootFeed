@@ -13,7 +13,7 @@ jobs:
       contents: write
       pull-requests: write
     # trunk-ignore(pinact/unpinned-action)
-    uses: McTalian-WoW-Addons/wow-build-tools/.github/workflows/toc-updater.yml@v1
+    uses: McTalian-WoW-Addons/wow-build-tools/.github/workflows/toc-updater.yml@83b931fdae0211618c649340d6cf90c3262ef8bf # v1
     with:
       addon-name: RPGLootFeed
       pr-body: |
