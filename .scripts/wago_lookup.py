@@ -238,16 +238,26 @@ REP_HELPERS = (
     / "utils"
     / "ReputationHelpers.lua"
 )
-# Blizzard ships some of these with a stray space after the underscore
-# (`ui_majorfactions_ nightfall`), so the separator is `[_ ]*`.
-ICON_FILE_RE = re.compile(
-    r"interface/icons/ui_majorfactions_[_ ]*(?:renown_)?[_ ]*([a-z0-9]+?)(?:_256)?\.blp$"
-)
 ATLAS_RE = re.compile(r"^majorfactions_icons_([a-z0-9]+?)512$")
 
+# Faction icon filenames are wildly inconsistent, so matching a strict pattern
+# produces false "no icon exists" verdicts. All of these are real, in 12.1:
+#   ui_majorfactions_storm.blp                  plural
+#   ui_majorfaction_storm.blp                   singular
+#   ui_majorfactions_ nightfall.blp             stray space (CSV quotes the line)
+#   ui_majorfaction_renown_zuljarrasforces.blp  'renown_', and the kit is only a prefix
+#   ui_prey.blp / ui_delves.blp                 no 'majorfaction' at all
+# So scan every ui_* icon for the kit name as a substring, and treat a miss as
+# "nothing matched" rather than proof that no icon exists.
+UI_ICON_RE = re.compile(r"^interface/icons/(ui_.*?)(?:_256)?\.blp$")
+# Kit-ish token from a faction icon filename, for factions that ship an icon but
+# no atlas member (radiantcore in 12.1). Tolerates singular/plural, the stray
+# space, and an optional `renown_`.
+ICON_KIT_RE = re.compile(r"^ui_majorfactions?_[ ]*(?:renown_)?[ ]*([a-z0-9]+)$")
 
-def _mapped_kits() -> Dict[str, str]:
-    """Texture kits already hardcoded in majorFactionTextureKitIconMap."""
+
+def _mapped_kits() -> Dict[str, int]:
+    """Texture kit -> FileDataID, as hardcoded in majorFactionTextureKitIconMap."""
     if not REP_HELPERS.exists():
         return {}
     text = REP_HELPERS.read_text(encoding="utf-8")
@@ -257,10 +267,8 @@ def _mapped_kits() -> Dict[str, str]:
     if not block:
         return {}
     return {
-        m.group(1).lower(): (m.group(2) or "").strip()
-        for m in re.finditer(
-            r'\["([^"]+)"\]\s*=\s*\d+,\s*(?:--\s*(.*))?', block.group(1)
-        )
+        m.group(1).lower(): int(m.group(2))
+        for m in re.finditer(r'\["([^"]+)"\]\s*=\s*(\d+),', block.group(1))
     }
 
 
@@ -277,38 +285,84 @@ def cmd_audit(args: argparse.Namespace) -> int:
         for r in db2("UiTextureAtlasMember", build, args.refresh)
         if (m := ATLAS_RE.match(r.get("CommittedName", "").lower()))
     }
-    icon_files: Dict[str, Tuple[int, str]] = {}
+    # Every ui_* icon, so a kit can be matched as a substring of the basename.
+    ui_icons: List[Tuple[int, str, str]] = []
     for fdid, name in listfile("wow", args.refresh):
-        m = ICON_FILE_RE.match(name.lower())
-        if m and "_256" not in name.lower():
-            icon_files.setdefault(m.group(1), (fdid, name))
+        lowered = name.lower()
+        # _256 files are higher-res duplicates of the base icon; keeping them
+        # makes a faction look unmapped when only its base icon is in the map.
+        if lowered.endswith("_256.blp"):
+            continue
+        m = UI_ICON_RE.match(lowered)
+        if m:
+            ui_icons.append((fdid, name, m.group(1)))
+
+    # Some factions ship an icon but no atlas member, so the live set is the
+    # union of both sources. Icon-derived tokens that merely extend an atlas kit
+    # (`zuljarrasforces` vs `zuljarra`) are the same faction, not a new one.
+    icon_kits = set()
+    for _, _, base in ui_icons:
+        m = ICON_KIT_RE.match(base)
+        if m:
+            token = m.group(1)
+            if not any(k in token or token in k for k in atlases):
+                icon_kits.add(token)
 
     known = set(mapped)
-    live = set(atlases) | set(icon_files)
+    live = set(atlases) | icon_kits
     missing = sorted(live - known)
 
-    print(
-        f"build {build}: {len(mapped)} kit(s) mapped, {len(live)} seen in game data\n"
-    )
+    print(f"build {build}: {len(mapped)} kit(s) mapped, {len(live)} live\n")
     if not missing:
         print("No unmapped major faction texture kits. Nothing to do.")
         return 0
 
-    print("UNMAPPED texture kits:\n")
+    mapped_fdids = set(mapped.values())
+    rows, unmatched = [], []
     for kit in missing:
-        icon = icon_files.get(kit)
-        if icon:
-            print(f"  {kit:<20} icon file  {icon[0]}  {icon[1]}")
+        candidates = [(f, n) for f, n, base in ui_icons if kit in base]
+        # A kit whose only icon is already in the map is the same faction under
+        # a different kit alias (`denizens` is Dream Wardens, already `dream`).
+        if candidates and all(f in mapped_fdids for f, _ in candidates):
+            continue
+        rows.append((kit, candidates))
+
+    if not rows:
+        print("No unmapped major faction texture kits. Nothing to do.")
+        return 0
+
+    print("UNMAPPED texture kits:\n")
+    for kit, candidates in rows:
+        if candidates:
+            fresh = [(f, n) for f, n in candidates if f not in mapped_fdids]
+            fdid, name = (fresh or candidates)[0]
+            extra = (
+                f"  (+{len(fresh or candidates) - 1} more)"
+                if len(fresh or candidates) > 1
+                else ""
+            )
+            print(f"  {kit:<20} icon file   {fdid}  {name}{extra}")
         else:
-            print(f"  {kit:<20} ATLAS ONLY  {atlases[kit]}  (no interface/icons file)")
+            unmatched.append(kit)
+            atlas = atlases.get(kit, "<none>")
+            print(f"  {kit:<20} no ui_* icon matched   atlas: {atlas}")
+
     print(
-        "\n'icon file' entries can be added to majorFactionTextureKitIconMap directly.\n"
-        "'ATLAS ONLY' entries have no FileDataID -- they need the atlas path\n"
-        "(see paragonIconAtlas / G_RLF.AtlasIconCoefficients for the existing\n"
-        "atlas-rendering approach), or a substitute icon.\n"
-        "Verify anything you add with: wago_lookup.py presence <fdid>",
+        "\n'icon file' rows: verify with `presence <fdid>`, then add to\n"
+        "majorFactionTextureKitIconMap. The filename is only a heuristic match on\n"
+        "the kit name -- eyeball the art before trusting it.\n",
         file=sys.stderr,
     )
+    if unmatched:
+        print(
+            "Rows with no match may still have an icon under an unrelated name\n"
+            f"(ui_prey.blp and ui_delves.blp both do). Search manually before\n"
+            "concluding a faction is atlas-only:\n"
+            + "".join(f"    wago_lookup.py find {k} --icons-only\n" for k in unmatched)
+            + "If genuinely atlas-only, it needs the atlas render path (see\n"
+            "paragonIconAtlas / G_RLF.AtlasIconCoefficients) or a substitute icon.",
+            file=sys.stderr,
+        )
     return 0
 
 
