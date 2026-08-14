@@ -5,7 +5,7 @@
     ":dependencyDashboard",
     ":semanticCommits"
   ],
-  "schedule": ["* 0-6 * * 1"],
+  "schedule": ["* 0-6 * * *"],
   "timezone": "America/Denver",
   "lockFileMaintenance": {
     "enabled": true,
