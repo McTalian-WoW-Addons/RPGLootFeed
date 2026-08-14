@@ -62,3 +62,9 @@ Typical pattern: load the module under test with `loadfile("RPGLootFeed/Features
 ## WoW API ground truth
 
 Blizzard's UI source is checked out locally at `~/code/wow-ui-source` (branch per flavor: `live` = Retail, `classic` = MoP, `classic_era` = Vanilla). Use the `wow-api-researcher` subagent for questions about API signatures, events, enums, or how Blizzard's own UI does something, rather than recalling APIs from memory.
+
+`wow-ui-source` covers API and UI _code_ only — it contains no asset listing. For **assets** (FileDataIDs, icons, texture atlases, texture kits, DB2 tables) use wago.tools via `.scripts/wago_lookup.py`; the `wago-datamining` skill has the full workflow and pitfalls.
+
+- **Never hardcode a FileDataID without checking it ships to every flavor**: `uv run .scripts/wago_lookup.py presence <fdid>`. Each client carries a different asset subset — e.g. `236681` (the default reputation icon) is missing from TBC Anniversary, which predates achievements and ships no `Achievement_*` icons. Guard non-universal assets with `G_RLF:IsRetail()` / `G_RLF:IsClassic()`.
+- **After a patch drops**, `uv run .scripts/wago_lookup.py audit` lists major faction texture kits missing from `majorFactionTextureKitIconMap`. Some factions never ship an icon file at all and are atlas-only.
+- `/api/casc/{fdid}` ignores its `product` parameter and will happily report Retail-only assets as present on Classic — only the `/api/files` listfile is authoritative. Always include a known-absent control in any presence check.
