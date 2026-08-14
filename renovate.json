@@ -5,7 +5,7 @@
     ":dependencyDashboard",
     ":semanticCommits"
   ],
-  "schedule": ["* 0-6 * * 1"],
+  "schedule": ["* 0-6 * * *"],
   "timezone": "America/Denver",
   "lockFileMaintenance": {
     "enabled": true,
@@ -13,10 +13,30 @@
   },
   "packageRules": [
     {
+      "description": "Auto-merge minor and patch updates for all packages (actions are already digest-pinned via config:best-practices)",
+      "matchDatasources": ["npm", "pypi", "python-version", "github-tags"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "automerge": true,
+      "automergeType": "pr",
+      "automergeStrategy": "squash",
+      "minimumReleaseAge": "14 days"
+    },
+    {
+      "description": "Group GitHub Actions",
+      "matchDatasources": ["github-tags"],
+      "groupName": "github-actions",
+      "groupSlug": "github-actions"
+    },
+    {
+      "description": "Group python dependencies",
+      "matchDatasources": ["pypi"],
+      "groupName": "python dependencies",
+      "groupSlug": "python-deps"
+    },
+    {
       "description": "Ignore WBT action pins",
-      "matchDatasources": ["github-tags", "github-digest", "github-releases"],
+      "matchDatasources": ["github-tags", "github-digest"],
       "matchPackageNames": ["McTalian-WoW-Addons/wow-build-tools"],
-      "matchUpdateTypes": ["pin"],
       "enabled": false
     }
   ],
