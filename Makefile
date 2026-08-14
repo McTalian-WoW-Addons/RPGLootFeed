@@ -19,6 +19,8 @@ help:
 	@echo "  i18n_fmt             - Organize/format translations"
 	@echo "  i18n_check           - Check for missing locale keys"
 	@echo "  generate_hidden_currencies - Generate hidden currencies list"
+	@echo "  faction_icon_audit  - Find major faction texture kits missing an icon mapping"
+	@echo "  asset_presence      - Check FileDataIDs ship to every flavor (FDIDS=\"1 2\")"
 	@echo "  lua_deps            - Install Lua dependencies"
 	@echo "  check_untracked_files - Check for untracked git files"
 	@echo "  options-dump        - Serialize G_RLF.options to .scripts/.output/options_dump.json"
@@ -72,6 +74,15 @@ i18n_fmt: wbt_setup
 
 generate_hidden_currencies:
 	@uv run .scripts/get_wowhead_hidden_currencies.py RPGLootFeed/Features/Currency/HiddenCurrencies.lua
+
+# Diff majorFactionTextureKitIconMap against live game data. Run after a patch.
+faction_icon_audit:
+	@uv run .scripts/wago_lookup.py audit
+
+# Verify FileDataIDs ship to every supported flavor, e.g.
+#   make asset_presence FDIDS="236681 894556"
+asset_presence:
+	@uv run .scripts/wago_lookup.py presence $(FDIDS)
 
 test:
 	@$(ROCKSBIN)/busted RPGLootFeed_spec
