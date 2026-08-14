@@ -20,7 +20,15 @@ uv run .scripts/wago_lookup.py find ui_majorfactions --icons-only
 uv run .scripts/wago_lookup.py atlas majorfactions_icons_
 uv run .scripts/wago_lookup.py kits ritual
 uv run .scripts/wago_lookup.py audit                # unmapped major faction texture kits
+
+# extract needs Pillow; everything else is stdlib-only
+uv run --with pillow .scripts/wago_lookup.py extract 7903180 majorfactions_icons_ritualsites512
 ```
+
+`extract` writes PNGs to `.scripts/.output/wago-icons`. All-digit arguments are
+FileDataIDs, anything else is an atlas member name (cropped out of its sheet).
+**Look at the art before hardcoding an ID** — a filename matching a faction name
+is a heuristic, not proof.
 
 ## The rule that matters
 
@@ -51,22 +59,41 @@ If an asset is not universal, either pick a different one or branch on
 - **Cloudflare 403s the default urllib/python User-Agent.** The script sets a browser UA.
 - **Listfile downloads are large** (Retail ~40MB) and intermittently 502/504. The script
   retries and caches; pass `--refresh` after a patch drops.
-- **Blizzard typos exist in asset names.** `ui_majorfactions_ nightfall.blp` and
-  `ui_majorfactions_ karesh.blp` both carry a stray space. Match loosely.
+- **Faction icon filenames are wildly inconsistent.** All of these are real in 12.1:
+  `ui_majorfactions_storm.blp` (plural), `ui_majorfaction_storm.blp` (singular),
+  `ui_majorfactions_nightfall.blp` but with a stray space after the underscore,
+  `ui_majorfaction_renown_zuljarrasforces.blp`
+  (`renown_`, and the kit name is only a prefix), and `ui_prey.blp` / `ui_delves.blp`
+  (no `majorfaction` at all). Never conclude a faction has no icon from one pattern
+  failing to match — `find` under several spellings first.
+- **Filenames containing spaces are quoted in the listfile CSV.** A naive
+  `grep '^[0-9]\+;interface/icons/'` silently skips every entry whose name carries
+  the stray space (nightfall, karesh) because the line starts with a quote.
+  `listfile()` strips the quotes; ad-hoc greps do not. Use the script.
+- **BLP2 encoding 3 (raw BGRA) breaks Pillow** with "Unknown BLP encoding 3", and
+  the major faction atlas sheets all use it. `extract` handles it; anything else
+  decoding BLPs needs to.
 
 ## Adding an icon for a new faction
 
-1. `uv run .scripts/wago_lookup.py audit` — lists texture kits present in game data but
-   missing from `majorFactionTextureKitIconMap` in `RPGLootFeed/utils/ReputationHelpers.lua`.
-2. For a kit reported with an **icon file**, add `["<kit>"] = <fdid>,` to that map with a
-   trailing comment naming the faction. Run `presence <fdid>` first.
-3. For a kit reported as **ATLAS ONLY**, there is no FileDataID. Some factions never ship
-   an `interface/icons/*.blp` — Ritual Sites (12.0.5) only ever shipped
-   `majorfactions_icons_ritualsites512`, frame art, and a minimap icon. Options: render the
-   atlas (the paragon reward bag already does this via `paragonIconAtlas` +
-   `G_RLF.AtlasIconCoefficients`), or substitute a thematically close icon file.
-4. The map is keyed by `mfd.textureKit:lower()` from `C_MajorFactions.GetMajorFactionData`,
+1. `make faction_icon_audit` — lists texture kits present in game data but missing from
+   `majorFactionTextureKitIconMap` in `RPGLootFeed/utils/ReputationHelpers.lua`.
+2. For a kit reported with an **icon file**, confirm the art is really that faction's:
+   `make faction_icon_preview TARGETS="<fdid>"`, then look at the PNG. The audit matches
+   on filename, which is a guess.
+3. Check it ships everywhere: `make asset_presence FDIDS="<fdid>"`. Then add
+   `["<kit>"] = <fdid>,` to the map with a trailing comment naming the faction.
+4. For a kit reported as **no `ui_*` icon matched**, run the suggested `find` searches
+   before believing it — `ui_prey.blp` and `ui_delves.blp` are both real icons that no
+   faction-name pattern would catch. If it is genuinely atlas-only (Ritual Sites in
+   12.0.5 only ever shipped `majorfactions_icons_ritualsites512`, frame art and a minimap
+   icon), it needs the atlas render path or a substitute icon.
+5. The map is keyed by `mfd.textureKit:lower()` from `C_MajorFactions.GetMajorFactionData`,
    so the key must be the lowercased kit prefix — `atlas`/`kits` output already matches.
+
+Beware kit aliases: `denizens`, `gold` and `vines` are Dream Wardens, Silvermoon Court and
+Hara'ti, already mapped as `dream`, `light` and `root` pointing at the same FileDataIDs.
+The audit dedupes on FileDataID, so an alias only surfaces if it has genuinely new art.
 
 Note `factionIdIconMap` in the same file is keyed by numeric faction ID instead, for
 non-major factions. Faction IDs and names come from the `Faction` DB2 table

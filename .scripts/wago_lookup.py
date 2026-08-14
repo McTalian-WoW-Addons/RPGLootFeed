@@ -366,6 +366,102 @@ def cmd_audit(args: argparse.Namespace) -> int:
     return 0
 
 
+def _require_pillow():
+    """Pillow is only needed by `extract`, so it stays an optional import."""
+    try:
+        from PIL import Image
+    except ImportError:
+        raise SystemExit(
+            "extract needs Pillow, which the other subcommands do not.\n"
+            "Run it as:  uv run --with pillow .scripts/wago_lookup.py extract ...\n"
+            'or:         make faction_icon_preview TARGETS="..."'
+        ) from None
+    return Image
+
+
+def _blp2_raw_bgra(data: bytes, Image):
+    """Decode BLP2 encoding 3 (uncompressed BGRA).
+
+    Pillow's BLP plugin raises "Unknown BLP encoding 3" on these, and the
+    major faction atlas sheets all use it, so it has to be handled here.
+    Palettised (1) and DXT (2) BLPs are left to Pillow.
+    """
+    import struct
+
+    width, height = struct.unpack_from("<II", data, 12)
+    offsets = struct.unpack_from("<16I", data, 20)
+    sizes = struct.unpack_from("<16I", data, 84)
+    mip0 = data[offsets[0] : offsets[0] + sizes[0]]
+    expected = width * height * 4
+    if len(mip0) != expected:
+        raise ValueError(
+            f"mip0 is {len(mip0)} bytes, expected {expected} for {width}x{height}"
+        )
+    return Image.frombytes("RGBA", (width, height), mip0, "raw", "BGRA")
+
+
+def _blp_image(fdid: int, build: str, Image):
+    data = _cached(f"casc-{fdid}.blp", f"{BASE}/api/casc/{fdid}?version={build}")
+    if not data.startswith(b"BLP"):
+        raise SystemExit(f"FileDataID {fdid} did not return a BLP (got {data[:16]!r})")
+    try:
+        return Image.open(io.BytesIO(data)).convert("RGBA")
+    except Exception:
+        return _blp2_raw_bgra(data, Image)
+
+
+def cmd_extract(args: argparse.Namespace) -> int:
+    """Save icons / atlas members as PNGs so the art can actually be eyeballed."""
+    Image = _require_pillow()
+    build = args.build or builds()["wow"]
+    out_dir = Path(args.out)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    members = sheets = None
+    for target in args.targets:
+        if target.isdigit():
+            fdid = int(target)
+            img = _blp_image(fdid, build, Image)
+            label = f"fdid-{fdid}"
+            detail = f"{img.width}x{img.height}"
+        else:
+            if members is None:
+                members = {
+                    r["CommittedName"].lower(): r
+                    for r in db2("UiTextureAtlasMember", build, args.refresh)
+                }
+                sheets = {
+                    r["ID"]: r for r in db2("UiTextureAtlas", build, args.refresh)
+                }
+            row = members.get(target.lower())
+            if not row:
+                print(f"no atlas member named {target!r}", file=sys.stderr)
+                continue
+            sheet = sheets[row["UiTextureAtlasID"]]
+            img = _blp_image(int(sheet["FileDataID"]), build, Image).crop(
+                (
+                    int(row["CommittedLeft"]),
+                    int(row["CommittedTop"]),
+                    int(row["CommittedRight"]),
+                    int(row["CommittedBottom"]),
+                )
+            )
+            label = target.lower()
+            detail = (
+                f"{img.width}x{img.height} from atlas {row['UiTextureAtlasID']}"
+                f" (fdid {sheet['FileDataID']})"
+            )
+
+        if args.scale > 1:
+            img = img.resize(
+                (img.width * args.scale, img.height * args.scale), Image.NEAREST
+            )
+        path = out_dir / f"{label}.png"
+        img.save(path)
+        print(f"{label}\t{detail}\t-> {path}")
+    return 0
+
+
 def cmd_builds(args: argparse.Namespace) -> int:
     latest = builds()
     for product, version in sorted(latest.items()):
@@ -433,6 +529,21 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
         "--build", help="full build, e.g. 12.1.0.69299 (default: latest Retail)"
     )
     s.set_defaults(func=cmd_audit)
+
+    s = sub.add_parser(
+        "extract",
+        help="save icons / atlas members as PNGs (needs Pillow: uv run --with pillow)",
+    )
+    s.add_argument(
+        "targets",
+        nargs="+",
+        metavar="FDID|ATLAS_MEMBER",
+        help="all-digit args are FileDataIDs, anything else is an atlas member name",
+    )
+    s.add_argument("--out", default=str(CACHE_DIR.parent / "wago-icons"))
+    s.add_argument("--scale", type=int, default=4, help="nearest-neighbour upscale")
+    s.add_argument("--build", help="full build (default: latest Retail)")
+    s.set_defaults(func=cmd_extract)
 
     s = sub.add_parser("builds", help="list the latest build per product")
     s.set_defaults(func=cmd_builds)

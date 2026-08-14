@@ -21,6 +21,7 @@ help:
 	@echo "  generate_hidden_currencies - Generate hidden currencies list"
 	@echo "  faction_icon_audit  - Find major faction texture kits missing an icon mapping"
 	@echo "  asset_presence      - Check FileDataIDs ship to every flavor (FDIDS=\"1 2\")"
+	@echo "  faction_icon_preview - Save icons/atlas members as PNGs (TARGETS=\"...\")"
 	@echo "  lua_deps            - Install Lua dependencies"
 	@echo "  check_untracked_files - Check for untracked git files"
 	@echo "  options-dump        - Serialize G_RLF.options to .scripts/.output/options_dump.json"
@@ -83,6 +84,12 @@ faction_icon_audit:
 #   make asset_presence FDIDS="236681 894556"
 asset_presence:
 	@uv run .scripts/wago_lookup.py presence $(FDIDS)
+
+# Save icons / atlas members as PNGs so the art can be eyeballed, e.g.
+#   make faction_icon_preview TARGETS="7903180 majorfactions_icons_ritualsites512"
+# Digits are FileDataIDs, anything else is an atlas member name.
+faction_icon_preview:
+	@uv run --with pillow .scripts/wago_lookup.py extract $(TARGETS)
 
 test:
 	@$(ROCKSBIN)/busted RPGLootFeed_spec
