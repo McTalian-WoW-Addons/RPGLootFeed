@@ -58,7 +58,13 @@ If an asset is not universal, either pick a different one or branch on
   wrong conclusion once already.
 - **Cloudflare 403s the default urllib/python User-Agent.** The script sets a browser UA.
 - **Listfile downloads are large** (Retail ~40MB) and intermittently 502/504. The script
-  retries and caches; pass `--refresh` after a patch drops.
+  retries and caches. Cached listfiles are **build-pinned by filename**, so a patch cannot
+  be answered from last patch's data — a new build is a file that has not been downloaded
+  yet, and re-downloads itself on next use with a note saying so. `make wago_cache` shows
+  cached vs live builds; `make wago_prune` deletes superseded ones.
+- **If wago is unreachable**, the tool falls back to the last known build list and warns
+  loudly that it could not confirm the build is current. Pass `--strict` to make that an
+  error instead — worth using in any unattended or scripted run.
 - **Faction icon filenames are wildly inconsistent.** All of these are real in 12.1:
   `ui_majorfactions_storm.blp` (plural), `ui_majorfaction_storm.blp` (singular),
   `ui_majorfactions_nightfall.blp` but with a stray space after the underscore,

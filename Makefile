@@ -22,6 +22,9 @@ help:
 	@echo "  faction_icon_audit  - Find major faction texture kits missing an icon mapping"
 	@echo "  asset_presence      - Check FileDataIDs ship to every flavor (FDIDS=\"1 2\")"
 	@echo "  faction_icon_preview - Save icons/atlas members as PNGs (TARGETS=\"...\")"
+	@echo "  wago_cache          - Show cached listfiles vs live builds"
+	@echo "  wago_refresh        - Re-download listfiles (FLAVOR=\"Retail\" for one)"
+	@echo "  wago_prune          - Delete listfiles for superseded builds"
 	@echo "  lua_deps            - Install Lua dependencies"
 	@echo "  check_untracked_files - Check for untracked git files"
 	@echo "  options-dump        - Serialize G_RLF.options to .scripts/.output/options_dump.json"
@@ -90,6 +93,21 @@ asset_presence:
 # Digits are FileDataIDs, anything else is an atlas member name.
 faction_icon_preview:
 	@uv run --with pillow .scripts/wago_lookup.py extract $(TARGETS)
+
+# Show which flavor listfiles are cached and whether they match the live build.
+wago_cache:
+	@uv run .scripts/wago_lookup.py cache
+
+# Re-download listfiles. All flavors by default, or one, e.g.
+#   make wago_refresh FLAVOR="Retail"
+# Listfiles are build-pinned by filename, so a new build re-downloads itself on
+# next use; this is for forcing a refetch of the same build.
+wago_refresh:
+	@uv run .scripts/wago_lookup.py cache --refresh $(if $(FLAVOR),--flavor "$(FLAVOR)")
+
+# Delete listfiles for builds that are no longer current.
+wago_prune:
+	@uv run .scripts/wago_lookup.py cache --prune
 
 test:
 	@$(ROCKSBIN)/busted RPGLootFeed_spec

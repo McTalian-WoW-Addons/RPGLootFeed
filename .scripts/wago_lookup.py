@@ -17,9 +17,15 @@ Usage (see `--help` on any subcommand):
     uv run .scripts/wago_lookup.py kits ritual
     uv run .scripts/wago_lookup.py builds
 
-Downloads are cached under .scripts/.output/wago-cache (gitignored). Pass
---refresh to re-fetch. Listfiles are large (Retail is ~40MB); the first call
-for a product is slow, subsequent ones are instant.
+Downloads are cached under .scripts/.output/wago-cache (gitignored). Listfiles
+are large (Retail is ~40MB); the first call for a product is slow, subsequent
+ones are instant.
+
+Cache filenames carry the build they were fetched for, so a stale cache cannot
+silently answer a question about a newer patch -- a new build is simply a file
+that has not been downloaded yet. `cache` reports cached vs live builds, and
+`cache --prune` drops superseded ones. If wago is unreachable the tool falls
+back to the last known build list with a warning; --strict makes that an error.
 
 IMPORTANT: https://wago.tools/api/casc/{fdid} does NOT honour its `product`
 parameter -- it returns HTTP 200 for Retail-only assets queried against
@@ -102,14 +108,48 @@ def _cached(name: str, url: str, refresh: bool = False) -> bytes:
     return data
 
 
-def builds() -> Dict[str, str]:
+# How long a cached /api/builds/latest response is trusted before re-checking.
+# Short enough to notice a patch the day it drops, long enough that a batch of
+# subcommands in one sitting costs a single request.
+BUILDS_TTL_SECONDS = 900
+STRICT = False  # set from --strict; turn stale-cache fallbacks into errors
+
+
+def builds(refresh: bool = False) -> Dict[str, str]:
     """Latest build version string per product.
 
     The endpoint returns either a bare version string or an object carrying
     `version` plus CDN config hashes, depending on the product; normalise both
     down to the version string.
+
+    Cached with a short TTL, and falls back to the last good response if
+    wago is unreachable -- being offline should degrade to "possibly stale",
+    not "cannot run at all".
     """
-    raw = json.loads(_fetch(f"{BASE}/api/builds/latest", timeout=60).decode())
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    path = CACHE_DIR / "builds-latest.json"
+    fresh_enough = (
+        path.exists() and (time.time() - path.stat().st_mtime) < BUILDS_TTL_SECONDS
+    )
+    raw = None
+    if fresh_enough and not refresh:
+        raw = json.loads(path.read_text())
+    else:
+        try:
+            data = _fetch(f"{BASE}/api/builds/latest", timeout=60)
+            path.write_bytes(data)
+            raw = json.loads(data.decode())
+        except Exception as e:  # noqa: BLE001
+            if not path.exists():
+                raise
+            msg = (
+                f"could not reach wago ({e}); using build list cached at {_mtime(path)}"
+            )
+            if STRICT:
+                raise SystemExit(f"--strict: {msg}") from None
+            sys.stderr.write(f"WARNING: {msg}\n")
+            raw = json.loads(path.read_text())
+
     out: Dict[str, str] = {}
     for product, value in raw.items():
         if isinstance(value, dict):
@@ -121,13 +161,60 @@ def builds() -> Dict[str, str]:
     return out
 
 
+def _mtime(path: Path) -> str:
+    return time.strftime("%Y-%m-%d %H:%M", time.localtime(path.stat().st_mtime))
+
+
+def _cached_builds_for(product: str) -> List[str]:
+    """Builds of `product` already on disk, newest-looking last."""
+    prefix = f"files-{product}-"
+    found = [
+        p.name[len(prefix) : -len(".csv")] for p in CACHE_DIR.glob(f"{prefix}*.csv")
+    ]
+    return sorted(found, key=_version_key)
+
+
+def _version_key(version: str):
+    return tuple(int(part) if part.isdigit() else 0 for part in version.split("."))
+
+
 def listfile(product: str, refresh: bool = False) -> List[Tuple[int, str]]:
-    """Every file present in a product's latest build, as (fdid, filename)."""
-    raw = _cached(
-        f"files-{product}.csv",
-        f"{BASE}/api/files?product={product}&format=csv",
-        refresh,
-    )
+    """Every file present in a product's current build, as (fdid, filename).
+
+    The build is baked into the cache filename, so a patch cannot be served
+    from a stale cache -- a new build is simply a different file that has not
+    been downloaded yet. This is deliberate: silently answering "is this icon
+    in the game" from last patch's data is the failure mode most likely to
+    produce a confidently wrong result.
+    """
+    try:
+        build = builds().get(product)
+    except Exception:  # noqa: BLE001
+        build = None
+
+    if not build:
+        cached = _cached_builds_for(product)
+        if not cached:
+            raise SystemExit(
+                f"cannot determine the current build for {product} and nothing "
+                f"is cached for it -- check network access to {BASE}"
+            )
+        build = cached[-1]
+        msg = f"using cached {product} build {build}; could not confirm it is current"
+        if STRICT:
+            raise SystemExit(f"--strict: {msg}")
+        sys.stderr.write(f"WARNING: {msg}\n")
+
+    name = f"files-{product}-{build}.csv"
+    if not (CACHE_DIR / name).exists() and not refresh:
+        superseded = [b for b in _cached_builds_for(product) if b != build]
+        if superseded:
+            sys.stderr.write(
+                f"{product}: new build {build} (cached: {', '.join(superseded)});"
+                " downloading current listfile\n"
+            )
+
+    raw = _cached(name, f"{BASE}/api/files?product={product}&format=csv", refresh)
     out: List[Tuple[int, str]] = []
     for line in raw.decode("utf-8", "replace").splitlines():
         fdid, _, name = line.partition(";")
@@ -462,6 +549,62 @@ def cmd_extract(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_cache(args: argparse.Namespace) -> int:
+    """Inspect, refresh, or prune the local listfile cache."""
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    flavors = _selected_flavors(args)
+    latest = builds(refresh=True) if args.refresh else builds()
+
+    if args.refresh:
+        for label, product in flavors.items():
+            build = latest.get(product, "?")
+            sys.stderr.write(f"--- {label} ({product}) {build}\n")
+            listfile(product, refresh=True)
+
+    if args.prune:
+        removed = 0
+        for product in FLAVORS.values():
+            current = latest.get(product)
+            for build in _cached_builds_for(product):
+                if build != current:
+                    (CACHE_DIR / f"files-{product}-{build}.csv").unlink()
+                    print(f"pruned {product} {build}")
+                    removed += 1
+            # Listfiles cached before builds were baked into the filename.
+            legacy = CACHE_DIR / f"files-{product}.csv"
+            if legacy.exists():
+                legacy.unlink()
+                print(f"pruned {product} (legacy un-pinned cache)")
+                removed += 1
+        print(f"{removed} superseded listfile(s) removed")
+
+    width = max(len(lbl) for lbl in FLAVORS)
+    print(f"\n{'flavor':<{width}}  {'current build':<18} {'cached':<18} status")
+    for label, product in FLAVORS.items():
+        current = latest.get(product, "?")
+        cached = _cached_builds_for(product)
+        path = CACHE_DIR / f"files-{product}-{current}.csv"
+        if path.exists():
+            status = f"ok (fetched {_mtime(path)})"
+            have = current
+        elif cached:
+            status = "STALE - will re-download on next use"
+            have = cached[-1]
+        else:
+            status = "not cached - will download on first use"
+            have = "-"
+        print(f"{label:<{width}}  {current:<18} {have:<18} {status}")
+
+    db2_files = sorted(CACHE_DIR.glob("db2-*.csv"))
+    if db2_files:
+        print(
+            f"\n{len(db2_files)} cached DB2 export(s); these are build-pinned by name:"
+        )
+        for p in db2_files:
+            print(f"  {p.name}")
+    return 0
+
+
 def cmd_builds(args: argparse.Namespace) -> int:
     latest = builds()
     for product, version in sorted(latest.items()):
@@ -483,6 +626,11 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     p.add_argument("--refresh", action="store_true", help="bypass the local cache")
+    p.add_argument(
+        "--strict",
+        action="store_true",
+        help="fail instead of falling back to a cache whose build cannot be confirmed current",
+    )
     sub = p.add_subparsers(dest="cmd", required=True)
 
     s = sub.add_parser("info", help="resolve FileDataID(s) to filenames")
@@ -548,7 +696,19 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
     s = sub.add_parser("builds", help="list the latest build per product")
     s.set_defaults(func=cmd_builds)
 
+    s = sub.add_parser(
+        "cache", help="show cache status; optionally refresh or prune it"
+    )
+    s.add_argument("--refresh", action="store_true", help="re-download listfiles")
+    s.add_argument("--prune", action="store_true", help="delete superseded builds")
+    s.add_argument(
+        "--flavor", choices=list(FLAVORS), help="limit --refresh to one flavor"
+    )
+    s.set_defaults(func=cmd_cache)
+
     args = p.parse_args(list(argv) if argv is not None else None)
+    global STRICT
+    STRICT = args.strict
     return args.func(args)
 
 
