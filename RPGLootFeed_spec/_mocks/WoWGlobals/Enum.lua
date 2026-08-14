@@ -20,6 +20,16 @@ _G.Enum = {
 		Heirloom = 7,
 		WoWToken = 8,
 	},
+	-- Values match SimpleStatusBarConstantsDocumentation.lua; identical on live,
+	-- classic, classic_era and classic_anniversary.
+	StatusBarFillStyle = {
+		Standard = 0,
+		StandardNoRangeFill = 1,
+		Center = 2,
+		Reverse = 3,
+	},
+	StatusBarInterpolation = { Immediate = 0, ExponentialEaseOut = 1 },
+	StatusBarTimerDirection = { ElapsedTime = 0, RemainingTime = 1 },
 }
 
 return enums

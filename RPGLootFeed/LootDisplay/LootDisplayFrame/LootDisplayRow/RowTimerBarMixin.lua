@@ -9,6 +9,20 @@ local G_RLF = ns
 ---@field _timerBarCoordinatorSubscribed boolean
 RLF_RowTimerBarMixin = {}
 
+--- Widget fill styles keyed by the config's drainDirection value.
+---
+--- The config stores UI-facing direction keys, not widget enum names, and the
+--- two are mirror images: a bar labelled "Right to Left" empties from its right
+--- edge, which is a Standard fill (anchored left, so the boundary recedes
+--- leftward as the value drops). "NORMAL" is not a StatusBarFillStyle at all --
+--- passing it straight through errors inside the widget.
+local fillStyleByDrainDirection = Enum.StatusBarFillStyle
+		and {
+			REVERSE = Enum.StatusBarFillStyle.Standard,
+			NORMAL = Enum.StatusBarFillStyle.Reverse,
+		}
+	or {}
+
 --- Apply configuration to the timer bar (height, color, alpha, drain direction).
 --- Called during row initialization and when animation settings change.
 function RLF_RowTimerBarMixin:StyleTimerBar()
@@ -17,15 +31,16 @@ function RLF_RowTimerBarMixin:StyleTimerBar()
 	end
 
 	local animCfg = G_RLF.DbAccessor:Animations(self.frameType)
-	if not animCfg or not animCfg.timerBar then
+	local timerBarCfg = animCfg and animCfg.timerBar
+	-- Styling must never reveal the bar. A disabled bar stays hidden even though
+	-- its config table is always present (the AceDB "**" wildcard supplies it for
+	-- every frame), and StartTimerBar() is the only thing allowed to Show() it.
+	if not timerBarCfg or not timerBarCfg.enabled then
 		self.TimerBar:Hide()
 		return
 	end
 
-	local timerBarCfg = animCfg.timerBar
-
 	-- Set height
-	local currentWidth = self.TimerBar:GetWidth()
 	self.TimerBar:SetHeight(timerBarCfg.height or 2)
 
 	-- Reposition with yOffset so the bar can sit above the row border
@@ -40,9 +55,13 @@ function RLF_RowTimerBarMixin:StyleTimerBar()
 	self.TimerBar:SetStatusBarColor(color[1], color[2], color[3], alpha)
 
 	-- Set fill style (drain direction)
-	local drainDirection = timerBarCfg.drainDirection or "REVERSE"
-	if C_StatusBar and C_StatusBar.SetFillStyle then
-		self.TimerBar:SetFillStyle(drainDirection)
+	-- SetFillStyle is a StatusBar widget method, so probe the widget itself.
+	-- The old guard tested the unrelated C_StatusBar namespace and never passed.
+	-- An unrecognized drainDirection leaves the XML default (Standard) in place,
+	-- which is the same thing the default "REVERSE" config value maps to.
+	local fillStyle = fillStyleByDrainDirection[timerBarCfg.drainDirection or "REVERSE"]
+	if fillStyle and self.TimerBar.SetFillStyle then
+		self.TimerBar:SetFillStyle(fillStyle)
 	end
 end
 
@@ -66,7 +85,7 @@ function RLF_RowTimerBarMixin:ShouldShowTimerBar()
 	-- Sample rows always show timer bar (for styling preview)
 	if self.isSampleRow then
 		local animCfg = G_RLF.DbAccessor:Animations(self.frameType)
-		return animCfg and animCfg.timerBar and animCfg.timerBar.enabled
+		return (animCfg and animCfg.timerBar and animCfg.timerBar.enabled) and true or false
 	end
 
 	-- Check if exit animation is disabled
@@ -91,8 +110,11 @@ function RLF_RowTimerBarMixin:StartTimerBar()
 
 	local duration = self.showForSeconds or 5
 
-	-- Retail: Use C_DurationUtil for hardware-accelerated countdown
-	if C_DurationUtil and C_DurationUtil.CreateDuration then
+	-- C_DurationUtil drives the drain natively where it exists, which is every
+	-- flavor we currently ship (it is documented on live, classic, classic_era
+	-- and classic_anniversary alike) -- the guard is a floor, not a Retail check.
+	local nativeDuration = false
+	if C_DurationUtil and C_DurationUtil.CreateDuration and self.TimerBar.SetTimerDuration then
 		if not self._timerBarDuration then
 			self._timerBarDuration = C_DurationUtil.CreateDuration()
 		end
@@ -103,17 +125,21 @@ function RLF_RowTimerBarMixin:StartTimerBar()
 			Enum.StatusBarInterpolation.Immediate,
 			Enum.StatusBarTimerDirection.RemainingTime
 		)
-		self.TimerBar:Show()
-	else
-		-- Classic: Use subscription-based coordinator for efficient OnUpdate
-		if not G_RLF.TimerBarCoordinator then
-			G_RLF.TimerBarCoordinator = ns.NewTimerBarCoordinator()
-		end
-
-		self._timerBarCoordinatorSubscribed = true
-		G_RLF.TimerBarCoordinator:Subscribe(self, duration)
-		self.TimerBar:Show()
+		nativeDuration = true
 	end
+
+	-- Subscribe either way. A native duration animates the value but never
+	-- signals completion, so without this the drained background track lingers
+	-- for the rest of the fade-out; hideOnly keeps the coordinator from fighting
+	-- the native driver for control of the value. Without a native duration the
+	-- coordinator drives the value itself.
+	if not G_RLF.TimerBarCoordinator then
+		G_RLF.TimerBarCoordinator = ns.NewTimerBarCoordinator()
+	end
+
+	self._timerBarCoordinatorSubscribed = true
+	G_RLF.TimerBarCoordinator:Subscribe(self, duration, nativeDuration)
+	self.TimerBar:Show()
 end
 
 --- Stop the timer bar countdown and reset to full.

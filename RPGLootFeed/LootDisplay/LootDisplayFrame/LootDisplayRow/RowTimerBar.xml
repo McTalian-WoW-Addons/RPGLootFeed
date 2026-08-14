@@ -3,8 +3,12 @@
 	<Frame name="RLF_RowTimerBarTemplate" virtual="true" mixin="RLF_RowTimerBarMixin">
 		<Frames>
 			<!-- Timer bar StatusBar docked at the bottom of the row -->
-			<!-- By default appears as a thin grey bar that drains from right to left -->
-			<StatusBar parentKey="TimerBar">
+			<!-- When enabled, appears as a thin bar that drains from right to left -->
+			<!-- Starts hidden: only StartTimerBar() may show it, and only when the
+			     feature is enabled. The BACKGROUND track below draws whenever this
+			     StatusBar is shown, independent of the bar's value, so leaving it
+			     visible would render a solid bar for disabled rows. -->
+			<StatusBar parentKey="TimerBar" hidden="true">
 				<Anchors>
 					<Anchor point="BOTTOMLEFT" relativePoint="BOTTOMLEFT" />
 					<Anchor point="BOTTOMRIGHT" relativePoint="BOTTOMRIGHT" />

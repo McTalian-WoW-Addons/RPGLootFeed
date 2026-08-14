@@ -8,6 +8,8 @@ local G_RLF = ns
 ---@field row RLF_LootDisplayRow
 ---@field startTime number
 ---@field duration number
+---@field hideOnly boolean When true the bar's value is driven by a native
+--- C_DurationUtil duration and the coordinator only watches for completion.
 
 ---@class RLF_TimerBarCoordinator
 ---@field _subscribers RLF_TimerBarSubscriber[]
@@ -15,7 +17,9 @@ local G_RLF = ns
 RLF_TimerBarCoordinator = {}
 
 --- Create a new TimerBarCoordinator instance.
---- This is a shared OnUpdate driver for Classic mode (Lua-driven timer bars).
+--- One shared OnUpdate for every active timer bar. It drives the bar's value
+--- when nothing else does, and watches for completion so the bar can be hidden
+--- even when a native C_DurationUtil duration owns the value (see hideOnly).
 ---@return RLF_TimerBarCoordinator
 function ns.NewTimerBarCoordinator()
 	local self = setmetatable({}, { __index = RLF_TimerBarCoordinator })
@@ -34,7 +38,10 @@ end
 --- Automatically starts the OnUpdate loop if this is the first subscriber.
 ---@param row RLF_LootDisplayRow
 ---@param duration number Countdown duration in seconds
-function RLF_TimerBarCoordinator:Subscribe(row, duration)
+---@param hideOnly boolean? Set when the row already has a native C_DurationUtil
+--- duration driving the bar's value; the coordinator then only hides the bar on
+--- completion and leaves min/max and value untouched.
+function RLF_TimerBarCoordinator:Subscribe(row, duration, hideOnly)
 	if not row or not row.TimerBar then
 		return
 	end
@@ -45,6 +52,7 @@ function RLF_TimerBarCoordinator:Subscribe(row, duration)
 			-- Already subscribed; update duration
 			subscriber.startTime = GetTime()
 			subscriber.duration = duration
+			subscriber.hideOnly = hideOnly or false
 			return
 		end
 	end
@@ -54,6 +62,7 @@ function RLF_TimerBarCoordinator:Subscribe(row, duration)
 		row = row,
 		startTime = GetTime(),
 		duration = duration,
+		hideOnly = hideOnly or false,
 	})
 
 	-- Start OnUpdate loop if first subscriber
@@ -61,9 +70,11 @@ function RLF_TimerBarCoordinator:Subscribe(row, duration)
 		self._updateFrame:Show()
 	end
 
-	-- Initialize bar to full
-	row.TimerBar:SetMinMaxValues(0, duration)
-	row.TimerBar:SetValue(duration)
+	-- Initialize bar to full, unless a native duration owns the value
+	if not hideOnly then
+		row.TimerBar:SetMinMaxValues(0, duration)
+		row.TimerBar:SetValue(duration)
+	end
 end
 
 --- Unsubscribe a row from timer bar updates.
@@ -101,15 +112,24 @@ function RLF_TimerBarCoordinator:_OnUpdate(elapsed)
 			local remaining = subscriber.duration - elapsed_since_start
 
 			if remaining <= 0 then
-				-- Countdown finished; hide and unsubscribe
-				row.TimerBar:SetValue(0)
+				-- Countdown finished; hide and unsubscribe. Hiding matters: the
+				-- StatusBar's background track is drawn regardless of value, so
+				-- a drained bar would otherwise linger for the rest of the fade.
+				if not subscriber.hideOnly then
+					row.TimerBar:SetValue(0)
+				end
+				row.TimerBar:Hide()
+				row._timerBarCoordinatorSubscribed = false
 				self:Unsubscribe(row)
-			else
+			elseif not subscriber.hideOnly then
 				-- Update bar value
 				row.TimerBar:SetValue(remaining)
 			end
 		else
 			-- Row invalid or hidden; clean up subscription
+			if row then
+				row._timerBarCoordinatorSubscribed = false
+			end
 			self:Unsubscribe(row)
 		end
 	end

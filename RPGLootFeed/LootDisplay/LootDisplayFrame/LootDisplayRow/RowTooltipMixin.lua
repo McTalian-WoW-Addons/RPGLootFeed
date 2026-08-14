@@ -78,6 +78,9 @@ function RLF_RowTooltipMixin:SetupTooltip(isHistoryFrame)
 					frame:ReleasePin(self)
 				end
 				self.ExitAnimation:Play()
+				-- Resume the countdown alongside the exit animation, matching the
+				-- Icon OnLeave and row OnLeave handlers.
+				self:StartTimerBar()
 			end
 		end
 		hideTooltip()

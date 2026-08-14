@@ -101,6 +101,33 @@ describe("LootDisplayRowMixin", function()
 		return r, captures
 	end
 
+	-- ── Styles ─────────────────────────────────────────────────────────────
+
+	describe("Styles", function()
+		-- Every timer bar option setter routes through UpdateRowStyles -> Styles,
+		-- so omitting StyleTimerBar here left live rows unable to pick up a
+		-- disabled (or restyled) timer bar.
+		it("restyles the timer bar so config changes reach live rows", function()
+			local r = buildRow()
+			for _, method in ipairs({
+				"StyleBackground",
+				"StyleRowBackdrop",
+				"StyleIcon",
+				"StyleIconHighlight",
+				"StyleUnitPortrait",
+				"StyleTimerBar",
+				"HandlerOnRightClick",
+			}) do
+				r[method] = function() end
+				stub(r, method)
+			end
+
+			r:Styles()
+
+			assert.stub(r.StyleTimerBar).was.called()
+		end)
+	end)
+
 	-- ── UpdateQuantity ─────────────────────────────────────────────────────
 
 	describe("UpdateQuantity", function()
