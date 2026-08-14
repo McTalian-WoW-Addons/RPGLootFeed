@@ -356,7 +356,7 @@ def cmd_audit(args: argparse.Namespace) -> int:
     if unmatched:
         print(
             "Rows with no match may still have an icon under an unrelated name\n"
-            f"(ui_prey.blp and ui_delves.blp both do). Search manually before\n"
+            "(ui_prey.blp and ui_delves.blp both do). Search manually before\n"
             "concluding a faction is atlas-only:\n"
             + "".join(f"    wago_lookup.py find {k} --icons-only\n" for k in unmatched)
             + "If genuinely atlas-only, it needs the atlas render path (see\n"
