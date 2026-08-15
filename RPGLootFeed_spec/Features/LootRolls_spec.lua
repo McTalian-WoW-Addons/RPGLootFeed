@@ -8,10 +8,6 @@ local it = busted.it
 local spy = busted.spy
 local stub = busted.stub
 
--- LootRolls.lua's Classic-Era CHAT_MSG_LOOT parsing (global-string pattern
--- matching for servers without C_LootHistory) is a separate, large concern
--- and isn't covered here — only the Retail C_LootHistory-driven lifecycle
--- and event handlers are tested in this file.
 describe("LootRolls Module", function()
 	local _ = match._
 	---@type RLF_LootRolls, table
@@ -54,6 +50,13 @@ describe("LootRolls Module", function()
 	end
 
 	before_each(function()
+		-- Referenced at call time (not module-load time) by
+		-- classicRollTypeToState, so before_each is early enough.
+		_G.LOOT_ROLL_TYPE_PASS = 0
+		_G.LOOT_ROLL_TYPE_NEED = 1
+		_G.LOOT_ROLL_TYPE_GREED = 2
+		_G.LOOT_ROLL_TYPE_DISENCHANT = 3
+
 		ns = {
 			FeatureModule = { LootRolls = "LootRolls" },
 			LogEventSource = { WOWEVENT = "WOWEVENT" },
@@ -159,6 +162,15 @@ describe("LootRolls Module", function()
 				return nil
 			end,
 			GetSortedInfoForDrop = function()
+				return nil
+			end,
+			GetNumItems = function()
+				return 0
+			end,
+			GetItem = function()
+				return nil
+			end,
+			GetPlayerInfo = function()
 				return nil
 			end,
 		}
@@ -411,6 +423,197 @@ describe("LootRolls Module", function()
 			assert.has_no.errors(function()
 				LootRolls:HandleHistoryDropUpdate(42, 7)
 			end)
+		end)
+	end)
+
+	-- Classic Era, TBC Anniversary, and MoP Classic all share the same
+	-- older, index-based C_LootHistory shape (GetNumItems/GetItem/
+	-- GetPlayerInfo) — verified against wow-ui-source's classic_era,
+	-- classic_anniversary, and classic branches. GetItem(itemIdx) returns
+	-- rollID directly, so unlike the Retail path above, no claim-tracking
+	-- is needed to correlate a drop back to a tracked roll.
+	describe("_BuildClassicDropInfoFromHistory", function()
+		it("maps each player's roll to the addon's state convention", function()
+			LootRolls._adapter.GetItem = function()
+				return 555, "itemlink", 3, false, nil
+			end
+			LootRolls._adapter.GetPlayerInfo = function(_, playerIdx)
+				if playerIdx == 1 then
+					return "Alice", "WARRIOR", _G.LOOT_ROLL_TYPE_NEED, 88, false, false
+				elseif playerIdx == 2 then
+					return "Bob", "MAGE", nil, nil, false, false -- hasn't rolled yet
+				else
+					return "Carl", "PRIEST", _G.LOOT_ROLL_TYPE_GREED, 42, false, false
+				end
+			end
+
+			local rollID, dropInfo = LootRolls:_BuildClassicDropInfoFromHistory(1)
+
+			assert.are.equal(555, rollID)
+			assert.are.equal(0, dropInfo.rollInfos[1].state) -- Need
+			assert.are.equal(4, dropInfo.rollInfos[2].state) -- waiting
+			assert.are.equal(3, dropInfo.rollInfos[3].state) -- Greed
+		end)
+
+		it("maps Disenchant rolls to the addon-internal state 6", function()
+			LootRolls._adapter.GetItem = function()
+				return 555, "itemlink", 1, false, nil
+			end
+			LootRolls._adapter.GetPlayerInfo = function()
+				return "Dave", "ROGUE", _G.LOOT_ROLL_TYPE_DISENCHANT, 55, false, false
+			end
+
+			local _, dropInfo = LootRolls:_BuildClassicDropInfoFromHistory(1)
+
+			assert.are.equal(6, dropInfo.rollInfos[1].state)
+		end)
+
+		it("builds a winner with both the mapped state and the raw rollType", function()
+			LootRolls._adapter.GetItem = function()
+				return 555, "itemlink", 1, true, 1 -- winnerIdx = 1
+			end
+			LootRolls._adapter.GetPlayerInfo = function()
+				return "Alice", "WARRIOR", _G.LOOT_ROLL_TYPE_NEED, 88, true, true
+			end
+
+			local _, dropInfo = LootRolls:_BuildClassicDropInfoFromHistory(1)
+
+			-- .state is the addon's rollInfo convention (SetRollResults);
+			-- .rollType is the raw LOOT_ROLL_TYPE_* value (OnRollWon) — the
+			-- two use different numbering, so both need to be right.
+			assert.are.equal(0, dropInfo.winner.state)
+			assert.are.equal(_G.LOOT_ROLL_TYPE_NEED, dropInfo.winner.rollType)
+			assert.is_true(dropInfo.winner.isSelf)
+		end)
+
+		it("computes currentLeader as the highest roller while still in progress", function()
+			LootRolls._adapter.GetItem = function()
+				return 555, "itemlink", 2, false, nil
+			end
+			LootRolls._adapter.GetPlayerInfo = function(_, playerIdx)
+				if playerIdx == 1 then
+					return "Alice", "WARRIOR", _G.LOOT_ROLL_TYPE_NEED, 50, false, false
+				end
+				return "Bob", "MAGE", _G.LOOT_ROLL_TYPE_NEED, 90, false, false
+			end
+
+			local _, dropInfo = LootRolls:_BuildClassicDropInfoFromHistory(1)
+
+			assert.are.equal("Bob", dropInfo.currentLeader.playerName)
+			assert.are.equal(90, dropInfo.currentLeader.roll)
+		end)
+
+		it("returns nil when the item doesn't exist", function()
+			LootRolls._adapter.GetItem = function()
+				return nil
+			end
+
+			local rollID, dropInfo = LootRolls:_BuildClassicDropInfoFromHistory(1)
+
+			assert.is_nil(rollID)
+			assert.is_nil(dropInfo)
+		end)
+	end)
+
+	describe("PollClassicLootHistory", function()
+		it("pushes results only for items matching a tracked rollID", function()
+			local trackedRow = makeRow()
+			local otherRow = makeRow()
+			ns.LootDisplay.GetAllFrames = framesFrom({
+				makeFrame({ ["LootRoll_555"] = trackedRow, ["LootRoll_999"] = otherRow }),
+			})
+			LootRolls._activeRolls = { [555] = { key = "LootRoll_555" } }
+			LootRolls._adapter.GetNumItems = function()
+				return 2
+			end
+			LootRolls._adapter.GetItem = function(itemIdx)
+				if itemIdx == 1 then
+					return 555, "itemlink1", 1, false, nil
+				end
+				return 999, "itemlink2", 1, false, nil
+			end
+			LootRolls._adapter.GetPlayerInfo = function()
+				return "Alice", "WARRIOR", nil, nil, false, false
+			end
+
+			LootRolls:PollClassicLootHistory()
+
+			assert.stub(trackedRow.SetRollResults).was.called(1)
+			assert.stub(otherRow.SetRollResults).was_not.called()
+		end)
+
+		it("does nothing when there are no active rolls", function()
+			assert.has_no.errors(function()
+				LootRolls:PollClassicLootHistory()
+			end)
+		end)
+	end)
+
+	describe("LOOT_HISTORY_ROLL_CHANGED", function()
+		it("pushes updated results for a tracked roll", function()
+			local row = makeRow()
+			ns.LootDisplay.GetAllFrames = framesFrom({ makeFrame({ ["LootRoll_555"] = row }) })
+			LootRolls._activeRolls = { [555] = { key = "LootRoll_555" } }
+			LootRolls._adapter.GetItem = function()
+				return 555, "itemlink", 1, false, nil
+			end
+			LootRolls._adapter.GetPlayerInfo = function()
+				return "Alice", "WARRIOR", nil, nil, false, false
+			end
+
+			LootRolls:LOOT_HISTORY_ROLL_CHANGED("LOOT_HISTORY_ROLL_CHANGED", 1, 1)
+
+			assert.stub(row.SetRollResults).was.called(1)
+		end)
+
+		it("ignores changes for an untracked roll", function()
+			local row = makeRow()
+			ns.LootDisplay.GetAllFrames = framesFrom({ makeFrame({ ["LootRoll_555"] = row }) })
+			LootRolls._activeRolls = { [999] = { key = "LootRoll_999" } }
+			LootRolls._adapter.GetItem = function()
+				return 555, "itemlink", 1, false, nil
+			end
+
+			LootRolls:LOOT_HISTORY_ROLL_CHANGED("LOOT_HISTORY_ROLL_CHANGED", 1, 1)
+
+			assert.stub(row.SetRollResults).was_not.called()
+		end)
+
+		it("calls OnRollWon with the raw rollType when the local player wins", function()
+			local row = makeRow()
+			ns.LootDisplay.GetAllFrames = framesFrom({ makeFrame({ ["LootRoll_555"] = row }) })
+			LootRolls._activeRolls = { [555] = { key = "LootRoll_555" } }
+			LootRolls._adapter.GetItem = function()
+				return 555, "itemlink", 1, true, 1
+			end
+			LootRolls._adapter.GetPlayerInfo = function()
+				return "Alice", "WARRIOR", _G.LOOT_ROLL_TYPE_NEED, 88, true, true
+			end
+
+			LootRolls:LOOT_HISTORY_ROLL_CHANGED("LOOT_HISTORY_ROLL_CHANGED", 1, 1)
+
+			assert.stub(row.OnRollWon).was.called_with(row, _G.LOOT_ROLL_TYPE_NEED, 88, false)
+		end)
+	end)
+
+	describe("LOOT_HISTORY_ROLL_COMPLETE", function()
+		it("triggers a re-poll that reaches matching rows", function()
+			local row = makeRow()
+			ns.LootDisplay.GetAllFrames = framesFrom({ makeFrame({ ["LootRoll_555"] = row }) })
+			LootRolls._activeRolls = { [555] = { key = "LootRoll_555" } }
+			LootRolls._adapter.GetNumItems = function()
+				return 1
+			end
+			LootRolls._adapter.GetItem = function()
+				return 555, "itemlink", 1, true, nil
+			end
+			LootRolls._adapter.GetPlayerInfo = function()
+				return "Alice", "WARRIOR", _G.LOOT_ROLL_TYPE_PASS, nil, false, false
+			end
+
+			LootRolls:LOOT_HISTORY_ROLL_COMPLETE("LOOT_HISTORY_ROLL_COMPLETE")
+
+			assert.stub(row.SetRollResults).was.called(1)
 		end)
 	end)
 end)
