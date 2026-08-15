@@ -335,6 +335,18 @@ describe("RLF_LootRollRowMixin", function()
 				assert.stub(row.ItemCountText.SetText).was.called_with(row.ItemCountText, "Bob won (Greed, 55)")
 				assert.is_true(row._resolved)
 			end)
+
+			it("shows a Disenchant win via the addon-internal state 6 (Classic only)", function()
+				row:SetRollResults({
+					winner = { playerClass = "UNKNOWN", playerName = "Dave", isSelf = false, roll = 20, state = 6 },
+					rollInfos = {
+						{ playerName = "Dave", playerClass = "UNKNOWN", state = 6 },
+					},
+				})
+
+				assert.stub(row.ItemCountText.SetText).was.called_with(row.ItemCountText, "Dave won (Disenchant, 20)")
+				assert.is_true(row._resolved)
+			end)
 		end)
 
 		describe("when everyone passes", function()
@@ -394,6 +406,17 @@ describe("RLF_LootRollRowMixin", function()
 			}, lines)
 
 			assert.are.equal("Waiting on (1)", lines[1][1])
+		end)
+
+		it("groups Disenchant rollers under their own section (Classic only)", function()
+			local lines = {}
+
+			row:_BuildRollTooltipLines({
+				rollInfos = { { playerName = "Dave", playerClass = "WARRIOR", state = 6, roll = 55 } },
+			}, lines)
+
+			assert.are.equal("Disenchant (1)", lines[1][1])
+			assert.is_not_nil(lines[2][1]:find("Dave", 1, true))
 		end)
 	end)
 
