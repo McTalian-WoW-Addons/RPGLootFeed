@@ -406,17 +406,41 @@ describe("LootRolls Module", function()
 			assert.stub(row.SetRollResults).was.called_with(row, dropInfo)
 		end)
 
-		it("also reports a self win when the drop has a winner", function()
+		it(
+			"also reports a self win, translating the EncounterLootDropRollState into OnRollWon's LOOT_ROLL_TYPE_* numbering",
+			function()
+				local row = makeRow()
+				ns.LootDisplay.GetAllFrames = framesFrom({ makeFrame({ ["LootRoll_1"] = row }) })
+				LootRolls._historyMatchMap = { [42] = { [7] = 1 } }
+				LootRolls._adapter.GetSortedInfoForDrop = function()
+					-- state = 0 is NeedMainSpec (EncounterLootDropRollState), not
+					-- rollType 0 (LOOT_ROLL_TYPE_PASS) — these are different enums.
+					return { lootListID = 7, winner = { isSelf = true, state = 0, roll = 99 } }
+				end
+
+				LootRolls:HandleHistoryDropUpdate(42, 7)
+
+				assert.stub(row.OnRollWon).was.called_with(row, 1, 99, false) -- 1 == LOOT_ROLL_TYPE_NEED
+			end
+		)
+
+		it("maps Greed and Transmog winner states to their own LOOT_ROLL_TYPE_* values, not each other's", function()
 			local row = makeRow()
 			ns.LootDisplay.GetAllFrames = framesFrom({ makeFrame({ ["LootRoll_1"] = row }) })
 			LootRolls._historyMatchMap = { [42] = { [7] = 1 } }
+
 			LootRolls._adapter.GetSortedInfoForDrop = function()
-				return { lootListID = 7, winner = { isSelf = true, state = 0, roll = 99 } }
+				return { lootListID = 7, winner = { isSelf = true, state = 3, roll = 77 } } -- Greed
 			end
-
 			LootRolls:HandleHistoryDropUpdate(42, 7)
+			assert.stub(row.OnRollWon).was.called_with(row, 2, 77, false) -- 2 == LOOT_ROLL_TYPE_GREED
 
-			assert.stub(row.OnRollWon).was.called_with(row, 0, 99, false)
+			row.OnRollWon:clear()
+			LootRolls._adapter.GetSortedInfoForDrop = function()
+				return { lootListID = 7, winner = { isSelf = true, state = 2, roll = 66 } } -- Transmog
+			end
+			LootRolls:HandleHistoryDropUpdate(42, 7)
+			assert.stub(row.OnRollWon).was.called_with(row, 4, 66, false) -- 4 == Transmogrification
 		end)
 
 		it("does nothing for an untracked encounter/lootListID pair", function()
