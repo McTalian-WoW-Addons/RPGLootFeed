@@ -35,7 +35,7 @@ describe("RLF_LootRollRowMixin", function()
 		_G.NEED = "Need"
 		_G.GREED = "Greed"
 		_G.PASS = "Pass"
-		_G.DISENCHANT = "Disenchant"
+		_G.ROLL_DISENCHANT = "Disenchant"
 		_G.TRANSMOGRIFICATION = "Transmogrification"
 		_G.LOOT_HISTORY_WAITING_ON = "Waiting on"
 		_G.LOOT_HISTORY_ALL_PASSED = "All passed"
@@ -250,6 +250,14 @@ describe("RLF_LootRollRowMixin", function()
 
 			assert.stub(row.ItemCountText.SetText).was.called_with(row.ItemCountText, "|cff00ff00Greed Won! (55)|r")
 		end)
+
+		it("shows the Disenchant roll type via ROLL_DISENCHANT, not the nonexistent DISENCHANT global", function()
+			row:OnRollWon(3, 20, false) -- 3 == Disenchant
+
+			assert
+				.stub(row.ItemCountText.SetText).was
+				.called_with(row.ItemCountText, "|cff00ff00Disenchant Won! (20)|r")
+		end)
 	end)
 
 	describe("SetRollResults", function()
@@ -362,6 +370,30 @@ describe("RLF_LootRollRowMixin", function()
 
 			assert.stub(row.StyleExitAnimation).was.called(1)
 			assert.stub(row.ResetFadeOut).was.called(1)
+		end)
+	end)
+
+	describe("_BuildRollTooltipLines", function()
+		it("uses LOOT_HISTORY_WAITING_ON for the waiting-section header when it exists (Retail)", function()
+			_G.LOOT_HISTORY_WAITING_ON = "Custom Waiting Label"
+			local lines = {}
+
+			row:_BuildRollTooltipLines({
+				rollInfos = { { playerName = "Bob", playerClass = "WARRIOR", state = 4 } },
+			}, lines)
+
+			assert.are.equal("Custom Waiting Label (1)", lines[1][1])
+		end)
+
+		it("falls back to a plain label when LOOT_HISTORY_WAITING_ON doesn't exist (Classic)", function()
+			_G.LOOT_HISTORY_WAITING_ON = nil
+			local lines = {}
+
+			row:_BuildRollTooltipLines({
+				rollInfos = { { playerName = "Bob", playerClass = "WARRIOR", state = 4 } },
+			}, lines)
+
+			assert.are.equal("Waiting on (1)", lines[1][1])
 		end)
 	end)
 
