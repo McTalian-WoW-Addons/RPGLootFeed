@@ -335,6 +335,25 @@ function LootRolls:PollLootHistory()
 	end
 end
 
+--- Map a Retail EncounterLootDropRollState (dropInfo.winner.state: 0/1=need,
+--- 2=transmog, 3=greed) to the LOOT_ROLL_TYPE_*-shaped numbering
+--- RLF_LootRollRowMixin:OnRollWon expects (matching the real
+--- LOOT_ITEM_ROLL_WON event's rollType argument: 1=need, 2=greed,
+--- 3=disenchant, 4=transmog). These are different enums — passing .state
+--- straight through mislabels wins (a Greed win renders as "Disenchant Won!").
+---@param state number
+---@return number?
+local function encounterLootStateToRollType(state)
+	if state == 0 or state == 1 then
+		return 1 -- NEED
+	elseif state == 2 then
+		return 4 -- TRANSMOGRIFICATION
+	elseif state == 3 then
+		return 2 -- GREED
+	end
+	return nil
+end
+
 --- Update a specific drop when LOOT_HISTORY_UPDATE_DROP fires.
 ---@param encounterID number
 ---@param lootListID number
@@ -362,7 +381,7 @@ function LootRolls:HandleHistoryDropUpdate(encounterID, lootListID)
 		entry.row:SetRollResults(dropInfo)
 		-- If there's a winner and the local player won, also update result text
 		if dropInfo.winner and dropInfo.winner.isSelf then
-			local rollType = dropInfo.winner.state
+			local rollType = encounterLootStateToRollType(dropInfo.winner.state)
 			local roll = dropInfo.winner.roll
 			entry.row:OnRollWon(rollType, roll, false)
 		end
