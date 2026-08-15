@@ -52,3 +52,5 @@ __pycache__
 luacov-html
 
 node_modules
+
+.claude/worktrees
