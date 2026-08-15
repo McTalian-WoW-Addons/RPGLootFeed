@@ -225,7 +225,7 @@ function RLF_LootRollRowMixin:OnRollWon(rollType, roll, isUpgraded)
 	local rollTypeNames = {
 		[1] = NEED,
 		[2] = GREED,
-		[3] = DISENCHANT,
+		[3] = ROLL_DISENCHANT,
 		[4] = TRANSMOGRIFICATION,
 	}
 	local typeName = rollTypeNames[rollType] or ""
@@ -254,7 +254,9 @@ function RLF_LootRollRowMixin:_BuildRollTooltipLines(dropInfo, lines)
 	}
 	local order = { "waiting", "need", "greed", "transmog", "pass" }
 	local sectionLabels = {
-		waiting = LOOT_HISTORY_WAITING_ON,
+		-- LOOT_HISTORY_WAITING_ON only exists on Retail; Classic Era and MoP
+		-- Classic don't ship it, so fall back to a plain label there.
+		waiting = LOOT_HISTORY_WAITING_ON or "Waiting on",
 		need = NEED,
 		greed = GREED,
 		transmog = TRANSMOGRIFICATION,
@@ -604,7 +606,7 @@ function RLF_LootRollRowMixin:PostBootstrapFromElement(element)
 
 	if not G_RLF:IsRetail() and canDisenchant then
 		local deBtn = self:_CreateRollButton(
-			DISENCHANT,
+			ROLL_DISENCHANT,
 			LOOT_ROLL_TYPE_DISENCHANT,
 			hasRealRoll and canDisenchant or false,
 			hasRealRoll and reasonDisenchant or nil
