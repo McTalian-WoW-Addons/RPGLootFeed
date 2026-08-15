@@ -171,6 +171,8 @@ function RLF_LootRollRowMixin:_SetupRollTimerBar(rollDuration)
 		self.TimerBar:SetValue(remaining)
 		self.TimerBar:Show()
 	end
+
+	self._rollTimerBarActive = true
 end
 
 function RLF_LootRollRowMixin:OnCancelRoll()
@@ -506,8 +508,12 @@ function RLF_LootRollRowMixin:SetRollResults(dropInfo)
 	if dropInfo.winner or allPassed or (waitingCount == 0 and self._rolled) then
 		-- Fully resolved results row
 		self:OnRollResolved()
-	elseif waitingCount > 0 and dropInfo.duration then
-		-- Unresolved: show timer bar at remaining duration (static display)
+	elseif waitingCount > 0 and dropInfo.duration and not self._rollTimerBarActive then
+		-- Unresolved and the roll-action phase never set up a timer bar
+		-- (e.g. replayed after reload) — show a static bar at full duration.
+		-- If _SetupRollTimerBar already started a countdown, leave it alone:
+		-- it's tracking the same roll duration and clobbering it here would
+		-- reset an in-progress countdown back to full on every history update.
 		G_RLF:LogDebug(
 			("SetRollResults_unresolved rollID=%s waiting=%d duration=%s"):format(
 				tostring(self.rollID or "?"),
@@ -518,11 +524,6 @@ function RLF_LootRollRowMixin:SetRollResults(dropInfo)
 			self.moduleName
 		)
 		self.TimerBar:SetMinMaxValues(0, dropInfo.duration)
-		-- If startTime available, try to compute remaining; otherwise show full
-		if dropInfo.startTime then
-			-- startTime is epoch ms, duration is ms. Show what we can.
-			-- Just show full bar - accurate countdown not possible without server time sync
-		end
 		self.TimerBar:SetValue(dropInfo.duration)
 		self.TimerBar:Show()
 	end
@@ -654,6 +655,7 @@ function RLF_LootRollRowMixin:CleanupLootRoll()
 	self.rollID = nil
 	self._rolled = false
 	self._resolved = nil
+	self._rollTimerBarActive = nil
 
 	if self._rollButtons then
 		for _, btn in ipairs(self._rollButtons) do
