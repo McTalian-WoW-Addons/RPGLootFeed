@@ -240,6 +240,7 @@ local ROLL_TOOLTIP_ICONS = {
 	[2] = "|A:lootroll-toast-icon-transmog-up:16:16|a",
 	[3] = "|TInterface\\Buttons\\UI-GroupLoot-Coin-Up:16:16|t",
 	[5] = "|TInterface\\Buttons\\UI-GroupLoot-Pass-Up:16:16|t",
+	[6] = "|TInterface\\Buttons\\UI-GroupLoot-DE-Up:16:16|t",
 }
 
 ---@param dropInfo table
@@ -249,16 +250,19 @@ function RLF_LootRollRowMixin:_BuildRollTooltipLines(dropInfo, lines)
 		waiting = {},
 		need = {},
 		greed = {},
+		disenchant = {},
 		transmog = {},
 		pass = {},
 	}
-	local order = { "waiting", "need", "greed", "transmog", "pass" }
+	local order = { "waiting", "need", "greed", "disenchant", "transmog", "pass" }
 	local sectionLabels = {
-		-- LOOT_HISTORY_WAITING_ON only exists on Retail; Classic Era and MoP
-		-- Classic don't ship it, so fall back to a plain label there.
+		-- LOOT_HISTORY_WAITING_ON only exists on Retail; Classic Era, TBC
+		-- Anniversary, and MoP Classic don't ship it, so fall back to a
+		-- plain label there.
 		waiting = LOOT_HISTORY_WAITING_ON or "Waiting on",
 		need = NEED,
 		greed = GREED,
+		disenchant = ROLL_DISENCHANT,
 		transmog = TRANSMOGRIFICATION,
 		pass = PASS,
 	}
@@ -266,6 +270,7 @@ function RLF_LootRollRowMixin:_BuildRollTooltipLines(dropInfo, lines)
 		waiting = { 1, 1, 0.5 },
 		need = { 1, 1, 1 },
 		greed = { 1, 1, 1 },
+		disenchant = { 1, 1, 1 },
 		transmog = { 1, 1, 1 },
 		pass = { 0.7, 0.7, 0.7 },
 	}
@@ -290,6 +295,10 @@ function RLF_LootRollRowMixin:_BuildRollTooltipLines(dropInfo, lines)
 			state = ri.state,
 		}
 
+		-- state follows retail's Enum.EncounterLootDropRollState (0=NeedMainSpec,
+		-- 1=NeedOffSpec, 2=Transmog, 3=Greed, 4=NoRoll/waiting, 5=Pass), which
+		-- has no Disenchant value since Retail doesn't have that roll option.
+		-- 6=Disenchant is an addon-internal extension for Classic, which does.
 		if ri.state == 4 then
 			table.insert(groups.waiting, playerData)
 		elseif ri.state == 0 or ri.state == 1 then
@@ -301,6 +310,8 @@ function RLF_LootRollRowMixin:_BuildRollTooltipLines(dropInfo, lines)
 			table.insert(groups.transmog, playerData)
 		elseif ri.state == 5 then
 			table.insert(groups.pass, playerData)
+		elseif ri.state == 6 then
+			table.insert(groups.disenchant, playerData)
 		end
 	end
 
@@ -318,6 +329,7 @@ function RLF_LootRollRowMixin:_BuildRollTooltipLines(dropInfo, lines)
 	end
 	table.sort(groups.need, sortByRoll)
 	table.sort(groups.greed, sortByRoll)
+	table.sort(groups.disenchant, sortByRoll)
 	table.sort(groups.transmog, sortByRoll)
 
 	for _, section in ipairs(order) do
@@ -488,6 +500,8 @@ function RLF_LootRollRowMixin:SetRollResults(dropInfo)
 			rollTypeStr = TRANSMOGRIFICATION
 		elseif dropInfo.winner.state == 3 then
 			rollTypeStr = GREED
+		elseif dropInfo.winner.state == 6 then
+			rollTypeStr = ROLL_DISENCHANT
 		end
 
 		if dropInfo.winner.isSelf then

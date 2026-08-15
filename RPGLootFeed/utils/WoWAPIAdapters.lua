@@ -334,7 +334,7 @@ G_RLF.WoWAPI.LootRolls = {
 	GetItemInfoInstant = function(itemLink)
 		return C_Item.GetItemInfoInstant(itemLink)
 	end,
-	-- C_LootHistory wrappers (may not exist on Classic)
+	-- C_LootHistory wrappers, Retail shape (encounter/lootListID indexed).
 	GetAllEncounterInfos = function()
 		if C_LootHistory and C_LootHistory.GetAllEncounterInfos then
 			return C_LootHistory.GetAllEncounterInfos()
@@ -350,6 +350,28 @@ G_RLF.WoWAPI.LootRolls = {
 	GetSortedInfoForDrop = function(encounterID, lootListID)
 		if C_LootHistory and C_LootHistory.GetSortedInfoForDrop then
 			return C_LootHistory.GetSortedInfoForDrop(encounterID, lootListID)
+		end
+		return nil
+	end,
+	-- C_LootHistory wrappers, Classic shape (itemIdx/playerIdx indexed).
+	-- Same namespace as Retail, different, older API surface — verified
+	-- present on Classic Era, TBC Anniversary, and MoP Classic via
+	-- Blizzard's own Classic/LootHistory.lua, which calls these directly.
+	GetNumItems = function()
+		if C_LootHistory and C_LootHistory.GetNumItems then
+			return C_LootHistory.GetNumItems()
+		end
+		return 0
+	end,
+	GetItem = function(itemIdx)
+		if C_LootHistory and C_LootHistory.GetItem then
+			return C_LootHistory.GetItem(itemIdx)
+		end
+		return nil
+	end,
+	GetPlayerInfo = function(itemIdx, playerIdx)
+		if C_LootHistory and C_LootHistory.GetPlayerInfo then
+			return C_LootHistory.GetPlayerInfo(itemIdx, playerIdx)
 		end
 		return nil
 	end,
