@@ -25,64 +25,10 @@ jobs:
       i18n-enabled: true
       i18n-ignore-files: IntegrationTest.lua SmokeTest.lua ConfigTest.lua
       trunk-enabled: true
+      # Not passing boot-sim-mocks: RPGLootFeed_spec/_mocks/helper.lua
+      # require("busted") transitively (WoWGlobals.lua), which boot-sim's
+      # plain-Lua subprocess doesn't have available. Not needed either --
+      # boot-sim's built-in WoW API mocks already give a clean, meaningful
+      # result without it (validated in #607: 152/152 steps).
+      boot-sim-enabled: true
     secrets: inherit
-
-  # TEMPORARY pilot job -- validates McTalian-WoW-Addons/wow-build-tools#222
-  # (the boot-sim command) against this repo before it ships as a release.
-  # Builds wow-build-tools from source at that PR's branch rather than using
-  # boot-sim-action, since the action runs dist/wow-build-tools, which is
-  # only rebuilt by wow-build-tools' real release pipeline and doesn't exist
-  # on the feature branch yet.
-  #
-  # Once #222 merges and releases, replace this job with
-  # `boot-sim-enabled: true` on the `pr-checks` job above (default
-  # `wbt-ref: v1` picks up the release) and delete this job.
-  boot_sim_pilot:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-
-      - name: Checkout wow-build-tools (boot-sim branch)
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          repository: McTalian-WoW-Addons/wow-build-tools
-          ref: feature/boot-sim-smoke-test
-          path: .wbt-pilot
-
-      - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: .wbt-pilot/go.mod
-
-      - name: Build wow-build-tools from source
-        run: |
-          set -euo pipefail
-          cd .wbt-pilot
-          go build -o wow-build-tools .
-          echo "$(pwd)" >> "$GITHUB_PATH"
-
-      - name: Install Subversion
-        uses: awalsh128/cache-apt-pkgs-action@553a35bb8ebd9fcabcb1c9451aa4c98e1b4ca8a9 # v1.6.3
-        with:
-          packages: subversion
-          version: 1.14
-
-      - name: Build (resolve externals, skip packaging)
-        run: wow-build-tools build -t ./RPGLootFeed -r ./.release --skipZip --skipUpload --skipChangelog
-
-      - name: Install Lua 5.1
-        uses: McTalian-WoW-Addons/gh-actions-lua@ff6eeef8bc502bfe3dbdd3d87dc0a4766f8c9fb0 # v1.0.2
-        with:
-          luaVersion: 5.1.5
-
-      - name: Run boot sim
-        # Not -m RPGLootFeed_spec/_mocks/helper.lua: it require("busted")
-        # transitively, which this plain-Lua subprocess doesn't have. Not
-        # needed either -- boot-sim's built-in WoW API mocks already give a
-        # clean, meaningful result without it (validated locally).
-        run: wow-build-tools boot-sim -t ./.release/RPGLootFeed
