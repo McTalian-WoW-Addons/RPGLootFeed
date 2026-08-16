@@ -1,4 +1,4 @@
-.PHONY: all_checks hardcode_string_check toc_check toc_update missing_translation_check wbt_setup i18n_check i18n_fmt test test-ci test-file test-pattern test-only local check_untracked_files options-dump options-html help
+.PHONY: all_checks hardcode_string_check toc_check toc_update boot_sim missing_translation_check wbt_setup i18n_check i18n_fmt test test-ci test-file test-pattern test-only local check_untracked_files options-dump options-html help
 
 all_checks: hardcode_string_check missing_translation_check i18n_check
 
@@ -27,6 +27,7 @@ help:
 	@echo "  wago_prune          - Delete listfiles for superseded builds"
 	@echo "  lua_deps            - Install Lua dependencies"
 	@echo "  check_untracked_files - Check for untracked git files"
+	@echo "  boot_sim            - Simulate a client login to catch Lua load errors"
 	@echo "  options-dump        - Serialize G_RLF.options to .scripts/.output/options_dump.json"
 	@echo "  options-html        - Render options_dump.json to .scripts/.output/options.html"
 	@echo "  watch               - Watch for changes and build"
@@ -173,6 +174,18 @@ toc_check:
 		-x embeds.xml \
 		--no-splash \
 		-b -p
+
+# Simulate a client login against a built package to catch Lua load errors
+# before a player does. Builds first (skipping packaging) to resolve Libs/
+# externals, since boot-sim needs those on disk to follow real Include
+# chains -- then points boot-sim at the result rather than the source tree.
+# Not passing -m RPGLootFeed_spec/_mocks/helper.lua: it requires("busted")
+# transitively (WoWGlobals.lua), which boot-sim's plain-Lua subprocess
+# doesn't have -- and isn't needed, boot-sim's built-in WoW API mocks
+# already give a clean, meaningful result without it.
+boot_sim:
+	@wow-build-tools build -t ./RPGLootFeed -r ./.release --skipZip --skipUpload --skipChangelog --no-splash
+	@wow-build-tools boot-sim -t ./.release/RPGLootFeed --no-splash
 
 toc_update:
 	@wow-build-tools toc update \

@@ -25,4 +25,10 @@ jobs:
       i18n-enabled: true
       i18n-ignore-files: IntegrationTest.lua SmokeTest.lua ConfigTest.lua
       trunk-enabled: true
+      # Not passing boot-sim-mocks: RPGLootFeed_spec/_mocks/helper.lua
+      # require("busted") transitively (WoWGlobals.lua), which boot-sim's
+      # plain-Lua subprocess doesn't have available. Not needed either --
+      # boot-sim's built-in WoW API mocks already give a clean, meaningful
+      # result without it (validated in #607: 152/152 steps).
+      boot-sim-enabled: true
     secrets: inherit
