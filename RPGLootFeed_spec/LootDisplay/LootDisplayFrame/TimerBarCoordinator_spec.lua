@@ -19,9 +19,11 @@ describe("RLF_TimerBarCoordinator", function()
 		local timerBar = {
 			SetMinMaxValues = function() end,
 			SetValue = function() end,
+			Hide = function() end,
 		}
 		stub(timerBar, "SetMinMaxValues")
 		stub(timerBar, "SetValue")
+		stub(timerBar, "Hide")
 		return {
 			TimerBar = timerBar,
 			IsVisible = function()
@@ -135,6 +137,29 @@ describe("RLF_TimerBarCoordinator", function()
 
 			assert.equal(0, #coordinator._subscribers)
 		end)
+
+		-- A native C_DurationUtil duration owns the bar's value; seeding it here
+		-- would fight the native driver.
+		it("leaves the bar's value alone for hideOnly subscribers", function()
+			local row = mockRow()
+
+			coordinator:Subscribe(row, 5, true)
+
+			assert.equal(1, #coordinator._subscribers)
+			assert.is_true(coordinator._subscribers[1].hideOnly)
+			assert.stub(row.TimerBar.SetMinMaxValues).was_not.called()
+			assert.stub(row.TimerBar.SetValue).was_not.called()
+		end)
+
+		it("updates hideOnly when an existing subscription is renewed", function()
+			local row = mockRow()
+			coordinator:Subscribe(row, 5, true)
+
+			coordinator:Subscribe(row, 10)
+
+			assert.equal(1, #coordinator._subscribers)
+			assert.is_false(coordinator._subscribers[1].hideOnly)
+		end)
 	end)
 
 	describe("Unsubscribe", function()
@@ -204,6 +229,46 @@ describe("RLF_TimerBarCoordinator", function()
 
 			-- Row should have been removed since it's not visible
 			assert.is_true(#coordinator._subscribers <= countBefore)
+		end)
+
+		-- The StatusBar's background track renders regardless of value, so a
+		-- drained bar must be hidden outright or it lingers for the rest of
+		-- the row's fade-out.
+		it("hides the timer bar when the countdown completes", function()
+			local row = mockRow()
+			stub(row, "IsVisible").returns(true)
+			coordinator:Subscribe(row, 0) -- already expired under the frozen clock
+
+			coordinator:_OnUpdate(0.1)
+
+			assert.stub(row.TimerBar.Hide).was.called()
+			assert.equal(0, #coordinator._subscribers)
+			assert.is_false(row._timerBarCoordinatorSubscribed)
+		end)
+
+		-- The watchdog path: C_DurationUtil already drained the bar, so the
+		-- coordinator hides it without ever touching the value.
+		it("hides a completed hideOnly subscriber without writing its value", function()
+			local row = mockRow()
+			stub(row, "IsVisible").returns(true)
+			coordinator:Subscribe(row, 0, true)
+
+			coordinator:_OnUpdate(0.1)
+
+			assert.stub(row.TimerBar.Hide).was.called()
+			assert.stub(row.TimerBar.SetValue).was_not.called()
+			assert.equal(0, #coordinator._subscribers)
+		end)
+
+		it("does not drive the value of an in-flight hideOnly subscriber", function()
+			local row = mockRow()
+			stub(row, "IsVisible").returns(true)
+			coordinator:Subscribe(row, 5, true)
+
+			coordinator:_OnUpdate(0.1)
+
+			assert.stub(row.TimerBar.SetValue).was_not.called()
+			assert.equal(1, #coordinator._subscribers)
 		end)
 	end)
 

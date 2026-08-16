@@ -295,6 +295,7 @@ function LootDisplayRowMixin:Styles()
 	end)
 	self:StyleUnitPortrait()
 	self:StyleText()
+	self:StyleTimerBar()
 	self:HandlerOnRightClick()
 end
 
