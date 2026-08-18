@@ -173,6 +173,7 @@ L["TopInsetDesc"] = "Фон будет сдвинут от верхнего кр
 --#endregion
 
 --#region 1.26.0
+-- L["Show Prices as Plain Text"] = "Show Prices as Plain Text"
 L["Hide All Icons"] = "Скрыть все иконки"
 L["HideAllIconsDesc"] = "Если включено, все иконки будут скрыты в ленте добычи."
 L["Show '1' Quantity"] = "Показывать количество '1'"
@@ -249,6 +250,7 @@ L["ShowMoneyIconDesc"] = "Показывать иконку перед сумм�
 --#region 1.0.0 - 1.22.0
 -- L["Ignore Item IDs"] = "Ignore Item IDs"
 -- L["IgnoreItemIDsDesc"] = "Enter a comma-separated list of item IDs to ignore in the Party Loot Feed"
+-- L["PlainTextPricesDesc"] = "Show prices for sellable items as plain text (e.g. 1g 2s 3c) instead of coin icons. Applies to the Vendor Price, Auction Price, and Highest Price modes."
 L["Abbreviate Total"] = "Сокращать общее количество"
 L["AbbreviateTotalDesc"] = "Сокращать общее количество денег в ленте добычи (для золота свыше 1000)"
 L["About"] = "О аддоне"

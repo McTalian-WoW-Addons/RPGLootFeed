@@ -174,6 +174,7 @@ L["TopInsetDesc"] = "背景将从该行顶部缩进此数量。"
 --#endregion
 
 --#region 1.26.0
+-- L["Show Prices as Plain Text"] = "Show Prices as Plain Text"
 L["Hide All Icons"] = "隐藏所有图标"
 L["HideAllIconsDesc"] = "如果启用，所有图标都将在拾取信息流中隐藏。"
 L["Show '1' Quantity"] = "显示 '1' 数量"
@@ -250,6 +251,7 @@ L["ShowMoneyIconDesc"] = "如果勾选，在拾取信息流中的金钱数额旁
 --#region 1.0.0 - 1.22.0
 -- L["Ignore Item IDs"] = "Ignore Item IDs"
 -- L["IgnoreItemIDsDesc"] = "Enter a comma-separated list of item IDs to ignore in the Party Loot Feed"
+-- L["PlainTextPricesDesc"] = "Show prices for sellable items as plain text (e.g. 1g 2s 3c) instead of coin icons. Applies to the Vendor Price, Auction Price, and Highest Price modes."
 L["Abbreviate Total"] = "缩写总计"
 L["AbbreviateTotalDesc"] = "缩写拾取通报中的金币总额 (金币超过1000时)"
 L["About"] = "关于"
