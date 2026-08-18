@@ -41,10 +41,7 @@ function Rep:CheckForHiddenRenownFactions(events)
 			self:LogDebug("Processing MAJOR_FACTION_RENOWN_LEVEL_CHANGED event for factionID " .. tostring(k))
 		end
 	end
-	if
-		CURRENT_SEASON_DELVE_JOURNEY == 0
-		and (self.isRetail() or self.reputationApi.GetExpansionLevel() >= G_RLF.Expansion.TWW)
-	then
+	if CURRENT_SEASON_DELVE_JOURNEY == 0 and self:IsDelversJourneyAvailable() then
 		CURRENT_SEASON_DELVE_JOURNEY = self.reputationApi.GetDelvesFactionForSeason()
 	end
 
