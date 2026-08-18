@@ -26,16 +26,35 @@ silently answer a question about a newer patch -- a new build is simply a file
 that has not been downloaded yet. `cache` reports cached vs live builds, and
 `cache --prune` drops superseded ones. If wago is unreachable the tool falls
 back to the last known build list with a warning; --strict makes that an error.
+Downloaded listfiles are validated (well-formed last row, minimum row count)
+before being cached and retried on failure -- a truncated wago response used
+to get cached as if it were the real thing, silently poisoning every lookup
+against it.
 
-IMPORTANT: https://wago.tools/api/casc/{fdid} does NOT honour its `product`
-parameter -- it returns HTTP 200 for Retail-only assets queried against
-Classic, and even for FileDataIDs that do not exist. It is useless for
-presence checks. Only the /api/files listfile is authoritative, which is what
-`presence` uses.
+`find` and `audit` source filenames from the GitHub community listfile
+(github.com/wowdev/wow-listfile) by default: a single well-formed file behind
+GitHub's CDN, cached by release tag, faster and more reliably complete than
+wago's per-product download. It has NO per-product/per-build dimension --
+finding a name there is not proof it ships anywhere. `presence` always stays
+on wago's `/api/files`, the only source that can answer that. Pass `find
+--source wago --flavor X` for a targeted, version-specific search scoped to
+one product's live listfile instead.
+
+IMPORTANT: https://wago.tools/api/casc/{fdid} always returns HTTP 200 whether
+a file is present in the queried `product` or not -- status code alone tells
+you nothing, which is how this endpoint earned a "useless for presence
+checks" reputation. But the `product` param DOES filter, and the response
+BODY SIZE is a reliable signal (0 bytes = absent, real bytes = present) --
+verified against the authoritative /api/files listfile across a random
+16-fdid x 4-product sample (64/64 correct). `presence` uses this by default
+(one small request per fdid/flavor pair, no listfile download); pass
+`--source listfile` to fall back to downloading and filtering the full
+per-product listfile instead.
 """
 
 import argparse
 import csv
+import gzip
 import io
 import json
 import re
@@ -44,11 +63,36 @@ import time
 import urllib.error
 import urllib.request
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Callable, Dict, Iterable, List, Optional, Tuple
 
 BASE = "https://wago.tools"
 # wago.tools sits behind Cloudflare, which 403s urllib's default User-Agent.
 UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36"
+
+# Community-maintained, cross-product FileDataID -> filename index. Unlike
+# wago's /api/files, this has no per-product/per-build dimension -- a name
+# here is not proof a file ships to any flavor RPGLootFeed supports. Use it
+# for name discovery (`find`, `audit`'s matching pass); `presence` always
+# stays on wago's per-product listfile, which is the only source that can
+# answer "does this flavor's client actually carry this file".
+GITHUB_LISTFILE_REPO = "wowdev/wow-listfile"
+GITHUB_LISTFILE_ASSET = "community-listfile.csv"
+GITHUB_API = "https://api.github.com/"
+GITHUB_DOWNLOADS = "https://github.com/"
+
+# Row-count floors below which a downloaded listfile is almost certainly a
+# truncated/error response rather than the real thing (wago's /api/files has
+# 504'd mid-transfer and cached the partial body before; see _validate_listfile).
+# Each product has a very different asset count -- Classic Era is ~1/12th of
+# Retail's -- so these are ~85% of an observed-good count per product, not a
+# single guessed number. Re-measure (`cache`) if a floor starts false-positiving.
+MIN_LISTFILE_ROWS: Dict[str, int] = {
+    "wow": 1_650_000,  # observed ~1,908,906 (12.1.0.69382)
+    "wow_classic": 360_000,  # observed ~420,065 (5.5.4.69155)
+    "wow_classic_era": 135_000,  # observed ~159,633 (1.15.9.69109)
+    "wow_anniversary": 160_000,  # observed ~190,291 (2.5.6.69110)
+}
+MIN_GITHUB_LISTFILE_ROWS = 1_000_000  # observed ~2,210,170 (202608181116)
 
 CACHE_DIR = Path(__file__).resolve().parent / ".output" / "wago-cache"
 
@@ -62,26 +106,42 @@ FLAVORS: Dict[str, str] = {
 }
 
 
-def _fetch(url: str, timeout: int = 300, attempts: int = 4) -> bytes:
+_DEFAULT_ALLOWED_PREFIXES = (f"{BASE}/",)
+
+
+def _fetch(
+    url: str,
+    timeout: int = 300,
+    attempts: int = 4,
+    allowed_prefixes: Tuple[str, ...] = _DEFAULT_ALLOWED_PREFIXES,
+) -> bytes:
     """GET with retries.
 
     The listfile endpoints return multi-megabyte payloads and intermittently
     502/504 under load, so a bare urlopen is not reliable enough for a tool
     people will run unattended.
     """
-    if not url.startswith(f"{BASE}/"):
+    if not any(url.startswith(p) for p in allowed_prefixes):
         # Guards against file:// and other schemes reaching urlopen.
-        raise ValueError(f"refusing to fetch non-wago.tools URL: {url}")
+        raise ValueError(f"refusing to fetch url outside allowlist: {url}")
 
     last: Optional[Exception] = None
-    req = urllib.request.Request(url, headers={"User-Agent": UA})
+    # urllib does not negotiate compression on its own (unlike curl --compressed);
+    # the listfile endpoints are large and highly repetitive CSV, so asking for
+    # gzip and decompressing ourselves cuts transfer size and 504 exposure a lot.
+    req = urllib.request.Request(
+        url, headers={"User-Agent": UA, "Accept-Encoding": "gzip"}
+    )
     for attempt in range(1, attempts + 1):
         try:
-            # Scheme is pinned to the https BASE constant by the guard above.
+            # Scheme is pinned to the allowlist above.
             with urllib.request.urlopen(
                 req, timeout=timeout
             ) as resp:  # nosec B310 # noqa: S310
-                return resp.read()
+                body = resp.read()
+                if resp.headers.get("Content-Encoding", "").lower() == "gzip":
+                    body = gzip.decompress(body)
+                return body
         except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError) as e:
             last = e
             code = getattr(e, "code", None)
@@ -97,15 +157,63 @@ def _fetch(url: str, timeout: int = 300, attempts: int = 4) -> bytes:
     raise RuntimeError(f"giving up on {url} after {attempts} attempts: {last}")
 
 
-def _cached(name: str, url: str, refresh: bool = False) -> bytes:
+def _validate_listfile_csv(raw: bytes, source: str, min_rows: int = 0) -> None:
+    """Raise if `raw` looks like a truncated or error response, not a listfile.
+
+    wago's /api/files has 504'd mid-transfer and returned a short body ending
+    in a JSON error object rather than raising -- a bare fetch-then-cache
+    silently accepts that as a valid (but wrong, incomplete) listfile, and
+    every subsequent lookup answers from missing data with no indication
+    anything is wrong. Catch the shape here instead.
+    """
+    text = raw.decode("utf-8", "replace")
+    lines = [line for line in text.splitlines() if line.strip()]
+    if not lines:
+        raise RuntimeError(f"{source}: empty response")
+    if not re.match(r"^\d+;", lines[-1]):
+        raise RuntimeError(
+            f"{source}: last line is not a well-formed 'fdid;name' row "
+            f"(got {lines[-1][:80]!r}) -- response looks truncated or is an error body"
+        )
+    if min_rows and len(lines) < min_rows:
+        raise RuntimeError(
+            f"{source}: only {len(lines)} rows, expected at least {min_rows} -- "
+            "response looks truncated"
+        )
+
+
+def _cached(
+    name: str,
+    url: str,
+    refresh: bool = False,
+    *,
+    fetch_kwargs: Optional[dict] = None,
+    validate: Optional[Callable[[bytes], None]] = None,
+    validate_attempts: int = 3,
+) -> bytes:
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
     path = CACHE_DIR / name
     if path.exists() and not refresh:
         return path.read_bytes()
     sys.stderr.write(f"fetching {url} ...\n")
-    data = _fetch(url)
-    path.write_bytes(data)
-    return data
+    fetch_kwargs = fetch_kwargs or {}
+    last_err: Optional[RuntimeError] = None
+    for attempt in range(1, validate_attempts + 1):
+        data = _fetch(url, **fetch_kwargs)
+        if validate is not None:
+            try:
+                validate(data)
+            except RuntimeError as e:
+                last_err = e
+                if attempt < validate_attempts:
+                    sys.stderr.write(
+                        f"  {e} - retry {attempt}/{validate_attempts - 1}\n"
+                    )
+                    continue
+                raise
+        path.write_bytes(data)
+        return data
+    raise last_err  # pragma: no cover - loop always returns or raises
 
 
 # How long a cached /api/builds/latest response is trusted before re-checking.
@@ -214,12 +322,96 @@ def listfile(product: str, refresh: bool = False) -> List[Tuple[int, str]]:
                 " downloading current listfile\n"
             )
 
-    raw = _cached(name, f"{BASE}/api/files?product={product}&format=csv", refresh)
+    raw = _cached(
+        name,
+        f"{BASE}/api/files?product={product}&format=csv",
+        refresh,
+        validate=lambda data: _validate_listfile_csv(
+            data, name, MIN_LISTFILE_ROWS.get(product, 0)
+        ),
+    )
     out: List[Tuple[int, str]] = []
     for line in raw.decode("utf-8", "replace").splitlines():
         fdid, _, name = line.partition(";")
         try:
             out.append((int(fdid), name.strip().strip('"')))
+        except ValueError:
+            continue
+    return out
+
+
+def _github_release_meta(refresh: bool = False) -> dict:
+    """Latest wow-listfile release metadata, short-TTL cached like builds()."""
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    path = CACHE_DIR / "github-listfile-release.json"
+    fresh_enough = (
+        path.exists() and (time.time() - path.stat().st_mtime) < BUILDS_TTL_SECONDS
+    )
+    if fresh_enough and not refresh:
+        return json.loads(path.read_text())
+    try:
+        data = _fetch(
+            f"{GITHUB_API}repos/{GITHUB_LISTFILE_REPO}/releases/latest",
+            timeout=60,
+            allowed_prefixes=(GITHUB_API,),
+        )
+        path.write_bytes(data)
+        return json.loads(data.decode())
+    except Exception as e:  # noqa: BLE001
+        if not path.exists():
+            raise
+        msg = f"could not reach GitHub ({e}); using release metadata cached at {_mtime(path)}"
+        if STRICT:
+            raise SystemExit(f"--strict: {msg}") from None
+        sys.stderr.write(f"WARNING: {msg}\n")
+        return json.loads(path.read_text())
+
+
+def github_listfile(refresh: bool = False) -> List[Tuple[int, str]]:
+    """Cross-product FileDataID -> filename index from wowdev/wow-listfile.
+
+    This has NO per-product/per-build dimension: a name here does not mean the
+    file ships to any flavor RPGLootFeed supports, only that it exists in some
+    WoW build wowdev has indexed (Retail, Classic, PTR, beta, ...). It is a
+    faster and more reliable name-discovery source than wago's per-product
+    listfile (a single well-formed file behind GitHub's CDN, no Cloudflare
+    UA-sniffing, no observed truncation), but it can never answer `presence` --
+    that still requires wago's `/api/files`.
+
+    Cached by release tag, same build-pinning approach as listfile(): a new
+    wowdev release is simply a file that has not been downloaded yet.
+    """
+    meta = _github_release_meta(refresh)
+    tag = meta.get("tag_name", "unknown")
+    asset = next(
+        (a for a in meta.get("assets", []) if a.get("name") == GITHUB_LISTFILE_ASSET),
+        None,
+    )
+    if asset is None:
+        raise SystemExit(
+            f"wow-listfile release {tag} has no asset named {GITHUB_LISTFILE_ASSET}"
+        )
+
+    name = f"github-listfile-{tag}.csv"
+    raw = _cached(
+        name,
+        asset["browser_download_url"],
+        refresh,
+        fetch_kwargs={
+            "allowed_prefixes": (
+                GITHUB_DOWNLOADS,
+                "https://objects.githubusercontent.com/",
+            )
+        },
+        validate=lambda data: _validate_listfile_csv(
+            data, name, MIN_GITHUB_LISTFILE_ROWS
+        ),
+    )
+    out: List[Tuple[int, str]] = []
+    for line in raw.decode("utf-8", "replace").splitlines():
+        fdid, _, fname = line.partition(";")
+        try:
+            out.append((int(fdid), fname.strip().strip('"')))
         except ValueError:
             continue
     return out
@@ -235,18 +427,95 @@ def db2(table: str, build: str, refresh: bool = False) -> List[dict]:
     return list(csv.DictReader(io.StringIO(raw.decode("utf-8", "replace"))))
 
 
+def _resolve_filename(fdid: int) -> str:
+    """FileDataID -> filename via /api/info, or a placeholder on failure.
+
+    A FileDataID absent from every product/build 500s persistently; `_fetch`
+    retries that to exhaustion and raises RuntimeError, not HTTPError, so
+    catching only HTTPError here would let a bad ID crash the whole command
+    instead of just leaving its name unresolved.
+    """
+    try:
+        data = json.loads(_fetch(f"{BASE}/api/info/{fdid}", timeout=60).decode())
+        return data.get("filename") or "<unknown>"
+    except (urllib.error.HTTPError, RuntimeError):
+        return "<unknown>"
+
+
 def cmd_info(args: argparse.Namespace) -> int:
     for fdid in args.fdids:
-        try:
-            data = json.loads(_fetch(f"{BASE}/api/info/{fdid}", timeout=60).decode())
-            print(f"{fdid}\t{data.get('filename')}")
-        except urllib.error.HTTPError as e:
-            print(f"{fdid}\t<HTTP {e.code}>")
+        print(f"{fdid}\t{_resolve_filename(fdid)}")
     return 0
 
 
-def cmd_presence(args: argparse.Namespace) -> int:
-    flavors = _selected_flavors(args)
+def _casc_presence(fdid: int, product: str, timeout: int = 30) -> Optional[bool]:
+    """True if `fdid` ships in `product`'s current build, False if confirmed
+    absent, None if the query itself failed (bad FileDataID, network error).
+
+    Uses /api/casc/{fdid}?product=X and the response BODY SIZE, not the HTTP
+    status: the endpoint returns HTTP 200 both when the file is present (real
+    bytes) and when it is absent from that product (0 bytes) -- status code
+    alone cannot tell those apart, which is how this endpoint earned a
+    "useless for presence checks" reputation. Verified against the
+    authoritative /api/files listfile across a random 16-fdid x 4-product
+    sample (64/64 correct) before this was trusted for real lookups. A
+    completely invalid FileDataID (not present in ANY product/build) 500s
+    instead of 200-with-empty-body; that case returns None here, not False,
+    so a typo'd ID is not silently reported as "absent".
+    """
+    url = f"{BASE}/api/casc/{fdid}?product={product}"
+    req = urllib.request.Request(
+        url, headers={"User-Agent": UA, "Accept-Encoding": "gzip"}
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:  # nosec B310
+            body = resp.read()
+            if resp.headers.get("Content-Encoding", "").lower() == "gzip":
+                body = gzip.decompress(body)
+            return len(body) > 0
+    except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError):
+        return None
+
+
+def _presence_via_casc(args: argparse.Namespace, flavors: Dict[str, str]) -> int:
+    names = {fdid: _resolve_filename(fdid) for fdid in args.fdids}
+
+    width = max((len(lbl) for lbl in flavors), default=10)
+    print(
+        f"{'fdid':<10} {'file':<58} " + " ".join(f"{lbl:<{width}}" for lbl in flavors)
+    )
+    missing_anywhere = False
+    errored = False
+    for fdid in args.fdids:
+        cells = []
+        for _label, product in flavors.items():
+            present = _casc_presence(fdid, product)
+            if present is None:
+                cells.append(f"{'ERR':<{width}}")
+                errored = True
+            else:
+                cells.append(f"{'yes' if present else 'NO':<{width}}")
+                if not present:
+                    missing_anywhere = True
+        print(f"{fdid:<10} {names.get(fdid, '<unknown>'):<58} " + " ".join(cells))
+    if errored:
+        print(
+            "\nAt least one query errored (network issue, or a FileDataID that "
+            "does not exist in any product/build). Rerun, or pass "
+            "`--source listfile` to cross-check against the full downloaded "
+            "listfile instead.",
+            file=sys.stderr,
+        )
+    if missing_anywhere:
+        print(
+            "\nAt least one file is absent from a shipped flavor. Guard its use "
+            "with G_RLF:IsRetail()/IsClassic(), or pick a different asset.",
+            file=sys.stderr,
+        )
+    return 0
+
+
+def _presence_via_listfile(args: argparse.Namespace, flavors: Dict[str, str]) -> int:
     tables = {
         label: {fdid for fdid, _ in listfile(product, args.refresh)}
         for label, product in flavors.items()
@@ -279,16 +548,28 @@ def cmd_presence(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_presence(args: argparse.Namespace) -> int:
+    flavors = _selected_flavors(args)
+    if args.source == "listfile":
+        return _presence_via_listfile(args, flavors)
+    return _presence_via_casc(args, flavors)
+
+
 def cmd_find(args: argparse.Namespace) -> int:
     pattern = re.compile(args.pattern, re.I)
-    rows = listfile(FLAVORS[args.flavor], args.refresh)
+    if args.source == "github":
+        rows = github_listfile(args.refresh)
+        scope = "GitHub community listfile (cross-product -- not a presence check)"
+    else:
+        rows = listfile(FLAVORS[args.flavor], args.refresh)
+        scope = args.flavor
     hits = [(f, n) for f, n in rows if pattern.search(n)]
     if args.icons_only:
         hits = [(f, n) for f, n in hits if n.startswith("interface/icons/")]
     for fdid, name in hits[: args.limit]:
         print(f"{fdid}\t{name}")
     print(
-        f"\n{len(hits)} match(es) in {args.flavor}"
+        f"\n{len(hits)} match(es) in {scope}"
         + (f", showing {args.limit}" if len(hits) > args.limit else ""),
         file=sys.stderr,
     )
@@ -373,8 +654,12 @@ def cmd_audit(args: argparse.Namespace) -> int:
         if (m := ATLAS_RE.match(r.get("CommittedName", "").lower()))
     }
     # Every ui_* icon, so a kit can be matched as a substring of the basename.
+    # Sourced from the GitHub community listfile rather than wago's per-product
+    # listfile: this pass is name discovery, not a presence check, and the
+    # cross-product file is a faster, more reliably-complete download. Any
+    # FileDataID this surfaces still needs `presence` before being hardcoded.
     ui_icons: List[Tuple[int, str, str]] = []
-    for fdid, name in listfile("wow", args.refresh):
+    for fdid, name in github_listfile(args.refresh):
         lowered = name.lower()
         # _256 files are higher-res duplicates of the base icon; keeping them
         # makes a faction look unmapped when only its base icon is in the map.
@@ -560,6 +845,8 @@ def cmd_cache(args: argparse.Namespace) -> int:
             build = latest.get(product, "?")
             sys.stderr.write(f"--- {label} ({product}) {build}\n")
             listfile(product, refresh=True)
+        sys.stderr.write("--- GitHub community listfile\n")
+        github_listfile(refresh=True)
 
     if args.prune:
         removed = 0
@@ -576,6 +863,17 @@ def cmd_cache(args: argparse.Namespace) -> int:
                 legacy.unlink()
                 print(f"pruned {product} (legacy un-pinned cache)")
                 removed += 1
+        try:
+            current_tag = _github_release_meta().get("tag_name")
+            for path in CACHE_DIR.glob("github-listfile-*.csv"):
+                if path.name != f"github-listfile-{current_tag}.csv":
+                    path.unlink()
+                    print(f"pruned {path.name} (superseded wow-listfile release)")
+                    removed += 1
+        except Exception as e:  # noqa: BLE001
+            sys.stderr.write(
+                f"WARNING: could not check wow-listfile release, skipping its prune: {e}\n"
+            )
         print(f"{removed} superseded listfile(s) removed")
 
     width = max(len(lbl) for lbl in FLAVORS)
@@ -594,6 +892,18 @@ def cmd_cache(args: argparse.Namespace) -> int:
             status = "not cached - will download on first use"
             have = "-"
         print(f"{label:<{width}}  {current:<18} {have:<18} {status}")
+
+    try:
+        gh_tag = _github_release_meta().get("tag_name", "?")
+    except Exception as e:  # noqa: BLE001
+        gh_tag = f"? ({e})"
+    gh_path = CACHE_DIR / f"github-listfile-{gh_tag}.csv"
+    gh_status = (
+        f"ok (fetched {_mtime(gh_path)})"
+        if gh_path.exists()
+        else "not cached - will download on first use"
+    )
+    print(f"{'GitHub listfile':<{width}}  {gh_tag:<18} {'' :<18} {gh_status}")
 
     db2_files = sorted(CACHE_DIR.glob("db2-*.csv"))
     if db2_files:
@@ -640,11 +950,37 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
     s = sub.add_parser("presence", help="check FileDataID presence per shipped flavor")
     s.add_argument("fdids", nargs="+", type=int)
     s.add_argument("--flavor", choices=list(FLAVORS), help="limit to one flavor")
+    s.add_argument(
+        "--source",
+        default="casc",
+        choices=["casc", "listfile"],
+        help=(
+            "casc = one small /api/casc request per fdid/flavor pair, no "
+            "listfile download (default); listfile = download and filter the "
+            "full per-product listfile, for cross-checking a casc result you "
+            "don't trust"
+        ),
+    )
     s.set_defaults(func=cmd_presence)
 
-    s = sub.add_parser("find", help="search a flavor's listfile by filename regex")
+    s = sub.add_parser("find", help="search a filename index by regex")
     s.add_argument("pattern")
-    s.add_argument("--flavor", default="Retail", choices=list(FLAVORS))
+    s.add_argument(
+        "--source",
+        default="github",
+        choices=["github", "wago"],
+        help=(
+            "github = cross-product community listfile, fast, NOT a presence "
+            "check (default); wago = one product's live listfile, for a "
+            "targeted, version-specific search (combine with --flavor)"
+        ),
+    )
+    s.add_argument(
+        "--flavor",
+        default="Retail",
+        choices=list(FLAVORS),
+        help="only used with --source wago",
+    )
     s.add_argument(
         "--icons-only", action="store_true", help="restrict to interface/icons/"
     )
