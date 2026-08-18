@@ -65,6 +65,33 @@ describe("LootDisplay module", function()
 		assert.is_not_nil(LootDisplayModule)
 	end)
 
+	it("GetFrame() with no id defaults to MAIN, and explicit id still resolves that frame", function()
+		local frame1 = makeFrameWithRow()
+		local frame2 = makeFrameWithRow()
+
+		local createCount = 0
+		_G.CreateFrame = function()
+			createCount = createCount + 1
+			if createCount == 1 then
+				return frame1
+			end
+			return frame2
+		end
+
+		ns.db.global.frames = {
+			[ns.Frames.MAIN] = { features = {} },
+			[2] = { features = {} },
+		}
+
+		LootDisplayModule:InitFrame(ns.Frames.MAIN)
+		LootDisplayModule:InitFrame(2)
+
+		assert.equal(frame1, LootDisplayModule:GetFrame())
+		assert.equal(frame1, LootDisplayModule:GetFrame(nil))
+		assert.equal(frame1, LootDisplayModule:GetFrame(ns.Frames.MAIN))
+		assert.equal(frame2, LootDisplayModule:GetFrame(2))
+	end)
+
 	it("routes OnLootReady rows only to frames subscribed to that feature", function()
 		local frame1, row1 = makeFrameWithRow()
 		local frame2, row2 = makeFrameWithRow()

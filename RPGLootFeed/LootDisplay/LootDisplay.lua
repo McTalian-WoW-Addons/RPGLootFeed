@@ -443,14 +443,6 @@ function LootDisplay:OnLootReady(_, element)
 	end
 end
 
---- Return the live frame widget for the given ID, or nil.
---- Intended for integration tests that need to read per-frame counters.
---- @param id integer
---- @return RLF_LootDisplayFrame|nil
-function LootDisplay:GetFrame(id)
-	return lootFrames[id]
-end
-
 --- Return an iterator over all live (id, frame) pairs.
 --- @return fun(): integer?, RLF_LootDisplayFrame?
 function LootDisplay:GetAllFrames()
