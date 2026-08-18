@@ -408,12 +408,19 @@ function LootRolls:LOOT_ITEM_ROLL_WON(eventName, itemLink, quantity, rollType, r
 		return
 	end
 
+	-- Blizzard's LOOT_ITEM_ROLL_WON payload carries no rollID (verified
+	-- against wow-ui-source), so when two concurrent rolls share the same
+	-- itemID we can't perfectly tell which one this event resolved. Mark
+	-- only the first not-yet-resolved match and stop — marking every
+	-- match would falsely flag still-active rolls as won.
 	for rollID, info in pairs(self._activeRolls) do
-		if info.itemID == wonItemID then
+		if info.itemID == wonItemID and not info.resolved then
+			info.resolved = true
 			local rows = self:FindRollRows(rollID)
 			for _, entry in ipairs(rows) do
 				entry.row:OnRollWon(rollType, roll, upgraded)
 			end
+			break
 		end
 	end
 end
@@ -665,7 +672,7 @@ function LootRolls:ReplayActiveRolls()
 	self:LogDebug("ReplayActiveRolls", addonName, #pendingRollIDs)
 	for _, rollID in ipairs(pendingRollIDs) do
 		local duration = self._adapter.GetLootRollDuration(rollID)
-		self:START_LOOT_ROLL(rollID, duration)
+		self:START_LOOT_ROLL("START_LOOT_ROLL", rollID, duration)
 	end
 end
 
