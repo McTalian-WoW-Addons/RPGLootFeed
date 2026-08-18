@@ -284,6 +284,7 @@ G_RLF.defaults = {
 						repLevelColor = { 0.5, 0.5, 1, 1 },
 						repLevelTextWrapChar = 5, -- ANGLE
 						enableIcon = true,
+						repIconTexture = "",
 					},
 					profession = {
 						enabled = true,
@@ -553,6 +554,7 @@ G_RLF.defaults = {
 						repLevelColor = { 0.5, 0.5, 1, 1 },
 						repLevelTextWrapChar = 5, -- ANGLE
 						enableIcon = true,
+						repIconTexture = "",
 					},
 					profession = {
 						enabled = false,

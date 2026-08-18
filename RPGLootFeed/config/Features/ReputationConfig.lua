@@ -69,6 +69,44 @@ function G_RLF.BuildReputationArgs(frameId, order)
 						end,
 						order = 0.5,
 					},
+					repIconTexture = {
+						type = "input",
+						name = G_RLF.L["Reputation Icon Texture"],
+						desc = G_RLF.L["RepIconTextureDesc"],
+						width = "double",
+						disabled = function()
+							return not fc().enabled or G_RLF.db.global.misc.hideAllIcons or not fc().enableIcon
+						end,
+						get = function()
+							return fc().repIconTexture
+						end,
+						set = function(_, value)
+							fc().repIconTexture = value
+							G_RLF.LootDisplay:RefreshSampleRowsIfShown()
+						end,
+						validate = "ValidateRepIcon",
+						order = 0.6,
+					},
+					testRepIcon = {
+						type = "description",
+						name = function()
+							return ReputationConfig:TestIcon(frameId, fc().repIconTexture)
+						end,
+						width = "normal",
+						order = 0.61,
+					},
+					revertRepIconToDefault = {
+						type = "execute",
+						name = CreateAtlasMarkup("common-icon-undo", 16, 16),
+						desc = G_RLF.L["RevertRepIconToDefaultDesc"],
+						func = function()
+							fc().repIconTexture =
+								G_RLF.db.defaults.global.frames["**"].features.reputation.repIconTexture
+							G_RLF.LootDisplay:RefreshSampleRowsIfShown()
+						end,
+						width = 0.35,
+						order = 0.62,
+					},
 					defaultRepColor = {
 						type = "color",
 						hasAlpha = true,
@@ -155,4 +193,34 @@ function G_RLF.BuildReputationArgs(frameId, order)
 			},
 		},
 	}
+end
+
+--- Render a preview of the resolved reputation icon (override, or the flavor default when unset).
+--- The reputation icon is applied via SetItemButtonTexture (FileDataID or texture path), never an
+--- Atlas, so this cannot reuse ItemConfig:TestIcon's CreateAtlasMarkup preview.
+function ReputationConfig:TestIcon(frameId, icon)
+	local styleDb = G_RLF.DbAccessor:Styling(frameId)
+	local secondaryFontSize = styleDb.secondaryFontSize
+	local resolvedIcon = (icon ~= nil and icon ~= "") and icon or G_RLF.DefaultIcons.REPUTATION
+	local markup = string.format("|T%s:%d:%d|t", resolvedIcon, secondaryFontSize, secondaryFontSize)
+	return string.format(G_RLF.L["Chosen Icon"], markup)
+end
+
+--- Accept an empty value (meaning "use the flavor default"), a numeric FileDataID, or a texture
+--- file path. Reject anything else, most notably Atlas names, since SetItemButtonTexture cannot
+--- render an Atlas.
+function ReputationConfig:ValidateRepIcon(_, value)
+	if value == nil or value == "" then
+		return true
+	end
+
+	if tonumber(value) then
+		return true
+	end
+
+	if type(value) == "string" and (value:find("/", 1, true) or value:find("\\", 1, true)) then
+		return true
+	end
+
+	return string.format(G_RLF.L["InvalidRepIconTexture"], value)
 end

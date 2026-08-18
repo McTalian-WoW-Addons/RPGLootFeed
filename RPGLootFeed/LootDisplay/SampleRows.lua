@@ -242,10 +242,11 @@ function LootDisplay:CreateSampleRows(frame)
 		if repModule and repModule:IsEnabled() then
 			local repDb = G_RLF.DbAccessor:Feature(frame, "reputation") or {}
 			local r, g, b, a = 1, 0.82, 0, 1
+			local repIcon = G_RLF.RepUtils.ResolveRepIcon(repDb)
 			LootElementBase:fromPayload({
 				key = "sample_rep",
 				type = "Reputation",
-				icon = (repDb.enableIcon and not G_RLF.db.global.misc.hideAllIcons) and DefaultIcons.REPUTATION or nil,
+				icon = (repDb.enableIcon and not G_RLF.db.global.misc.hideAllIcons) and repIcon or nil,
 				quality = ItemQualEnum.Rare,
 				quantity = 668,
 				r = r,

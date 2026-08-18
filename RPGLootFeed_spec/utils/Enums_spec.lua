@@ -80,4 +80,27 @@ describe("Enums", function()
 	it("defines TertiaryStats enum", function()
 		assert.is_not_nil(ns.TertiaryStats)
 	end)
+
+	describe("DefaultIcons.REPUTATION", function()
+		-- 236681 (achievement_reputation_01, the handshake icon) predates achievements and is
+		-- absent from TBC Anniversary, which renders a missing texture as a solid green square.
+		-- 135026 (the guild tabard) ships on every flavor, including TBC Anniversary.
+		it("uses the handshake icon on flavors other than TBC Classic", function()
+			local repNs = nsMocks:unitLoadedAfter(nsMocks.LoadSections.UtilsList)
+			repNs.IsTBCClassic = function()
+				return false
+			end
+			assert(loadfile("RPGLootFeed/utils/Enums.lua"))("TestAddon", repNs)
+			assert.are.equal(236681, repNs.DefaultIcons.REPUTATION)
+		end)
+
+		it("uses the guild tabard icon on TBC Classic", function()
+			local repNs = nsMocks:unitLoadedAfter(nsMocks.LoadSections.UtilsList)
+			repNs.IsTBCClassic = function()
+				return true
+			end
+			assert(loadfile("RPGLootFeed/utils/Enums.lua"))("TestAddon", repNs)
+			assert.are.equal(135026, repNs.DefaultIcons.REPUTATION)
+		end)
+	end)
 end)
