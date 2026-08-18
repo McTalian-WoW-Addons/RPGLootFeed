@@ -187,6 +187,18 @@ function Rep:BuildPayload(unifiedFactionData)
 	return payload
 end
 
+-- ── Gating helpers ────────────────────────────────────────────────────────────
+
+--- Single source of truth for whether Delver's Journey (and the TWW-era
+--- reputation plumbing it rides on) is available: current Retail client, or
+--- a Classic-flavor client whose reported expansion level has caught up to
+--- TWW. OnEnable/OnDisable/PLAYER_ENTERING_WORLD/CheckForHiddenRenownFactions
+--- all gate on this so they can never drift out of sync with each other.
+---@return boolean
+function Rep:IsDelversJourneyAvailable()
+	return self.isRetail() or self.reputationApi.GetExpansionLevel() >= G_RLF.Expansion.TWW
+end
+
 -- ── Module lifecycle ──────────────────────────────────────────────────────────
 
 function Rep:OnInitialize()
@@ -204,7 +216,7 @@ end
 function Rep:OnDisable()
 	self.textTemplateEngine.contextProviders["Reputation"] = nil
 	self:UnregisterEvent("PLAYER_ENTERING_WORLD")
-	if self.reputationApi.GetExpansionLevel() >= G_RLF.Expansion.TWW then
+	if self:IsDelversJourneyAvailable() then
 		self:UnregisterAllBuckets()
 	end
 	if self.reputationApi.IsEventValid("FACTION_STANDING_CHANGED") then
@@ -222,7 +234,7 @@ function Rep:OnEnable()
 	else
 		self:RegisterEvent("CHAT_MSG_COMBAT_FACTION_CHANGE")
 	end
-	if self.reputationApi.GetExpansionLevel() >= G_RLF.Expansion.TWW then
+	if self:IsDelversJourneyAvailable() then
 		--- @type FrameEvent[]
 		local delversJourneyPollEvents = {
 			"UPDATE_FACTION",
@@ -241,7 +253,7 @@ function Rep:ParseFactionChangeMessage(message)
 end
 
 function Rep:PLAYER_ENTERING_WORLD(eventName, isLogin, isReload)
-	if self.reputationApi.GetExpansionLevel() >= G_RLF.Expansion.TWW then
+	if self:IsDelversJourneyAvailable() then
 		if not self.companionFactionId or not self.companionFactionName then
 			self.companionFactionId = self.reputationApi.GetFactionForCompanion()
 			local factionData = self.reputationApi.GetFactionDataByID(self.companionFactionId)

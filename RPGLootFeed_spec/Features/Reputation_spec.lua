@@ -589,6 +589,105 @@ describe("Reputation Module", function()
 		end)
 	end)
 
+	-- ── IsDelversJourneyAvailable (shared TWW gate) ───────────────────────────
+	-- Guards OnEnable, OnDisable, PLAYER_ENTERING_WORLD, and
+	-- CheckForHiddenRenownFactions. All four must move together off ONE
+	-- predicate -- previously each call site re-derived it independently,
+	-- and could drift out of sync (e.g. an OnEnable/OnDisable mismatch that
+	-- leaves a bucket registered forever).
+
+	describe("IsDelversJourneyAvailable", function()
+		it("is false below TWW on a non-Retail client, true at/above TWW", function()
+			ns.IsRetail = function()
+				return false
+			end
+			RepModule.reputationApi.GetExpansionLevel = function()
+				return 9
+			end
+			assert.is_false(RepModule:IsDelversJourneyAvailable())
+
+			RepModule.reputationApi.GetExpansionLevel = function()
+				return 10
+			end
+			assert.is_true(RepModule:IsDelversJourneyAvailable())
+		end)
+
+		it("is true on Retail regardless of reported expansion level", function()
+			ns.IsRetail = function()
+				return true
+			end
+			RepModule.reputationApi.GetExpansionLevel = function()
+				return 9
+			end
+			assert.is_true(RepModule:IsDelversJourneyAvailable())
+		end)
+
+		-- Flip the single upstream signal (reported expansion level) and prove
+		-- every guarded call site's behavior flips with it -- one shared
+		-- source of truth, not four independently-drifting copies.
+		for _, case in ipairs({
+			{ desc = "below TWW", level = 9, delversJourneyGuardedCallCount = 1 },
+			{ desc = "at/above TWW", level = 10, delversJourneyGuardedCallCount = 2 },
+		}) do
+			it("OnEnable and OnDisable register/unregister the same number of buckets (" .. case.desc .. ")", function()
+				RepModule.reputationApi = makeTWWAdapter()
+				RepModule.reputationApi.GetExpansionLevel = function()
+					return case.level
+				end
+
+				local bucketSpy = spy.on(RepModule, "RegisterBucketEvent")
+				RepModule:OnEnable()
+				assert.spy(bucketSpy).was.called(case.delversJourneyGuardedCallCount)
+
+				local unregSpy = spy.on(RepModule, "UnregisterAllBuckets")
+				RepModule:OnDisable()
+				assert.spy(unregSpy).was.called(case.delversJourneyGuardedCallCount)
+			end)
+		end
+
+		it("PLAYER_ENTERING_WORLD skips Delvers Journey init when the gate is false", function()
+			RepModule.reputationApi = makeTWWAdapter()
+			RepModule.reputationApi.GetExpansionLevel = function()
+				return 9 -- below TWW, non-Retail: gate is false
+			end
+			local companionSpy = spy.on(RepModule.reputationApi, "GetFactionForCompanion")
+
+			RepModule:PLAYER_ENTERING_WORLD("PLAYER_ENTERING_WORLD", true, false)
+
+			assert.spy(companionSpy).was_not.called()
+			assert.is_nil(RepModule.companionFactionId)
+		end)
+
+		it("PLAYER_ENTERING_WORLD runs Delvers Journey init when the gate is true", function()
+			RepModule.reputationApi = makeTWWAdapter() -- GetExpansionLevel = 10, at TWW
+			local companionSpy = spy.on(RepModule.reputationApi, "GetFactionForCompanion")
+
+			RepModule:PLAYER_ENTERING_WORLD("PLAYER_ENTERING_WORLD", true, false)
+
+			assert.spy(companionSpy).was.called(1)
+			assert.equals(2640, RepModule.companionFactionId)
+		end)
+
+		it("CheckForHiddenRenownFactions defers to the shared gate instead of re-deriving it", function()
+			ns = makeNs()
+			RepModule = loadRepModule(ns)
+			RepModule.reputationApi = makeTWWAdapter()
+			stub(RepModule, "IsDelversJourneyAvailable").returns(false)
+			local seasonSpy = spy.new(function()
+				return 0
+			end)
+			RepModule.reputationApi.GetDelvesFactionForSeason = seasonSpy
+
+			-- CURRENT_SEASON_DELVE_JOURNEY starts at 0 for a freshly loaded module,
+			-- so a re-fetch is only skipped if CheckForHiddenRenownFactions is
+			-- actually asking the shared gate rather than its own copy of the
+			-- expansion-level condition.
+			RepModule:CheckForHiddenRenownFactions({})
+
+			assert.spy(seasonSpy).was_not.called()
+		end)
+	end)
+
 	-- ── CheckForHiddenRenownFactions (TWW Delvers Journey) ────────────────────
 
 	describe("CheckForHiddenRenownFactions", function()
