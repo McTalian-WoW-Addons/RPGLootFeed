@@ -49,6 +49,25 @@ describe("RLF_LootRollRowMixin", function()
 		ns = nsMocks:unitLoadedAfter(nsMocks.LoadSections.All)
 		ns.FeatureModule = { LootRolls = "LootRolls" }
 
+		-- Class-color adapter seam (WoWAPIAdapters.lua's G_RLF.WoWAPI.LootRolls).
+		-- Default stub resolves no colors, matching prior (unmocked
+		-- RAID_CLASS_COLORS) behavior for tests that don't care about color.
+		-- Individual tests override GetClassColor/GetRaidClassColor to prove
+		-- the row actually goes through this seam rather than the global.
+		ns.WoWAPI = {
+			LootRolls = {
+				GetExpansionLevel = function()
+					return ns.Expansion.BFA
+				end,
+				GetClassColor = function()
+					return nil
+				end,
+				GetRaidClassColor = function()
+					return nil
+				end,
+			},
+		}
+
 		assert(loadfile(MIXIN_FILE))("TestAddon", ns)
 
 		row = rowFrameMocks.new()
@@ -336,6 +355,49 @@ describe("RLF_LootRollRowMixin", function()
 				assert.is_true(row._resolved)
 			end)
 
+			it("colors the winner's name via G_RLF.WoWAPI.LootRolls, not the global RAID_CLASS_COLORS", function()
+				-- A global RAID_CLASS_COLORS is deliberately present here with a
+				-- DIFFERENT color than the adapter stub. If the row still reads
+				-- the global directly (old behavior) rather than going through
+				-- the adapter seam, this test's assertion on the mocked color
+				-- fails and the "not called" assertion on the global catches it.
+				_G.RAID_CLASS_COLORS = {
+					WARRIOR = {
+						r = 0,
+						g = 0,
+						b = 0,
+						WrapTextInColorCode = function()
+							return "|| SHOULD NOT BE USED ||"
+						end,
+					},
+				}
+				local mockColor = {
+					r = 0.1,
+					g = 0.2,
+					b = 0.3,
+				}
+				mockColor.WrapTextInColorCode = function(_, text)
+					return "|cffMOCKED" .. text .. "|r"
+				end
+				ns.WoWAPI.LootRolls.GetClassColor = function(className)
+					if className == "WARRIOR" then
+						return mockColor
+					end
+					return nil
+				end
+
+				row:SetRollResults({
+					winner = { playerClass = "WARRIOR", playerName = "Bob", isSelf = false, roll = 55, state = 3 },
+					rollInfos = {
+						{ playerName = "Bob", playerClass = "WARRIOR", state = 3 },
+					},
+				})
+
+				assert
+					.stub(row.ItemCountText.SetText).was
+					.called_with(row.ItemCountText, "|cffMOCKEDBob|r won (Greed, 55)")
+			end)
+
 			it("shows a Disenchant win via the addon-internal state 6 (Classic only)", function()
 				row:SetRollResults({
 					winner = { playerClass = "UNKNOWN", playerName = "Dave", isSelf = false, roll = 20, state = 6 },
@@ -421,12 +483,47 @@ describe("RLF_LootRollRowMixin", function()
 	end)
 
 	describe("CleanupLootRoll", function()
-		it("untracks the roll and resets all row state", function()
-			row.moduleRef = { _UntrackRoll = function() end }
-			stub(row.moduleRef, "_UntrackRoll")
+		it("untracks the roll and resets all row state, via the real payload->element->row pipeline", function()
+			-- Goes through the actual production chain instead of manually
+			-- injecting row.moduleRef: LootRolls.lua's BuildPayload sets
+			-- payload.moduleRef, G_RLF.LootElementBase:fromPayload must carry
+			-- it onto the element, and PostBootstrapFromElement must carry it
+			-- from the element onto the row. A regression in any of those
+			-- three hops must fail this test.
+			assert(loadfile("RPGLootFeed/Features/_Internals/LootElementBase.lua"))("TestAddon", ns)
+			assert.is_not_nil(ns.LootElementBase)
+
+			local moduleRef = {}
+			stub(moduleRef, "_UntrackRoll")
+
+			-- Mirrors LootRolls.lua's START_LOOT_ROLL payload shape (no
+			-- canNeed/canGreed overrides -- those are sample-row-only, so a
+			-- real roll row falls through to GetLootRollItemInfo, exactly
+			-- like the production, non-sample path does).
+			local payload = {
+				key = "lootRoll:999",
+				type = ns.FeatureModule.LootRolls,
+				rollID = 999,
+				rollDuration = 60,
+				moduleRef = moduleRef,
+			}
+			_G.GetLootRollItemInfo = function()
+				return nil, nil, nil, nil, nil, true, true, false, nil, nil, nil, nil, false
+			end
+
+			local element = ns.LootElementBase:fromPayload(payload)
+
+			stub(row, "_CreateRollButton", function()
+				return newDummyButton()
+			end)
+
+			row:PostBootstrapFromElement(element)
+
+			-- Prove the indirection actually happened before relying on it.
+			assert.are.equal(moduleRef, row.moduleRef)
+			assert.are.equal(999, row.rollID)
 
 			local btn = newDummyButton()
-			row.rollID = 999
 			row._rolled = true
 			row._resolved = true
 			row._rollTimerBarActive = true
@@ -437,7 +534,7 @@ describe("RLF_LootRollRowMixin", function()
 
 			row:CleanupLootRoll()
 
-			assert.stub(row.moduleRef._UntrackRoll).was.called_with(row.moduleRef, 999)
+			assert.stub(moduleRef._UntrackRoll).was.called_with(moduleRef, 999)
 			assert.is_nil(row.rollID)
 			assert.is_false(row._rolled)
 			assert.is_nil(row._resolved)
