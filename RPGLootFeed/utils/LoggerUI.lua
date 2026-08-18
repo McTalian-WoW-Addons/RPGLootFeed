@@ -30,7 +30,7 @@ for _, key in ipairs({
 	"Money",
 	"Reputation",
 	"Experience",
-	"Professions",
+	"Profession",
 	"PartyLoot",
 	"TravelPoints",
 	"Transmog",
