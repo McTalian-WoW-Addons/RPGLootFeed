@@ -375,6 +375,143 @@ describe("LootDisplayRowMixin", function()
 				assert.equal(0.8, captures.showText.a)
 			end)
 		end)
+
+		-- ── iconFn ─────────────────────────────────────────────────────────
+		-- Money is the first (and so far only) module to use iconFn: the row
+		-- icon following the accumulated total (e.g. gold/silver/copper coin
+		-- denomination) rather than staying fixed at whatever the row was
+		-- created with.
+
+		describe("iconFn (dynamic icon recompute on update)", function()
+			-- UpdateIcon is stubbed out to a no-op by buildRow(); replace it with
+			-- a fake that mimics the real mixin's synchronous `self.icon = icon`
+			-- assignment (RowIconMixin.lua:160) so the early-out comparison has
+			-- something real to check against.
+			local function withIconSpy(r)
+				local calls = {}
+				r.UpdateIcon = function(self, key, icon, quality)
+					table.insert(calls, { key = key, icon = icon, quality = quality })
+					self.icon = icon
+				end
+				return calls
+			end
+
+			it("calls iconFn with the OLD amount, mirroring coinDataFn's convention", function()
+				local captures
+				row, captures = buildRow()
+				row.amount = 40
+				row.icon = nil
+				withIconSpy(row)
+
+				local receivedArg
+				local element = {
+					textFn = function()
+						return "text"
+					end,
+					quantity = 20,
+					r = 1,
+					g = 1,
+					b = 1,
+					a = 1,
+					iconFn = function(existingCopper)
+						receivedArg = existingCopper
+						return "some-icon"
+					end,
+				}
+
+				row:UpdateQuantity(element)
+
+				assert.equal(40, receivedArg)
+			end)
+
+			it("applies the new icon via UpdateIcon when the resolved icon changes", function()
+				local captures
+				row, captures = buildRow()
+				row.amount = 50
+				row.icon = "copper-icon"
+				local calls = withIconSpy(row)
+
+				local element = {
+					textFn = function()
+						return "text"
+					end,
+					quantity = 100,
+					r = 1,
+					g = 1,
+					b = 1,
+					a = 1,
+					iconFn = function(existingCopper)
+						local total = (existingCopper or 0) + 100
+						if total >= 10000 then
+							return "gold-icon"
+						elseif total >= 100 then
+							return "silver-icon"
+						else
+							return "copper-icon"
+						end
+					end,
+				}
+
+				row:UpdateQuantity(element)
+
+				assert.equal(1, #calls)
+				assert.equal("silver-icon", calls[1].icon)
+				assert.equal("silver-icon", row.icon)
+			end)
+
+			it("does not call UpdateIcon when the resolved icon is unchanged (perf early-out)", function()
+				local captures
+				row, captures = buildRow()
+				row.amount = 50
+				row.icon = "copper-icon"
+				local calls = withIconSpy(row)
+
+				local element = {
+					textFn = function()
+						return "text"
+					end,
+					quantity = 10,
+					r = 1,
+					g = 1,
+					b = 1,
+					a = 1,
+					iconFn = function()
+						-- Always resolves to the icon the row already has --
+						-- must not queue a redundant UpdateIcon/RunNextFrame call.
+						return "copper-icon"
+					end,
+				}
+
+				row:UpdateQuantity(element)
+
+				assert.equal(0, #calls)
+				assert.equal("copper-icon", row.icon)
+			end)
+
+			it("does nothing when the element has no iconFn (non-money rows)", function()
+				local captures
+				row, captures = buildRow()
+				row.amount = 5
+				row.icon = "some-icon"
+				local calls = withIconSpy(row)
+
+				local element = {
+					textFn = function()
+						return "text"
+					end,
+					quantity = 1,
+					r = 1,
+					g = 1,
+					b = 1,
+					a = 1,
+				}
+
+				row:UpdateQuantity(element)
+
+				assert.equal(0, #calls)
+				assert.equal("some-icon", row.icon)
+			end)
+		end)
 	end)
 
 	-- ── BootstrapFromElement ───────────────────────────────────────────────

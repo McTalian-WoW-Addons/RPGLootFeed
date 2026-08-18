@@ -18,6 +18,7 @@ function G_RLF.LootElementBase:new()
 	---@class RLF_BaseLootElement
 	---@field public customBehavior? fun(): nil
 	---@field public colorFn (fun(netQuantity: number): number, number, number)?
+	---@field public iconFn (fun(existingQuantity: number): number|string|nil)?
 	local element = {}
 
 	-- ── Identity / routing ─────────────────────────────────────────────────────
@@ -34,6 +35,7 @@ function G_RLF.LootElementBase:new()
 
 	-- ── Visuals ────────────────────────────────────────────────────────────────
 	element.icon = nil
+	element.iconFn = nil
 	element.quality = nil
 	element.sellPrice = nil
 
@@ -152,6 +154,7 @@ function G_RLF.LootElementBase:fromPayload(payload)
 
 	-- ── Icon ───────────────────────────────────────────────────────────────────
 	element.icon = payload.icon
+	element.iconFn = payload.iconFn
 	element.quality = payload.quality
 	element.topLeftText = payload.topLeftText
 	element.topLeftColor = payload.topLeftColor
@@ -227,6 +230,7 @@ end
 ---@field type string|number Module enum value or type string
 ---@field eventChannel? string Message bus channel (default: "RLF_NEW_LOOT")
 ---@field icon? number|string Texture ID or path
+---@field iconFn? fun(existingQuantity: number): (number|string|nil) Dynamic icon recomputer; called with the OLD accumulated quantity, mirrors coinDataFn's convention
 ---@field quality? number Item quality / rarity
 ---@field topLeftText? string Text overlayed on icon corner
 ---@field topLeftColor? table RGBA table for topLeftText

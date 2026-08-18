@@ -21,7 +21,7 @@ describe("Money", function()
 		-- and TextTemplateEngine.lua are included; everything else is intentionally absent.
 		ns = {
 			-- Captured as locals by Money.lua at load time.
-			DefaultIcons = { MONEY = 132279 },
+			DefaultIcons = { MONEY = 132279, MONEY_SILVER = 132280, MONEY_COPPER = 132281 },
 			ItemQualEnum = { Poor = 0 },
 			FeatureModule = { Money = "Money" },
 			WoWAPI = { Money = {} },
@@ -388,6 +388,84 @@ describe("Money", function()
 				assert.equals(1, g)
 				assert.equals(1, b)
 				assert.equals(1, a)
+			end)
+		end)
+
+		describe("iconFn (denomination icon for row updates)", function()
+			it("is present on the payload and mirrors the resolved icon on create", function()
+				local payload = Money:BuildPayload(50000)
+
+				assert.is_function(payload.iconFn)
+				-- Row creation calls coinDataFn(0); iconFn(0) must agree.
+				assert.equal(payload.icon, payload.iconFn(0))
+			end)
+
+			it("picks copper below the silver boundary (99 copper)", function()
+				local element = buildElement(99)
+				assert.equal(ns.DefaultIcons.MONEY_COPPER, element.iconFn(0))
+			end)
+
+			it("picks silver at the silver boundary (100 copper)", function()
+				local element = buildElement(100)
+				assert.equal(ns.DefaultIcons.MONEY_SILVER, element.iconFn(0))
+			end)
+
+			it("picks silver below the gold boundary (9999 copper)", function()
+				local element = buildElement(9999)
+				assert.equal(ns.DefaultIcons.MONEY_SILVER, element.iconFn(0))
+			end)
+
+			it("picks gold at the gold boundary (10000 copper)", function()
+				local element = buildElement(10000)
+				assert.equal(ns.DefaultIcons.MONEY, element.iconFn(0))
+			end)
+
+			it("a row created and never updated still resolves the correct denomination icon", function()
+				-- 50 copper is below the silver boundary -- must NOT default to gold.
+				local payload = Money:BuildPayload(50)
+				assert.equal(ns.DefaultIcons.MONEY_COPPER, payload.icon)
+			end)
+
+			it("follows the accumulating running total across updates", function()
+				-- Row starts with 50 copper (copper icon), then accumulates up through
+				-- the silver and gold boundaries. iconFn mirrors coinDataFn's convention:
+				-- called with the OLD accumulated amount, adds its own quantity internally.
+				local element = buildElement(60) -- this event's delta
+
+				-- existing 50 + 60 = 110 → silver
+				assert.equal(ns.DefaultIcons.MONEY_SILVER, element.iconFn(50))
+
+				local goldElement = buildElement(9950)
+				-- existing 100 + 9950 = 10050 → gold
+				assert.equal(ns.DefaultIcons.MONEY, goldElement.iconFn(100))
+			end)
+
+			it("uses math.abs so negative amounts still resolve a sensible denomination", function()
+				-- Existing 200 (silver), losing 150 → net = 50 copper (abs) → copper icon
+				local element = buildElement(-150)
+				assert.equal(ns.DefaultIcons.MONEY_COPPER, element.iconFn(200))
+			end)
+
+			it("resolves gold for a large negative net (money loss)", function()
+				-- Existing 0, losing 15000 copper → abs 15000 → gold icon
+				local element = buildElement(-15000)
+				assert.equal(ns.DefaultIcons.MONEY, element.iconFn(0))
+			end)
+
+			it("returns nil (payload.icon and iconFn) when enableIcon is disabled", function()
+				ns.db.global.money.enableIcon = false
+
+				local payload = Money:BuildPayload(50000)
+				assert.is_nil(payload.icon)
+				assert.is_nil(payload.iconFn(0))
+			end)
+
+			it("returns nil (payload.icon and iconFn) when hideAllIcons is set", function()
+				ns.db.global.misc.hideAllIcons = true
+
+				local payload = Money:BuildPayload(50000)
+				assert.is_nil(payload.icon)
+				assert.is_nil(payload.iconFn(0))
 			end)
 		end)
 

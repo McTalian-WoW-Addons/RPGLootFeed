@@ -171,6 +171,11 @@ G_RLF.GameSounds = {
 ---@enum G_RLF.DefaultIcons
 G_RLF.DefaultIcons = {
 	MONEY = 133785,
+	-- Stacked-coin family by the same artist as MONEY (gold); confirmed present
+	-- on all four shipped flavors. Used to pick the icon by denomination of the
+	-- accumulated total instead of always showing gold coins.
+	MONEY_SILVER = 133787,
+	MONEY_COPPER = 133789,
 	-- 236681 (the handshake icon used everywhere else) predates achievements and is absent
 	-- from TBC Anniversary (2.5.6 ships no Achievement_* icons at all); it renders as a
 	-- solid green square there. 135026 (guild tabard) ships on every flavor including TBC.
