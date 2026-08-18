@@ -77,6 +77,18 @@ local function createMoneyContextProvider()
 	end
 end
 
+--- Decomposes a non-negative copper amount into gold/silver/copper parts.
+--- Shared by coinDataFn (coin texture display) and the icon denomination
+--- picker in BuildPayload so the icon and the coin display can never disagree.
+---@param totalCopper number Non-negative copper amount
+---@return number gold, number silver, number copper
+local function DecomposeCopper(totalCopper)
+	local gold = math.floor(totalCopper / 10000)
+	local silver = math.floor((totalCopper % 10000) / 100)
+	local copper = totalCopper % 100
+	return gold, silver, copper
+end
+
 --- Build a uniform payload for a money loot event.
 --- Returns nil when the amount is zero or nil (nothing to display).
 ---@param quantity number The copper amount (positive = income, negative = loss)
@@ -86,11 +98,36 @@ function Money:BuildPayload(quantity)
 		return nil
 	end
 
-	local icon = DefaultIcons.MONEY
-	local moneyBuildConfig = G_RLF.DbAccessor:AnyFeatureConfig("money") or {}
-	if not moneyBuildConfig.enableIcon or G_RLF.db.global.misc.hideAllIcons then
-		icon = nil
+	-- Icon tracks the highest non-zero denomination of the running accumulated
+	-- total (gold > silver > copper) instead of always showing gold coins, so
+	-- a row that only ever loots silver/copper doesn't read as "gold looted".
+	-- Mirrors coinDataFn's convention below: called with the OLD accumulated
+	-- amount, and computes the new total itself as (existingCopper or 0) +
+	-- quantity, rather than colorFn's convention of receiving the net amount
+	-- pre-computed by the caller.
+	---@param existingCopper? number
+	local function iconFn(existingCopper)
+		local moneyConfig = G_RLF.DbAccessor:AnyFeatureConfig("money") or {}
+		if not moneyConfig.enableIcon or G_RLF.db.global.misc.hideAllIcons then
+			return nil
+		end
+		local total = math.abs((existingCopper or 0) + quantity)
+		local gold, silver = DecomposeCopper(total)
+		if gold > 0 then
+			return DefaultIcons.MONEY
+		elseif silver > 0 then
+			return DefaultIcons.MONEY_SILVER
+		else
+			return DefaultIcons.MONEY_COPPER
+		end
 	end
+
+	-- Resolve the initial icon now, with existingCopper = 0 (mirroring how the
+	-- row's create path calls coinDataFn(0) -- see LootDisplayRow.lua), so a
+	-- row that is created and never updated still gets the correct
+	-- denomination icon instead of only being fixed up on the next accumulation.
+	local icon = iconFn(0)
+	local moneyBuildConfig = G_RLF.DbAccessor:AnyFeatureConfig("money") or {}
 
 	local r, g, b = 1, 1, 1
 	if quantity < 0 then
@@ -114,6 +151,7 @@ function Money:BuildPayload(quantity)
 		key = "MONEY_LOOT",
 		type = FeatureModule.Money,
 		icon = icon,
+		iconFn = iconFn,
 		quality = ItemQualEnum.Poor,
 		quantity = quantity,
 		r = r,
@@ -157,10 +195,7 @@ function Money:BuildPayload(quantity)
 		---@param existingCopper? number
 		coinDataFn = function(existingCopper)
 			local total = math.abs((existingCopper or 0) + quantity)
-			local gold = math.floor(total / 10000)
-			local silver = math.floor((total % 10000) / 100)
-			local copper = total % 100
-			return gold, silver, copper
+			return DecomposeCopper(total)
 		end,
 		-- Secondary coin display: current wallet total rendered with real Textures.
 		---@param existingCopper? number

@@ -477,6 +477,21 @@ function LootDisplayRowMixin:UpdateQuantity(element)
 	if element.colorFn then
 		r, g, b, a = element.colorFn(netAmount)
 	end
+	-- Allow the element to recompute the icon based on the accumulated total.
+	-- Mirrors coinDataFn's convention (called with the OLD amount, resolves the
+	-- new total internally) rather than colorFn's (called with netAmount), so
+	-- Money can share one decomposition helper between the icon and the coin
+	-- display and the two can never disagree.
+	-- Early-out when the resolved icon is unchanged: UpdateIcon queues a
+	-- RunNextFrame closure on every call, and a fast-accumulating row (e.g.
+	-- money ticking up several times a second) would otherwise queue one
+	-- redundant closure per update.
+	if element.iconFn then
+		local newIcon = element.iconFn(oldAmount)
+		if newIcon ~= self.icon then
+			self:UpdateIcon(self.key, newIcon, self.quality)
+		end
+	end
 	-- Negative net amounts always shown in red
 	if netAmount < 0 then
 		r, g, b, a = 1, 0, 0, 0.8
