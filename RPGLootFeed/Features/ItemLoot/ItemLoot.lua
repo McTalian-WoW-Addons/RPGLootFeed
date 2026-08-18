@@ -397,8 +397,8 @@ function ItemLoot:BuildPayload(info, quantity, fromLink)
 		return "x" .. effectiveQuantity
 	end
 
-	payload.secondaryTextFn = function(...)
-		return self.textTemplateEngine:ProcessRowElements(2, elementData)
+	payload.secondaryTextFn = function(existingQuantity, truncatedLink)
+		return self.textTemplateEngine:ProcessRowElements(2, elementData, existingQuantity, truncatedLink)
 	end
 
 	-- secondaryCoinDataFn: drives SecondaryCoinDisplay (real Textures) for
