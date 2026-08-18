@@ -40,7 +40,7 @@ local majorFactionTextureKitIconMap = {
 	["rocket"] = 6252691, -- The Cartels of Undermine
 	["stars"] = 6351805, -- Gallagio Loyalty Rewards Club
 	["nightfall"] = 6694197, -- Flame's Radiance
-	["karesh"] = 6937965, -- Manaforge Vandals
+	["karesh"] = 6937965, -- The K'aresh Trust
 	["origin"] = 7505698, -- Amani Tribe
 	["sky"] = 7505702, -- The Singularity
 	["root"] = 7505704, -- Hara'ti
@@ -48,6 +48,7 @@ local majorFactionTextureKitIconMap = {
 	["delves"] = 6025441, -- Delves
 	["delve"] = 6025441, -- Delves
 	["prey"] = 7493985, -- Prey
+	["zuljarra"] = 7903180, -- Zul'jarra's Forces
 }
 
 --- A bit of a grab bag
