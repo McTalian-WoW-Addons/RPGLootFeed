@@ -20,7 +20,7 @@ function G_RLF.PartyLoot:BuildConfigArgs(frameId, order)
 		args = {
 			interactionsWarning = {
 				type = "description",
-				name = "|cFFFFAA00" .. G_RLF.L["DisableAllInteractionFeatureWarning"] .. "|r",
+				name = "|cFFFFAA00" .. G_RLF.L["DisableAllInteractionFeatureWarning"] .. "|r", -- nocheck
 				order = 0.9,
 				hidden = function()
 					return not G_RLF.db.global.interactions.disableAllInteraction

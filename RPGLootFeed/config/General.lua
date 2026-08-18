@@ -305,11 +305,11 @@ G_RLF.options.args.general = {
 							or not G_RLF.db.global.lootHistory.scrollWheelDoubleScrollMode
 					end,
 					values = {
-						[500] = "500 ms",
-						[1000] = "1000 ms",
-						[1500] = "1500 ms",
-						[2000] = "2000 ms",
-						[3000] = "3000 ms",
+						[500] = G_RLF.L["500 ms"],
+						[1000] = G_RLF.L["1000 ms"],
+						[1500] = G_RLF.L["1500 ms"],
+						[2000] = G_RLF.L["2000 ms"],
+						[3000] = G_RLF.L["3000 ms"],
 					},
 					sorting = { 500, 1000, 1500, 2000, 3000 },
 					get = function()
@@ -394,15 +394,15 @@ G_RLF.options.args.general = {
 							or not G_RLF.db.global.lootHistory.enableScrollWheelActivation
 					end,
 					values = {
-						["CENTER"] = "Center",
-						["TOP"] = "Top",
-						["BOTTOM"] = "Bottom",
-						["LEFT"] = "Left",
-						["RIGHT"] = "Right",
-						["TOPLEFT"] = "Top Left",
-						["TOPRIGHT"] = "Top Right",
-						["BOTTOMLEFT"] = "Bottom Left",
-						["BOTTOMRIGHT"] = "Bottom Right",
+						["CENTER"] = G_RLF.L["Center"],
+						["TOP"] = G_RLF.L["Top"],
+						["BOTTOM"] = G_RLF.L["Bottom"],
+						["LEFT"] = G_RLF.L["Left"],
+						["RIGHT"] = G_RLF.L["Right"],
+						["TOPLEFT"] = G_RLF.L["Top Left"],
+						["TOPRIGHT"] = G_RLF.L["Top Right"],
+						["BOTTOMLEFT"] = G_RLF.L["Bottom Left"],
+						["BOTTOMRIGHT"] = G_RLF.L["Bottom Right"],
 					},
 					sorting = {
 						"CENTER",
@@ -486,7 +486,7 @@ G_RLF.options.args.general = {
 			args = {
 				tooltipInteractionsWarning = {
 					type = "description",
-					name = "|cFFFFAA00" .. G_RLF.L["DisableAllInteractionFeatureWarning"] .. "|r",
+					name = "|cFFFFAA00" .. G_RLF.L["DisableAllInteractionFeatureWarning"] .. "|r", -- nocheck
 					order = 0.5,
 					hidden = function()
 						return not G_RLF.db.global.interactions.disableAllInteraction
