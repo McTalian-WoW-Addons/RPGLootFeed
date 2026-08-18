@@ -881,6 +881,28 @@ describe("ItemLoot Module", function()
 			end)
 		end)
 
+		describe("secondaryTextFn", function()
+			before_each(function()
+				-- Registers the "ItemLoot" context provider that resolves
+				-- the "{secondaryText}" placeholder used by row 2.
+				ItemLoot:OnEnable()
+			end)
+
+			it("uses the live stacked quantity passed by the row, not the original loot quantity", function()
+				ns.db.global.item.pricesForSellableItems = "VendorAH"
+				local info = makeItemInfo({ sellPrice = 10000 }) -- 1g per item
+				-- Row is created with a single item...
+				local payload = ItemLoot:BuildPayload(info, 1, nil)
+
+				-- ...then the same row later reflects a live stack of 6. The row passes
+				-- its NEW accumulated total (self.amount), not the pre-merge quantity.
+				local text = payload.secondaryTextFn(6, "[Link]")
+
+				assert.matches("6g", text)
+				assert.is_nil(text:match("1g"))
+			end)
+		end)
+
 		describe("amountTextFn", function()
 			it("returns quantity suffix when showOneQuantity is true and quantity > 1", function()
 				ns.db.global.misc.showOneQuantity = true
