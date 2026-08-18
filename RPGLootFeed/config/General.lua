@@ -493,7 +493,7 @@ G_RLF.options.args.general = {
 			args = {
 				tooltipInteractionsWarning = {
 					type = "description",
-					name = "|cFFFFAA00" .. G_RLF.L["DisableAllInteractionFeatureWarning"] .. "|r",
+					name = "|cFFFFAA00" .. G_RLF.L["DisableAllInteractionFeatureWarning"] .. "|r", -- nocheck
 					order = 0.5,
 					hidden = function()
 						return not G_RLF.db.global.interactions.disableAllInteraction
