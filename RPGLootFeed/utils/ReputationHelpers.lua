@@ -40,7 +40,8 @@ local majorFactionTextureKitIconMap = {
 	["rocket"] = 6252691, -- The Cartels of Undermine
 	["stars"] = 6351805, -- Gallagio Loyalty Rewards Club
 	["nightfall"] = 6694197, -- Flame's Radiance
-	["karesh"] = 6937965, -- The K'aresh Trust
+	["karesh"] = 6937965, -- Manaforge Vandals, observed in-game.
+	-- No DB2 table exposes the FactionID<->textureKit link to confirm; don't relabel from name similarity alone.
 	["origin"] = 7505698, -- Amani Tribe
 	["sky"] = 7505702, -- The Singularity
 	["root"] = 7505704, -- Hara'ti
