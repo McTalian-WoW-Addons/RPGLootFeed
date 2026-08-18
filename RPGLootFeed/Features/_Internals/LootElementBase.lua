@@ -225,6 +225,7 @@ function G_RLF.LootElementBase:fromPayload(payload)
 
 	-- ── LootRolls-specific fields ──────────────────────────────────────────────
 	-- Used directly by the row mixin; nil for non-roll types
+	element.moduleRef = payload.moduleRef
 	element.rollID = payload.rollID
 	element.rollDuration = payload.rollDuration
 	element.itemLink = payload.itemLink

@@ -334,6 +334,15 @@ G_RLF.WoWAPI.LootRolls = {
 	GetItemInfoInstant = function(itemLink)
 		return C_Item.GetItemInfoInstant(itemLink)
 	end,
+	GetExpansionLevel = function()
+		return GetExpansionLevel()
+	end,
+	GetClassColor = function(className)
+		return C_ClassColor and C_ClassColor.GetClassColor and C_ClassColor.GetClassColor(className)
+	end,
+	GetRaidClassColor = function(className)
+		return RAID_CLASS_COLORS and RAID_CLASS_COLORS[className]
+	end,
 	-- C_LootHistory wrappers, Retail shape (encounter/lootListID indexed).
 	GetAllEncounterInfos = function()
 		if C_LootHistory and C_LootHistory.GetAllEncounterInfos then

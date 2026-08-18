@@ -25,6 +25,21 @@ local ROLL_BUTTON_ATLAS = {
 	[4] = { base = "lootroll-toast-icon-transmog" }, -- Transmog
 }
 
+--- Resolves a player class's color through the LootRolls WoWAPI adapter
+--- rather than indexing the global RAID_CLASS_COLORS table directly, mirroring
+--- PartyLoot's expansion-gated GetClassColor/GetRaidClassColor split.
+---@param className string|nil
+---@return table|nil
+local function _GetClassColor(className)
+	if not className then
+		return nil
+	end
+	if G_RLF.WoWAPI.LootRolls.GetExpansionLevel() >= G_RLF.Expansion.BFA then
+		return G_RLF.WoWAPI.LootRolls.GetClassColor(className)
+	end
+	return G_RLF.WoWAPI.LootRolls.GetRaidClassColor(className)
+end
+
 ---@return number
 function RLF_LootRollRowMixin:_GetButtonSize()
 	local frameConfig = G_RLF.db.global.frames[self.frameType]
@@ -276,7 +291,7 @@ function RLF_LootRollRowMixin:_BuildRollTooltipLines(dropInfo, lines)
 	}
 
 	for _, ri in ipairs(dropInfo.rollInfos) do
-		local classColor = RAID_CLASS_COLORS[ri.playerClass]
+		local classColor = _GetClassColor(ri.playerClass)
 		local r, g, b = 1, 1, 1
 		if classColor then
 			r, g, b = classColor.r, classColor.g, classColor.b
@@ -492,7 +507,7 @@ function RLF_LootRollRowMixin:SetRollResults(dropInfo)
 
 	-- ItemCountText: show winner, all passed, or current leader on the primary line
 	if dropInfo.winner then
-		local classColor = RAID_CLASS_COLORS[dropInfo.winner.playerClass]
+		local classColor = _GetClassColor(dropInfo.winner.playerClass)
 		local rollTypeStr = ""
 		if dropInfo.winner.state == 0 or dropInfo.winner.state == 1 then
 			rollTypeStr = NEED
@@ -514,7 +529,7 @@ function RLF_LootRollRowMixin:SetRollResults(dropInfo)
 	elseif allPassed then
 		_ShowRollText(self, ("|cffb0b0b0%s|r"):format(LOOT_HISTORY_ALL_PASSED))
 	elseif self._rolled and dropInfo.currentLeader then
-		local classColor = RAID_CLASS_COLORS[dropInfo.currentLeader.playerClass]
+		local classColor = _GetClassColor(dropInfo.currentLeader.playerClass)
 		local name = classColor and classColor:WrapTextInColorCode(dropInfo.currentLeader.playerName)
 			or dropInfo.currentLeader.playerName
 		_ShowRollText(self, ("%s leads (%d)"):format(name, dropInfo.currentLeader.roll))
@@ -570,6 +585,7 @@ function RLF_LootRollRowMixin:PostBootstrapFromElement(element)
 	end
 
 	self.rollID = element.rollID
+	self.moduleRef = element.moduleRef
 	self._rolled = false
 	self._isLootRollRow = true
 
