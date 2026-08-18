@@ -171,7 +171,10 @@ G_RLF.GameSounds = {
 ---@enum G_RLF.DefaultIcons
 G_RLF.DefaultIcons = {
 	MONEY = 133785,
-	REPUTATION = 236681,
+	-- 236681 (the handshake icon used everywhere else) predates achievements and is absent
+	-- from TBC Anniversary (2.5.6 ships no Achievement_* icons at all); it renders as a
+	-- solid green square there. 135026 (guild tabard) ships on every flavor including TBC.
+	REPUTATION = G_RLF:IsTBCClassic() and 135026 or 236681,
 	XP = 894556,
 	PROFESSION = 133740,
 	TRAVELPOINTS = 4635200,

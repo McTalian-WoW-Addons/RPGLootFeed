@@ -68,4 +68,113 @@ describe("ReputationConfig module", function()
 	it("should use angle brackets as default wrap character for reputation level", function()
 		assert.equal(ns.WrapCharEnum.ANGLE, ns.defaults.global.frames["**"].features.reputation.repLevelTextWrapChar)
 	end)
+
+	it("should default the reputation icon override to empty (use the flavor default)", function()
+		assert.equal("", ns.defaults.global.frames["**"].features.reputation.repIconTexture)
+	end)
+
+	describe("reputation icon override", function()
+		local group, fc
+
+		setup(function()
+			_G.CreateAtlasMarkup = function()
+				return ""
+			end
+		end)
+
+		before_each(function()
+			ns.LootDisplay = { RefreshSampleRowsIfShown = function() end }
+			-- ConfigFeatureXP is below the Config load threshold that stubs ns.DbAccessor
+			-- as a busted stub table, so provide a minimal real implementation here.
+			ns.DbAccessor = {
+				Styling = function()
+					return { secondaryFontSize = 12 }
+				end,
+			}
+			ns.db = {
+				defaults = ns.defaults,
+				global = {
+					misc = { hideAllIcons = false },
+					frames = {
+						[1] = {
+							features = {
+								reputation = {
+									enabled = true,
+									enableIcon = true,
+									repIconTexture = "",
+								},
+							},
+						},
+					},
+				},
+			}
+			group = ns.BuildReputationArgs(1, 6)
+			fc = function()
+				return ns.db.global.frames[1].features.reputation
+			end
+		end)
+
+		it("exposes an input, a preview, and a revert-to-default button", function()
+			local args = group.args.repOptions.args
+			assert.equal("input", args.repIconTexture.type)
+			assert.equal("description", args.testRepIcon.type)
+			assert.equal("execute", args.revertRepIconToDefault.type)
+		end)
+
+		it("get/set round-trip through the per-frame reputation config", function()
+			local args = group.args.repOptions.args
+			assert.equal("", args.repIconTexture.get())
+			args.repIconTexture.set(nil, "135026")
+			assert.equal("135026", fc().repIconTexture)
+			assert.equal("135026", args.repIconTexture.get())
+		end)
+
+		it("reverts the override back to the empty default", function()
+			fc().repIconTexture = "135026"
+			group.args.repOptions.args.revertRepIconToDefault.func()
+			assert.equal("", fc().repIconTexture)
+		end)
+
+		describe("ValidateRepIcon", function()
+			local handler
+			before_each(function()
+				handler = group.handler
+			end)
+
+			it("accepts nil and empty string (meaning: use the flavor default)", function()
+				assert.is_true(handler:ValidateRepIcon(nil, nil))
+				assert.is_true(handler:ValidateRepIcon(nil, ""))
+			end)
+
+			it("accepts a numeric FileDataID", function()
+				assert.is_true(handler:ValidateRepIcon(nil, "135026"))
+			end)
+
+			it("accepts a texture file path", function()
+				assert.is_true(handler:ValidateRepIcon(nil, "interface/icons/inv_shirt_guildtabard_01"))
+			end)
+
+			it("rejects a bare Atlas-style name (not a FileDataID or path)", function()
+				local result = handler:ValidateRepIcon(nil, "some-atlas-name")
+				assert.is_string(result)
+				assert.are_not.equal(true, result)
+			end)
+		end)
+
+		describe("TestIcon", function()
+			-- These assert the actual resolved icon appears in the markup, not
+			-- just that a string comes back -- a stub that always returned the
+			-- default (or always the override) would still pass an is_string check.
+			it("embeds the flavor default icon in the markup when no override is set", function()
+				local text = group.handler:TestIcon(1, "")
+				assert.truthy(text:find(tostring(ns.DefaultIcons.REPUTATION), 1, true))
+			end)
+
+			it("embeds the override icon in the markup instead of the default when one is set", function()
+				local text = group.handler:TestIcon(1, "135026")
+				assert.truthy(text:find("135026", 1, true))
+				assert.falsy(text:find(tostring(ns.DefaultIcons.REPUTATION), 1, true))
+			end)
+		end)
+	end)
 end)

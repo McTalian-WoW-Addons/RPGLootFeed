@@ -25,6 +25,8 @@ describe("SampleRows", function()
 	local ns
 	---@type table Mock Money module
 	local mockMoneyModule
+	---@type table Mock Reputation module
+	local mockRepModule
 
 	before_each(function()
 		capturedPayloads = {}
@@ -38,12 +40,18 @@ describe("SampleRows", function()
 			end,
 		}
 
+		mockRepModule = {
+			IsEnabled = function()
+				return true
+			end,
+		}
+
 		-- Build a minimal ns with only the fields actually referenced inside
 		-- LootDisplay:CreateSampleRows.  All features except money are disabled
 		-- so only the money branch executes.
 		ns = {
 			LootDisplay = {},
-			DefaultIcons = { MONEY = 132279, CURRENCY = 131919, XP = 135925 },
+			DefaultIcons = { MONEY = 132279, CURRENCY = 131919, XP = 135925, REPUTATION = 236681 },
 			ItemQualEnum = { Poor = 0, Common = 1, Rare = 3, Epic = 4 },
 			FeatureModule = {
 				Money = "Money",
@@ -73,7 +81,7 @@ describe("SampleRows", function()
 								partyLoot = { enabled = false },
 								currency = { enabled = false },
 								experience = { enabled = false },
-								reputation = { enabled = false },
+								reputation = { enabled = false, enableIcon = true, repIconTexture = "" },
 								profession = { enabled = false },
 								travelPoints = { enabled = false },
 								transmog = { enabled = false },
@@ -93,12 +101,18 @@ describe("SampleRows", function()
 					if name == "Money" then
 						return mockMoneyModule
 					end
+					if name == "Reputation" then
+						return mockRepModule
+					end
 					return nil
 				end,
 			},
 			DbAccessor = {
-				Feature = function(_, _frame, _featureKey)
-					-- Return empty table for all feature-specific config lookups.
+				Feature = function(_, _frame, featureKey)
+					if featureKey == "reputation" then
+						return ns.db.global.frames[1].features.reputation
+					end
+					-- Return empty table for all other feature-specific config lookups.
 					return {}
 				end,
 				AnyFeatureConfig = function(_, featureKey)
@@ -130,6 +144,15 @@ describe("SampleRows", function()
 			end,
 		}
 
+		-- Load the real ReputationHelpers module so the reputation sample row
+		-- goes through the actual G_RLF.RepUtils.ResolveRepIcon -- proving
+		-- SampleRows.lua shares the same icon-override resolution as
+		-- RepUtils.GetFactionData rather than reimplementing it inline. Loading
+		-- only defines functions, so it's safe alongside the money-specific
+		-- AnyFeatureConfig stub above -- ResolveRepIcon isn't called until
+		-- SampleRows.lua invokes it directly with an already-resolved config.
+		assert(loadfile("RPGLootFeed/utils/ReputationHelpers.lua"))("TestAddon", ns)
+
 		-- Loading SampleRows attaches CreateSampleRows to ns.LootDisplay.
 		assert(loadfile("RPGLootFeed/LootDisplay/SampleRows.lua"))("TestAddon", ns)
 	end)
@@ -145,6 +168,62 @@ describe("SampleRows", function()
 		end
 		return nil
 	end
+
+	--- Run CreateSampleRows and return the reputation payload, or nil if not found.
+	local function getRepPayload()
+		capturedPayloads = {}
+		ns.LootDisplay:CreateSampleRows(1)
+		for _, p in ipairs(capturedPayloads) do
+			if p.type == "Reputation" then
+				return p
+			end
+		end
+		return nil
+	end
+
+	-- ── Reputation sample row ─────────────────────────────────────────────────
+	-- Regression coverage for the icon-override resolution: SampleRows.lua used
+	-- to reimplement "override or flavor default" inline instead of calling
+	-- G_RLF.RepUtils.ResolveRepIcon, the same function RepUtils.GetFactionData
+	-- uses. A future edit to one could silently disagree with the other with
+	-- nothing here to catch it.
+
+	describe("Reputation sample row icon", function()
+		before_each(function()
+			ns.db.global.frames[1].features.money.enabled = false
+			ns.db.global.frames[1].features.reputation.enabled = true
+		end)
+
+		it("uses the flavor default icon when no override is configured", function()
+			local payload = getRepPayload()
+			assert.equal(236681, payload.icon)
+		end)
+
+		it("uses the configured numeric FileDataID override instead of the default", function()
+			ns.db.global.frames[1].features.reputation.repIconTexture = "135026"
+			local payload = getRepPayload()
+			assert.equal(135026, payload.icon)
+		end)
+
+		it("uses the configured texture path override instead of the default", function()
+			ns.db.global.frames[1].features.reputation.repIconTexture = "interface/icons/inv_shirt_guildtabard_01"
+			local payload = getRepPayload()
+			assert.equal("interface/icons/inv_shirt_guildtabard_01", payload.icon)
+		end)
+
+		it("shows no icon at all when enableIcon is off, even with an override configured", function()
+			ns.db.global.frames[1].features.reputation.enableIcon = false
+			ns.db.global.frames[1].features.reputation.repIconTexture = "135026"
+			local payload = getRepPayload()
+			assert.is_nil(payload.icon)
+		end)
+
+		it("shows no icon at all when hideAllIcons is set", function()
+			ns.db.global.misc.hideAllIcons = true
+			local payload = getRepPayload()
+			assert.is_nil(payload.icon)
+		end)
+	end)
 
 	-- ── Money sample row ──────────────────────────────────────────────────────
 

@@ -83,6 +83,7 @@
 ---@field repLevelColor number[]
 ---@field repLevelTextWrapChar WrapCharEnum
 ---@field enableIcon boolean
+---@field repIconTexture string  Empty string means "use the flavor default".
 
 ---@class RLF_FeatureConfig_Profession : RLF_FeatureConfig
 ---@field backgroundOverride RLF_BackgroundColorOverride

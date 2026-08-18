@@ -32,6 +32,9 @@ describe("ReputationHelpers", function()
 				Styling = function()
 					return { fontSize = 12 }
 				end,
+				AnyFeatureConfig = function()
+					return {}
+				end,
 			},
 			Frames = { MAIN = 1 },
 			-- db structure for the cache
@@ -372,6 +375,58 @@ describe("ReputationHelpers", function()
 
 				assert.are.equal(-500, delta)
 			end)
+		end)
+	end)
+
+	describe("GetFactionData icon resolution", function()
+		before_each(function()
+			_G.C_Reputation.GetFactionDataByID = function()
+				return {
+					name = "Test Faction",
+					reaction = 5,
+					currentStanding = 500,
+					currentReactionThreshold = 0,
+					nextReactionThreshold = 6000,
+				}
+			end
+		end)
+
+		it("falls back to the flavor default icon when no override is configured", function()
+			local fd = RepUtils.GetFactionData(1234, RepUtils.RepType.BaseFaction)
+			assert.are.equal(236681, fd.icon)
+		end)
+
+		it("falls back to the flavor default icon when the override is an empty string", function()
+			ns.DbAccessor.AnyFeatureConfig = function()
+				return { repIconTexture = "" }
+			end
+			local fd = RepUtils.GetFactionData(1234, RepUtils.RepType.BaseFaction)
+			assert.are.equal(236681, fd.icon)
+		end)
+
+		it("uses the configured numeric FileDataID override over the default", function()
+			ns.DbAccessor.AnyFeatureConfig = function()
+				return { repIconTexture = "135026" }
+			end
+			local fd = RepUtils.GetFactionData(1234, RepUtils.RepType.BaseFaction)
+			assert.are.equal(135026, fd.icon)
+		end)
+
+		it("uses the configured texture path override over the default", function()
+			ns.DbAccessor.AnyFeatureConfig = function()
+				return { repIconTexture = "interface/icons/inv_shirt_guildtabard_01" }
+			end
+			local fd = RepUtils.GetFactionData(1234, RepUtils.RepType.BaseFaction)
+			assert.are.equal("interface/icons/inv_shirt_guildtabard_01", fd.icon)
+		end)
+
+		it("does not stomp a real per-faction icon resolved from the faction ID map", function()
+			-- 2601 is mapped to a real per-faction icon (The Weaver) in factionIdIconMap.
+			ns.DbAccessor.AnyFeatureConfig = function()
+				return { repIconTexture = "135026" }
+			end
+			local fd = RepUtils.GetFactionData(2601, RepUtils.RepType.BaseFaction)
+			assert.are_not.equal(135026, fd.icon)
 		end)
 	end)
 end)

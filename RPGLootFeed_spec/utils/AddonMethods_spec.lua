@@ -3,6 +3,7 @@ local assert = require("luassert")
 local match = require("luassert.match")
 local busted = require("busted")
 local before_each = busted.before_each
+local after_each = busted.after_each
 local describe = busted.describe
 local it = busted.it
 local setup = busted.setup
@@ -37,6 +38,7 @@ describe("AddonMethods", function()
 			assert.is_not_nil(ns.Print)
 			assert.is_not_nil(ns.IsRetail)
 			assert.is_not_nil(ns.IsClassic)
+			assert.is_not_nil(ns.IsTBCClassic)
 			assert.is_not_nil(ns.IsCataClassic)
 			assert.is_not_nil(ns.IsMoPClassic)
 			assert.is_not_nil(ns.SendMessage)
@@ -505,6 +507,29 @@ describe("AddonMethods", function()
 			it("properly determines when versions are the same", function()
 				local result = ns:CompareWithVersion("v1.2.3", "v1.2.3")
 				assert.are.equal(result, ns.VersionCompare.SAME)
+			end)
+		end)
+
+		describe("flavor detection", function()
+			local savedProjectId
+			before_each(function()
+				savedProjectId = _G.WOW_PROJECT_ID
+			end)
+			after_each(function()
+				_G.WOW_PROJECT_ID = savedProjectId
+			end)
+
+			it("IsTBCClassic is true only when WOW_PROJECT_ID is Burning Crusade Classic", function()
+				_G.WOW_PROJECT_ID = _G.WOW_PROJECT_BURNING_CRUSADE_CLASSIC
+				assert.is_true(ns:IsTBCClassic())
+
+				_G.WOW_PROJECT_ID = _G.WOW_PROJECT_MAINLINE
+				assert.is_false(ns:IsTBCClassic())
+			end)
+
+			it("IsRetail is false while flavor is TBC Classic", function()
+				_G.WOW_PROJECT_ID = _G.WOW_PROJECT_BURNING_CRUSADE_CLASSIC
+				assert.is_false(ns:IsRetail())
 			end)
 		end)
 	end)
