@@ -953,5 +953,150 @@ describe("ItemLoot Module", function()
 				assert.is_nil(result)
 			end)
 		end)
+
+		describe("sellable item price display (secondaryTextFn / secondaryCoinDataFn)", function()
+			describe("plainTextPrices disabled (default)", function()
+				it("Vendor mode: returns spacer text and real coin data", function()
+					ns.db.global.item.pricesForSellableItems = "Vendor"
+					local info = makeItemInfo({ sellPrice = 10000 })
+					local payload = ItemLoot:BuildPayload(info, 1, nil)
+
+					assert.equals(" ", payload.secondaryTextFn())
+					local g, s, c = payload.secondaryCoinDataFn(0)
+					assert.equals(1, g)
+					assert.equals(0, s)
+					assert.equals(0, c)
+				end)
+
+				it("AH mode: returns spacer text and real coin data", function()
+					ns.db.global.item.pricesForSellableItems = "AH"
+					ItemLoot._itemLootAdapter.GetAHPrice = function()
+						return 250000
+					end
+					local info = makeItemInfo({ sellPrice = 0 })
+					local payload = ItemLoot:BuildPayload(info, 1, nil)
+
+					assert.equals(" ", payload.secondaryTextFn())
+					local g, s, c = payload.secondaryCoinDataFn(0)
+					assert.equals(25, g)
+					assert.equals(0, s)
+					assert.equals(0, c)
+				end)
+
+				it("Highest mode: returns spacer text and real coin data", function()
+					ns.db.global.item.pricesForSellableItems = "Highest"
+					ItemLoot._itemLootAdapter.GetAHPrice = function()
+						return 50000
+					end
+					local info = makeItemInfo({ sellPrice = 10000 })
+					local payload = ItemLoot:BuildPayload(info, 1, nil)
+
+					assert.equals(" ", payload.secondaryTextFn())
+					local g, s, c = payload.secondaryCoinDataFn(0)
+					assert.equals(5, g)
+					assert.equals(0, s)
+					assert.equals(0, c)
+				end)
+			end)
+
+			describe("plainTextPrices enabled", function()
+				before_each(function()
+					ns.db.global.item.plainTextPrices = true
+				end)
+
+				it("Vendor mode: returns plain price text and no coin data", function()
+					ns.db.global.item.pricesForSellableItems = "Vendor"
+					local info = makeItemInfo({ sellPrice = 10000 })
+					local payload = ItemLoot:BuildPayload(info, 1, nil)
+
+					assert.equals("1g 0s 0c", payload.secondaryTextFn())
+					assert.is_nil(payload.secondaryCoinDataFn(0))
+				end)
+
+				it("AH mode: returns plain price text and no coin data", function()
+					ns.db.global.item.pricesForSellableItems = "AH"
+					ItemLoot._itemLootAdapter.GetAHPrice = function()
+						return 250000
+					end
+					local info = makeItemInfo({ sellPrice = 0 })
+					local payload = ItemLoot:BuildPayload(info, 1, nil)
+
+					assert.equals("25g 0s 0c", payload.secondaryTextFn())
+					assert.is_nil(payload.secondaryCoinDataFn(0))
+				end)
+
+				it("Highest mode: returns plain price text for the higher price and no coin data", function()
+					ns.db.global.item.pricesForSellableItems = "Highest"
+					ItemLoot._itemLootAdapter.GetAHPrice = function()
+						return 50000
+					end
+					local info = makeItemInfo({ sellPrice = 10000 })
+					local payload = ItemLoot:BuildPayload(info, 1, nil)
+
+					assert.equals("5g 0s 0c", payload.secondaryTextFn())
+					assert.is_nil(payload.secondaryCoinDataFn(0))
+				end)
+			end)
+
+			-- secondaryCoinDataFn's Highest branch and the plainTextPrices Highest
+			-- branch each independently decide the tie-break ("vendor wins when
+			-- vendor == auction"). They currently agree; lock that in so a future
+			-- edit to one can't silently disagree with the other.
+			describe("Highest mode tie-break (vendor == auction price)", function()
+				it("coin-icon path (plainTextPrices off): picks vendor's icon on a tie", function()
+					ns.db.global.item.plainTextPrices = false
+					ns.db.global.item.pricesForSellableItems = "Highest"
+					ItemLoot._itemLootAdapter.GetAHPrice = function()
+						return 10000
+					end
+					local info = makeItemInfo({ sellPrice = 10000 })
+					local payload = ItemLoot:BuildPayload(info, 1, nil)
+
+					local _, _, _, icon = payload.secondaryCoinDataFn(0)
+					assert.equals(ns.db.global.item.vendorIconTexture, icon)
+				end)
+
+				it("plain-text path (plainTextPrices on): resolves to a single price on a tie, not both", function()
+					-- A tie formats identically regardless of which side wins, so
+					-- this can't distinguish *which* side was picked the way the
+					-- coin-icon test above does (that's what the tie-break formula
+					-- comparison in the source establishes: both branches use
+					-- `> ` not `>=`, so both fall through to vendor on equality).
+					-- What this guards against is the multi-price code path
+					-- accidentally being reached instead -- e.g. concatenating
+					-- "1g 0s 0c    1g 0s 0c" -- since that bug would still "work"
+					-- for the coin-icon path's distinct assertion above but not here.
+					ns.db.global.item.plainTextPrices = true
+					ns.db.global.item.pricesForSellableItems = "Highest"
+					ItemLoot._itemLootAdapter.GetAHPrice = function()
+						return 10000
+					end
+					local info = makeItemInfo({ sellPrice = 10000 })
+					local payload = ItemLoot:BuildPayload(info, 1, nil)
+
+					assert.equals("1g 0s 0c", payload.secondaryTextFn())
+				end)
+			end)
+
+			describe("dual-price modes are unaffected by plainTextPrices", function()
+				it("VendorAH mode: plain text is identical whether the toggle is off or on", function()
+					ns.db.global.item.pricesForSellableItems = "VendorAH"
+					local info = makeItemInfo({ sellPrice = 10000 })
+
+					ns.db.global.item.plainTextPrices = false
+					local payloadOff = ItemLoot:BuildPayload(info, 1, nil)
+					local textOff = payloadOff.secondaryTextFn(1)
+
+					ns.db.global.item.plainTextPrices = true
+					local payloadOn = ItemLoot:BuildPayload(info, 1, nil)
+					local textOn = payloadOn.secondaryTextFn(1)
+
+					assert.equals("1g 0s 0c", textOff)
+					assert.equals(textOff, textOn)
+					assert.is_nil(payloadOff.secondaryCoinDataFn(0))
+					assert.is_nil(payloadOn.secondaryCoinDataFn(0))
+				end)
+			end)
+		end)
 	end)
 end)
