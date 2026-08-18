@@ -444,15 +444,14 @@ function ItemLoot:BuildPayload(info, quantity, fromLink)
 		return "x" .. effectiveQuantity
 	end
 
-	payload.secondaryTextFn = function(...)
+	payload.secondaryTextFn = function(rowTotal, truncatedLink)
 		-- Convention mismatch: the row calls secondaryTextFn with the row's NEW
 		-- accumulated total (self.amount, already including this element's
 		-- quantity), while ProcessRowElements takes the OLD quantity and adds
 		-- data.quantity itself. Subtract so a merged row prices the live stack
 		-- once instead of twice.
-		local rowTotal = ...
 		local existingQuantity = rowTotal and (rowTotal - quantity) or 0
-		local text = self.textTemplateEngine:ProcessRowElements(2, elementData, existingQuantity)
+		local text = self.textTemplateEngine:ProcessRowElements(2, elementData, existingQuantity, truncatedLink)
 		-- Single-price modes deliberately render a whitespace-only Row 2 so the
 		-- row applies its vertical split and SecondaryCoinDisplay can draw the
 		-- real coin Textures underneath. The engine collapses whitespace-only
