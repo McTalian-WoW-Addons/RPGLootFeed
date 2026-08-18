@@ -221,6 +221,44 @@ describe("LootRolls Module", function()
 		end)
 	end)
 
+	describe("ReplayActiveRolls", function()
+		it("replays each pending roll through START_LOOT_ROLL with the correct argument order", function()
+			LootRolls._adapter.GetActiveLootRollIDs = function()
+				return { 555 }
+			end
+			LootRolls._adapter.GetLootRollDuration = function()
+				return 42
+			end
+			LootRolls._adapter.GetLootRollItemInfo = spy.new(function()
+				return 12345, "Finkle's Lava Dredger", 1, 4 -- texture, name, count, quality
+			end)
+			LootRolls._adapter.GetLootRollItemLink = function()
+				return "|cffa335ee|Hitem:18803::::::::60:::::|h[Finkle's Lava Dredger]|h|r"
+			end
+			LootRolls._adapter.GetItemInfoInstant = function()
+				return 18803
+			end
+			local capturedPayload
+			ns.LootElementBase.fromPayload = function(_, payload)
+				capturedPayload = payload
+				local element = { payload = payload, Show = function() end }
+				stub(element, "Show")
+				return element
+			end
+
+			LootRolls:ReplayActiveRolls()
+
+			-- If eventName is dropped, rollID (555) lands in the eventName slot
+			-- and duration (42) lands in the rollID slot, so GetLootRollItemInfo
+			-- would be called with 42 instead of 555, and the real duration (42)
+			-- would never reach rollTime/rollDuration.
+			assert.spy(LootRolls._adapter.GetLootRollItemInfo).was.called_with(555)
+			assert.is_not_nil(LootRolls._activeRolls[555])
+			assert.is_nil(LootRolls._activeRolls[42])
+			assert.are.equal(42, capturedPayload.rollDuration)
+		end)
+	end)
+
 	describe("FindRollRows / ReleaseRollRows", function()
 		it("finds only rows whose key matches the rollID", function()
 			local matchingRow = makeRow()
@@ -346,6 +384,29 @@ describe("LootRolls Module", function()
 			assert.stub(wonRow.OnRollWon).was.called_with(wonRow, 1, 88, false)
 			assert.stub(otherRow.OnRollWon).was_not.called()
 		end)
+
+		it(
+			"marks only one roll won when two concurrent rolls share the same itemID (Blizzard's event carries no rollID)",
+			function()
+				local row1 = makeRow()
+				local row2 = makeRow()
+				ns.LootDisplay.GetAllFrames = framesFrom({
+					makeFrame({ ["LootRoll_1"] = row1, ["LootRoll_2"] = row2 }),
+				})
+				LootRolls._activeRolls = {
+					[1] = { key = "LootRoll_1", itemID = 18803 },
+					[2] = { key = "LootRoll_2", itemID = 18803 },
+				}
+				LootRolls._adapter.GetItemInfoInstant = function()
+					return 18803
+				end
+
+				LootRolls:LOOT_ITEM_ROLL_WON("LOOT_ITEM_ROLL_WON", "itemlink", 1, 1, 88, false)
+
+				local totalCalls = #row1.OnRollWon.calls + #row2.OnRollWon.calls
+				assert.are.equal(1, totalCalls)
+			end
+		)
 	end)
 
 	describe("PollLootHistory", function()
