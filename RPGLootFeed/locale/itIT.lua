@@ -14,6 +14,15 @@ end
 --- You may translate these comments, but do not translate "region" or "endregion" as they are used by the localization tool to determine where to place the translations.
 --- To add translations, simply uncomment the line(s) and replace the English text after the equal sign (=) with the translated value.
 
+--#region 1.36.0
+-- L["InvalidRepIconTexture"] = "%s is not a valid FileDataID or texture path. Atlas textures are not supported here."
+-- L["PlainTextPricesDesc"] = "Show prices for sellable items as plain text (e.g. 1g 2s 3c) instead of coin icons. Applies to the Vendor Price, Auction Price, and Highest Price modes."
+-- L["RepIconTextureDesc"] = "The icon to use for reputation rows. Enter a FileDataID or a texture file path, and leave blank to use the default icon. This is NOT an Atlas texture."
+-- L["Reputation Icon Texture"] = "Reputation Icon Texture"
+-- L["RevertRepIconToDefaultDesc"] = "Revert the reputation icon texture to the default."
+-- L["Show Prices as Plain Text"] = "Show Prices as Plain Text"
+--#endregion
+
 --#region 1.34.0
 -- L["Automatic"] = "Automatic"
 -- L["Disable Slug"] = "Disable Slug"
@@ -27,12 +36,8 @@ end
 -- L["Icon Skin"] = "Icon Skin"
 -- L["IconSkinDesc"] = "Choose which addon skins the loot row icons. Automatic uses whichever supported addon you have loaded. Square crops the icon border without needing any other addon."
 -- L["IconSkinUnavailableWarning"] = "That icon skin is not available because the addon that provides it is not loaded."
--- L["InvalidRepIconTexture"] = "%s is not a valid FileDataID or texture path. Atlas textures are not supported here."
 -- L["Left to Right"] = "Left to Right"
 -- L["NotInstalledSuffix"] = " (not installed)"
--- L["RepIconTextureDesc"] = "The icon to use for reputation rows. Enter a FileDataID or a texture file path, and leave blank to use the default icon. This is NOT an Atlas texture."
--- L["Reputation Icon Texture"] = "Reputation Icon Texture"
--- L["RevertRepIconToDefaultDesc"] = "Revert the reputation icon texture to the default."
 -- L["Right to Left"] = "Right to Left"
 -- L["SlugFlagNote"] = "Outlines are rendered through the Slug library for crisper glyphs at any size. It has no effect while Use Font Objects is on."
 -- L["Square"] = "Square"
@@ -181,7 +186,6 @@ end
 -- L["Show Experience Icon"] = "Show Experience Icon"
 -- L["Show Item Icon"] = "Show Item Icon"
 -- L["Show Party Avatar"] = "Show Party Avatar"
--- L["Show Prices as Plain Text"] = "Show Prices as Plain Text"
 -- L["Show Profession Icon"] = "Show Profession Icon"
 -- L["Show Reputation Icon"] = "Show Reputation Icon"
 -- L["Show Transmog Icon"] = "Show Transmog Icon"
@@ -497,7 +501,6 @@ end
 -- L["Party Loot Options"] = "Party Loot Options"
 -- L["PartyItemQualityFilterDesc"] = "Check which qualities you would like to show in the Party Loot Feed."
 -- L["Pending Items"] = "%s pending items"
--- L["PlainTextPricesDesc"] = "Show prices for sellable items as plain text (e.g. 1g 2s 3c) instead of coin icons. Applies to the Vendor Price, Auction Price, and Highest Price modes."
 -- L["Play Sound for Items Better Than Equipped"] = "Play Sound for Items Better Than Equipped"
 -- L["Play Sound for Legendary Items"] = "Play Sound for Legendary Items"
 -- L["Play Sound for Mounts"] = "Play Sound for Mounts"
