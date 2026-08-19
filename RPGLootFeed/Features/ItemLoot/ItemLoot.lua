@@ -284,14 +284,17 @@ function ItemLoot:BuildPayload(info, quantity, fromLink)
 
 		-- Non-equippable sellable items: price display.
 		-- Single-price modes return " " (spacer) here; SecondaryCoinDisplay
-		-- (via secondaryCoinDataFn) renders the real Texture coin icons.
-		-- Multi-price modes return plain text (no |T| markup) for both prices.
+		-- (via secondaryCoinDataFn) renders the real Texture coin icons, unless
+		-- plainTextPrices is enabled, in which case single-price modes render
+		-- plain text below too (secondaryCoinDataFn suppresses itself to match).
+		-- Multi-price modes always return plain text (no |T| markup) for both prices.
 		local effectiveQuantity = ... or 1
 		local itemCfg = G_RLF.DbAccessor:AnyFeatureConfig("itemLoot") or {}
 		local vendorIcon = itemCfg.vendorIconTexture
 		local auctionIcon = itemCfg.auctionHouseIconTexture
 		local vendorPrice, auctionPrice = 0, 0
 		local pricesForSellableItems = itemCfg.pricesForSellableItems
+		local plainTextPrices = itemCfg.plainTextPrices
 		if info.sellPrice and info.sellPrice > 0 then
 			vendorPrice = info.sellPrice
 		end
@@ -302,31 +305,46 @@ function ItemLoot:BuildPayload(info, quantity, fromLink)
 		local showVendorPrice = vendorPrice > 0
 		local showAuctionPrice = auctionPrice > 0
 
-		-- Single-price modes delegate to SecondaryCoinDisplay; just return a spacer.
-		if pricesForSellableItems == PricesEnum.Vendor and showVendorPrice then
-			return " "
-		elseif pricesForSellableItems == PricesEnum.AH and showAuctionPrice then
-			return " "
-		elseif pricesForSellableItems == PricesEnum.Highest then
-			if showAuctionPrice or showVendorPrice then
-				return " "
-			end
-		end
-
-		-- Multi-price modes: build plain text (no |T| markup → no animation jank)
+		-- Plain text formatter (no |T| markup → no animation jank). Used
+		-- unconditionally by multi-price modes below, and optionally by
+		-- single-price modes when plainTextPrices is enabled.
 		local function plainPrice(copper)
 			local g = math.floor(copper / 10000)
 			local s = math.floor((copper % 10000) / 100)
 			local c = copper % 100
 			local parts = {}
 			if g > 0 then
-				table.insert(parts, g .. "g")
+				table.insert(parts, g .. ItemLoot._itemLootAdapter.GetGoldAmountSymbol())
 			end
 			if s > 0 or g > 0 then
-				table.insert(parts, s .. "s")
+				table.insert(parts, s .. ItemLoot._itemLootAdapter.GetSilverAmountSymbol())
 			end
-			table.insert(parts, c .. "c")
+			table.insert(parts, c .. ItemLoot._itemLootAdapter.GetCopperAmountSymbol())
 			return table.concat(parts, " ")
+		end
+
+		-- Single-price modes normally delegate to SecondaryCoinDisplay; just
+		-- return a spacer. When plainTextPrices is enabled, render plain text
+		-- here instead (secondaryCoinDataFn returns nil in that case).
+		if pricesForSellableItems == PricesEnum.Vendor and showVendorPrice then
+			if plainTextPrices then
+				return plainPrice(vendorPrice * effectiveQuantity)
+			end
+			return " "
+		elseif pricesForSellableItems == PricesEnum.AH and showAuctionPrice then
+			if plainTextPrices then
+				return plainPrice(auctionPrice * effectiveQuantity)
+			end
+			return " "
+		elseif pricesForSellableItems == PricesEnum.Highest then
+			if showAuctionPrice or showVendorPrice then
+				if plainTextPrices then
+					local highestPrice = (showAuctionPrice and auctionPrice > vendorPrice) and auctionPrice
+						or vendorPrice
+					return plainPrice(highestPrice * effectiveQuantity)
+				end
+				return " "
+			end
 		end
 
 		local str = ""
@@ -356,7 +374,8 @@ function ItemLoot:BuildPayload(info, quantity, fromLink)
 	end
 
 	-- secondaryCoinDataFn: drives SecondaryCoinDisplay (real Textures) for
-	-- single-price modes.  Returns nil for multi-price modes so they fall back
+	-- single-price modes.  Returns nil for multi-price modes, and also for
+	-- single-price modes when plainTextPrices is enabled, so they fall back
 	-- to the plain-text secondaryTextFn above.
 	payload.secondaryCoinDataFn = function(existingQuantity)
 		if info:IsEquippableItem() then
@@ -367,6 +386,9 @@ function ItemLoot:BuildPayload(info, quantity, fromLink)
 			effectiveQuantity = quantity
 		end
 		local itemCfg = G_RLF.DbAccessor:AnyFeatureConfig("itemLoot") or {}
+		if itemCfg.plainTextPrices then
+			return nil
+		end
 		local pricesForSellableItems = itemCfg.pricesForSellableItems
 		local vendorPrice = (info.sellPrice and info.sellPrice > 0) and info.sellPrice or 0
 		local auctionPrice = 0

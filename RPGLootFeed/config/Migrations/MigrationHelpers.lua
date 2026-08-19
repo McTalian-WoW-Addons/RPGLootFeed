@@ -231,6 +231,7 @@ local LEGACY_DEFAULTS = {
 		repLevelColor = { 0.5, 0.5, 1, 1 },
 		repLevelTextWrapChar = 5, -- ANGLE
 		enableIcon = true,
+		repIconTexture = "",
 	},
 	prof = {
 		enabled = true,
@@ -644,6 +645,7 @@ local function copyReputationFeature(source)
 		repLevelColor = copyColor(source.repLevelColor or d.repLevelColor),
 		repLevelTextWrapChar = pick(source.repLevelTextWrapChar, d.repLevelTextWrapChar),
 		enableIcon = pick(source.enableIcon, d.enableIcon),
+		repIconTexture = pick(source.repIconTexture, d.repIconTexture),
 	}
 end
 

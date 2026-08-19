@@ -476,6 +476,21 @@ function G_RLF.BuildItemLootArgs(frameId, order)
 								width = 0.35,
 								order = 4.2,
 							},
+							plainTextPrices = {
+								type = "toggle",
+								name = G_RLF.L["Show Prices as Plain Text"],
+								desc = G_RLF.L["PlainTextPricesDesc"],
+								disabled = function()
+									return not fc().enabled or fc().pricesForSellableItems == PricesEnum.None
+								end,
+								get = function()
+									return fc().plainTextPrices
+								end,
+								set = function(_, value)
+									fc().plainTextPrices = value
+								end,
+								order = 5,
+							},
 						},
 					},
 					itemQualityFilter = {

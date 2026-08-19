@@ -14,6 +14,15 @@ end
 --- You may translate these comments, but do not translate "region" or "endregion" as they are used by the localization tool to determine where to place the translations.
 --- To add translations, simply uncomment the line(s) and replace the English text after the equal sign (=) with the translated value.
 
+--#region 1.36.0
+-- L["InvalidRepIconTexture"] = "%s is not a valid FileDataID or texture path. Atlas textures are not supported here."
+-- L["PlainTextPricesDesc"] = "Show prices for sellable items as plain text (e.g. 1g 2s 3c) instead of coin icons. Applies to the Vendor Price, Auction Price, and Highest Price modes."
+-- L["RepIconTextureDesc"] = "The icon to use for reputation rows. Enter a FileDataID or a texture file path, and leave blank to use the default icon. This is NOT an Atlas texture."
+-- L["Reputation Icon Texture"] = "Reputation Icon Texture"
+-- L["RevertRepIconToDefaultDesc"] = "Revert the reputation icon texture to the default."
+-- L["Show Prices as Plain Text"] = "Show Prices as Plain Text"
+--#endregion
+
 --#region 1.34.0
 -- L["Automatic"] = "Automatic"
 -- L["Disable Slug"] = "Disable Slug"

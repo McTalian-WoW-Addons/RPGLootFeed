@@ -451,6 +451,20 @@ _G.MEMBERS_PER_RAID_GROUP = 5
 _G.GENERAL = "General"
 --#endregion
 
+--#region:WOW_PROJECT_* flavor constants
+-- Real values, per Blizzard_FrameXMLBase/*/Constants.lua, so G_RLF:IsRetail()/IsClassic()/
+-- IsTBCClassic()/etc. behave correctly for specs that load the real AddonMethods.lua instead
+-- of stubbing those methods on the mock namespace. Defaults to Retail; individual specs may
+-- override _G.WOW_PROJECT_ID to exercise other flavors.
+_G.WOW_PROJECT_MAINLINE = 1
+_G.WOW_PROJECT_CLASSIC = 2
+_G.WOW_PROJECT_BURNING_CRUSADE_CLASSIC = 5
+_G.WOW_PROJECT_WRATH_CLASSIC = 11
+_G.WOW_PROJECT_CATACLYSM_CLASSIC = 14
+_G.WOW_PROJECT_MISTS_CLASSIC = 19
+_G.WOW_PROJECT_ID = _G.WOW_PROJECT_MAINLINE
+--#endregion
+
 --#region:RAID_CLASS_COLORS
 --- Minimal RAID_CLASS_COLORS used as fallback when expansion < BFA.
 --- Only WARRIOR is populated to match the UnitClass stub default.

@@ -141,6 +141,22 @@ end
 
 local rewardIcon = "ParagonReputation_Bag"
 
+--- Resolve the fallback reputation icon from a reputation feature config table:
+--- the user's configured override (if any), otherwise the flavor-appropriate
+--- default. Never stomps a real per-faction icon resolved further below.
+--- Shared by GetFactionData (frame-agnostic, via AnyFeatureConfig) and
+--- SampleRows.lua's reputation preview (per-frame, via Feature(frame, ...))
+--- so the two can never resolve a different icon for the same config.
+--- @param repConfig table? The reputation feature config table (may be nil/empty)
+--- @return integer|string
+function RepUtils.ResolveRepIcon(repConfig)
+	local override = repConfig and repConfig.repIconTexture
+	if override and override ~= "" then
+		return tonumber(override) or override
+	end
+	return G_RLF.DefaultIcons.REPUTATION
+end
+
 ---@diagnostic disable: inject-field
 
 ---@return UnifiedFactionData|nil
@@ -156,7 +172,7 @@ function RepUtils.GetFactionData(factionId, repType)
 		name = G_RLF.L["Unknown Faction"],
 		contextInfo = nil,
 		standing = 0,
-		icon = G_RLF.DefaultIcons.REPUTATION,
+		icon = RepUtils.ResolveRepIcon(G_RLF.DbAccessor:AnyFeatureConfig("reputation")),
 		quality = G_RLF.ItemQualEnum.Rare,
 	}
 
