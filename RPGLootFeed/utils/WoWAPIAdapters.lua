@@ -244,6 +244,22 @@ G_RLF.WoWAPI.ItemLoot = {
 	GetCoinTextureString = function(price)
 		return C_CurrencyInfo.GetCoinTextureString(price)
 	end,
+	-- Client-localized gold/silver/copper abbreviations (used by Blizzard's own
+	-- MoneyFrame/CoinPickupFrame, WoW Token, and Store UIs across every shipped
+	-- flavor), for the plain-text price mode -- so it matches whatever suffix
+	-- players already see everywhere else in the game's UI instead of a
+	-- hardcoded English "g"/"s"/"c". Falls back to the English literal if a
+	-- future client build ever ships without one -- a missing global here must
+	-- degrade the suffix, not throw a concat error and blank the price text.
+	GetGoldAmountSymbol = function()
+		return GOLD_AMOUNT_SYMBOL or "g"
+	end,
+	GetSilverAmountSymbol = function()
+		return SILVER_AMOUNT_SYMBOL or "s"
+	end,
+	GetCopperAmountSymbol = function()
+		return COPPER_AMOUNT_SYMBOL or "c"
+	end,
 	CreateAtlasMarkup = function(icon, w, h, x, y)
 		return CreateAtlasMarkup(icon, w, h, x, y)
 	end,

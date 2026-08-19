@@ -314,12 +314,12 @@ function ItemLoot:BuildPayload(info, quantity, fromLink)
 			local c = copper % 100
 			local parts = {}
 			if g > 0 then
-				table.insert(parts, g .. "g")
+				table.insert(parts, g .. ItemLoot._itemLootAdapter.GetGoldAmountSymbol())
 			end
 			if s > 0 or g > 0 then
-				table.insert(parts, s .. "s")
+				table.insert(parts, s .. ItemLoot._itemLootAdapter.GetSilverAmountSymbol())
 			end
-			table.insert(parts, c .. "c")
+			table.insert(parts, c .. ItemLoot._itemLootAdapter.GetCopperAmountSymbol())
 			return table.concat(parts, " ")
 		end
 

@@ -245,6 +245,15 @@ describe("ItemLoot Module", function()
 			GetCoinTextureString = function(p)
 				return tostring(p)
 			end,
+			GetGoldAmountSymbol = function()
+				return "g"
+			end,
+			GetSilverAmountSymbol = function()
+				return "s"
+			end,
+			GetCopperAmountSymbol = function()
+				return "c"
+			end,
 			CreateAtlasMarkup = function(icon)
 				return "[" .. icon .. "]"
 			end,
@@ -1095,6 +1104,42 @@ describe("ItemLoot Module", function()
 					assert.equals(textOff, textOn)
 					assert.is_nil(payloadOff.secondaryCoinDataFn(0))
 					assert.is_nil(payloadOn.secondaryCoinDataFn(0))
+				end)
+			end)
+
+			describe("plain-text price suffixes", function()
+				-- Distinct, non-English stand-ins. If plainPrice() ever falls back
+				-- to a hardcoded "g"/"s"/"c" literal instead of the adapter, this
+				-- test's assertion on the mocked suffixes fails.
+				before_each(function()
+					ItemLoot._itemLootAdapter.GetGoldAmountSymbol = function()
+						return "au"
+					end
+					ItemLoot._itemLootAdapter.GetSilverAmountSymbol = function()
+						return "ag"
+					end
+					ItemLoot._itemLootAdapter.GetCopperAmountSymbol = function()
+						return "cu"
+					end
+				end)
+
+				it("uses the client-localized symbols in single-price plain text mode", function()
+					ns.db.global.item.plainTextPrices = true
+					ns.db.global.item.pricesForSellableItems = "Vendor"
+					local info = makeItemInfo({ sellPrice = 10000 })
+
+					local payload = ItemLoot:BuildPayload(info, 1, nil)
+
+					assert.equals("1au 0ag 0cu", payload.secondaryTextFn())
+				end)
+
+				it("uses the client-localized symbols in dual-price mode", function()
+					ns.db.global.item.pricesForSellableItems = "VendorAH"
+					local info = makeItemInfo({ sellPrice = 10000 })
+
+					local payload = ItemLoot:BuildPayload(info, 1, nil)
+
+					assert.equals("1au 0ag 0cu", payload.secondaryTextFn(1))
 				end)
 			end)
 		end)
