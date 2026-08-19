@@ -13,6 +13,15 @@ end
 --- You may translate these comments, but do not translate "region" or "endregion" as they are used by the localization tool to determine where to place the translations.
 --- To add translations, simply uncomment the line(s) and replace the English text after the equal sign (=) with the translated value.
 
+--#region 1.36.0
+-- L["InvalidRepIconTexture"] = "%s is not a valid FileDataID or texture path. Atlas textures are not supported here."
+-- L["PlainTextPricesDesc"] = "Show prices for sellable items as plain text (e.g. 1g 2s 3c) instead of coin icons. Applies to the Vendor Price, Auction Price, and Highest Price modes."
+-- L["RepIconTextureDesc"] = "The icon to use for reputation rows. Enter a FileDataID or a texture file path, and leave blank to use the default icon. This is NOT an Atlas texture."
+-- L["Reputation Icon Texture"] = "Reputation Icon Texture"
+-- L["RevertRepIconToDefaultDesc"] = "Revert the reputation icon texture to the default."
+-- L["Show Prices as Plain Text"] = "Show Prices as Plain Text"
+--#endregion
+
 --#region 1.34.0
 -- L["Automatic"] = "Automatic"
 -- L["Disable Slug"] = "Disable Slug"
@@ -26,12 +35,8 @@ end
 -- L["Icon Skin"] = "Icon Skin"
 -- L["IconSkinDesc"] = "Choose which addon skins the loot row icons. Automatic uses whichever supported addon you have loaded. Square crops the icon border without needing any other addon."
 -- L["IconSkinUnavailableWarning"] = "That icon skin is not available because the addon that provides it is not loaded."
--- L["InvalidRepIconTexture"] = "%s is not a valid FileDataID or texture path. Atlas textures are not supported here."
 -- L["Left to Right"] = "Left to Right"
 -- L["NotInstalledSuffix"] = " (not installed)"
--- L["RepIconTextureDesc"] = "The icon to use for reputation rows. Enter a FileDataID or a texture file path, and leave blank to use the default icon. This is NOT an Atlas texture."
--- L["Reputation Icon Texture"] = "Reputation Icon Texture"
--- L["RevertRepIconToDefaultDesc"] = "Revert the reputation icon texture to the default."
 -- L["Right to Left"] = "Right to Left"
 -- L["SlugFlagNote"] = "Outlines are rendered through the Slug library for crisper glyphs at any size. It has no effect while Use Font Objects is on."
 -- L["Square"] = "Square"
@@ -173,7 +178,6 @@ L["TopInsetDesc"] = "Фон будет сдвинут от верхнего кр
 --#endregion
 
 --#region 1.26.0
--- L["Show Prices as Plain Text"] = "Show Prices as Plain Text"
 L["Hide All Icons"] = "Скрыть все иконки"
 L["HideAllIconsDesc"] = "Если включено, все иконки будут скрыты в ленте добычи."
 L["Show '1' Quantity"] = "Показывать количество '1'"
@@ -250,7 +254,6 @@ L["ShowMoneyIconDesc"] = "Показывать иконку перед сумм�
 --#region 1.0.0 - 1.22.0
 -- L["Ignore Item IDs"] = "Ignore Item IDs"
 -- L["IgnoreItemIDsDesc"] = "Enter a comma-separated list of item IDs to ignore in the Party Loot Feed"
--- L["PlainTextPricesDesc"] = "Show prices for sellable items as plain text (e.g. 1g 2s 3c) instead of coin icons. Applies to the Vendor Price, Auction Price, and Highest Price modes."
 L["Abbreviate Total"] = "Сокращать общее количество"
 L["AbbreviateTotalDesc"] = "Сокращать общее количество денег в ленте добычи (для золота свыше 1000)"
 L["About"] = "О аддоне"
