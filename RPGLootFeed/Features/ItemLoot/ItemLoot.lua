@@ -295,6 +295,7 @@ function ItemLoot:BuildPayload(info, quantity, fromLink)
 		local vendorPrice, auctionPrice = 0, 0
 		local pricesForSellableItems = itemCfg.pricesForSellableItems
 		local plainTextPrices = itemCfg.plainTextPrices
+		local plainTextPricesColored = itemCfg.plainTextPricesColored
 		if info.sellPrice and info.sellPrice > 0 then
 			vendorPrice = info.sellPrice
 		end
@@ -314,13 +315,37 @@ function ItemLoot:BuildPayload(info, quantity, fromLink)
 			local c = copper % 100
 			local parts = {}
 			if g > 0 then
-				table.insert(parts, g .. ItemLoot._itemLootAdapter.GetGoldAmountSymbol())
+				local part = g .. ItemLoot._itemLootAdapter.GetGoldAmountSymbol()
+				if plainTextPricesColored then
+					part = "|cffffd700" .. part .. "|r"
+				end
+				table.insert(parts, part)
 			end
 			if s > 0 or g > 0 then
-				table.insert(parts, s .. ItemLoot._itemLootAdapter.GetSilverAmountSymbol())
+				local part = s .. ItemLoot._itemLootAdapter.GetSilverAmountSymbol()
+				if plainTextPricesColored then
+					part = "|cffc7c7cf" .. part .. "|r"
+				end
+				table.insert(parts, part)
 			end
-			table.insert(parts, c .. ItemLoot._itemLootAdapter.GetCopperAmountSymbol())
+			local copperPart = c .. ItemLoot._itemLootAdapter.GetCopperAmountSymbol()
+			if plainTextPricesColored then
+				copperPart = "|cffeda55f" .. copperPart .. "|r"
+			end
+			table.insert(parts, copperPart)
 			return table.concat(parts, " ")
+		end
+
+		-- Single-icon prefix for plain-text single-price modes, so the vendor/AH
+		-- icon isn't lost when plainTextPrices swaps out SecondaryCoinDisplay's
+		-- real Textures for plain text.
+		local function iconMarkup(icon)
+			if not icon or icon == "" then
+				return ""
+			end
+			local sizeCoeff = AtlasIconCoefficients[icon] or 1
+			local iconSize = secondaryFontSize * sizeCoeff
+			return ItemLoot._itemLootAdapter.CreateAtlasMarkup(icon, iconSize, iconSize) .. " "
 		end
 
 		-- Single-price modes normally delegate to SecondaryCoinDisplay; just
@@ -328,20 +353,21 @@ function ItemLoot:BuildPayload(info, quantity, fromLink)
 		-- here instead (secondaryCoinDataFn returns nil in that case).
 		if pricesForSellableItems == PricesEnum.Vendor and showVendorPrice then
 			if plainTextPrices then
-				return plainPrice(vendorPrice * effectiveQuantity)
+				return iconMarkup(vendorIcon) .. plainPrice(vendorPrice * effectiveQuantity)
 			end
 			return " "
 		elseif pricesForSellableItems == PricesEnum.AH and showAuctionPrice then
 			if plainTextPrices then
-				return plainPrice(auctionPrice * effectiveQuantity)
+				return iconMarkup(auctionIcon) .. plainPrice(auctionPrice * effectiveQuantity)
 			end
 			return " "
 		elseif pricesForSellableItems == PricesEnum.Highest then
 			if showAuctionPrice or showVendorPrice then
 				if plainTextPrices then
-					local highestPrice = (showAuctionPrice and auctionPrice > vendorPrice) and auctionPrice
-						or vendorPrice
-					return plainPrice(highestPrice * effectiveQuantity)
+					local useAuction = showAuctionPrice and auctionPrice > vendorPrice
+					local highestPrice = useAuction and auctionPrice or vendorPrice
+					local icon = useAuction and auctionIcon or vendorIcon
+					return iconMarkup(icon) .. plainPrice(highestPrice * effectiveQuantity)
 				end
 				return " "
 			end
