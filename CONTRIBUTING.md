@@ -27,7 +27,7 @@ Thank you for your interest in contributing to this project! Following these gui
    cd RPGlootFeed
    ```
 
-2. Review the [issues](https://github.com/RPGLootFeed/issues) to find something you'd like to work on, or propose a new feature by creating an issue.
+2. Review the [issues](https://github.com/McTalian-WoW-Addons/RPGLootFeed/issues) to find something you'd like to work on, or propose a new feature by creating an issue.
 
 ---
 
@@ -66,16 +66,15 @@ Thank you for your interest in contributing to this project! Following these gui
 1. **Install LuaRocks**  
    [Install Luarocks for package management.](https://github.com/luarocks/luarocks?tab=readme-ov-file#installing)
 1. **Install Dependencies**  
-   Install project dependencies using `luarocks`:
+   Install project dependencies via `make`:
    ```bash
-   luarocks install busted
-   luarocks install luassert
+   make lua_deps
    ```
 1. **Verify Installation**  
    Ensure the tools are available:
    ```bash
    lua -v
-   busted --version
+   ~/.luarocks/bin/busted --version
    ```
 
 ---
@@ -95,10 +94,10 @@ Run [trunk](https://trunk.io) checks to ensure your code meets the project's sta
 
 ### Packaging
 
-- Use `make local` to package the project for local testing:
+- Use `make dev` to package the project for local testing:
 
   ```bash
-  make local
+  make dev
   ```
 
 This will create an alpha build in the `.release` directory. It is recommended that you create a symlink to this directory in your game's `Interface/Addons` directory so that the latest changes are immediately available in the game after a `/reload`.
@@ -108,15 +107,15 @@ This will create an alpha build in the `.release` directory. It is recommended t
 
 ### Lua Tests
 
-- Use `busted` for unit tests:
+- Use `make test` for unit tests:
 
   ```bash
-  busted
+  make test
   ```
 
 - Generate coverage reports:
   ```bash
-  busted --coverage && luarocks luacov
+  make test-cov
   ```
 
 ---
@@ -169,5 +168,7 @@ This will create an alpha build in the `.release` directory. It is recommended t
 ## Contact
 
 If you have any questions or need help, feel free to reach out by creating an issue in the repository.
+
+AI tooling: see CLAUDE.md.
 
 ---
