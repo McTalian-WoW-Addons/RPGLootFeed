@@ -118,6 +118,15 @@ describe("Money", function()
 			PlaySoundFile = spy.new(function()
 				return true, 12345
 			end),
+			GetGoldAmountSymbol = function()
+				return "g"
+			end,
+			GetSilverAmountSymbol = function()
+				return "s"
+			end,
+			GetCopperAmountSymbol = function()
+				return "c"
+			end,
 		}
 	end)
 
@@ -171,7 +180,7 @@ describe("Money", function()
 			assert.is_not_nil(elements[1].primary)
 			assert.equal("primary", elements[1].primary.type)
 			-- coinString prefix comes before sign so accountant mode produces "(-…)"
-			assert.equal("{coinString}{sign}", elements[1].primary.template)
+			assert.equal("{coinString}{sign}{plainAmount}", elements[1].primary.template)
 			assert.equal(1, elements[1].primary.order)
 		end)
 
@@ -798,6 +807,69 @@ describe("Money", function()
 				local result = element.secondaryTextFn(0)
 
 				assert.equal("", result)
+			end)
+		end)
+
+		describe("plainTextMoney", function()
+			before_each(function()
+				ns.db.global.money.plainTextMoney = true
+			end)
+
+			it("renders the looted amount as plain text and suppresses coinDataFn", function()
+				local element = buildElement(50000) -- 5g
+
+				assert.equal("5g 0s 0c", element.textFn(0))
+				assert.is_nil(element.coinDataFn(0))
+			end)
+
+			it("renders the wallet total as plain text and suppresses secondaryCoinDataFn", function()
+				ns.db.global.money.showMoneyTotal = true
+				Money._moneyAdapter.GetMoney = function()
+					return 1500000 -- 150g
+				end
+
+				local element = buildElement(50000)
+
+				assert.equal("150g 0s 0c", element.secondaryTextFn(0))
+				assert.is_nil(element.secondaryCoinDataFn(0))
+			end)
+
+			it("wraps each denomination in a color code when plainTextMoneyColored is on", function()
+				ns.db.global.money.plainTextMoneyColored = true
+
+				local element = buildElement(50000) -- 5g
+
+				assert.equal("|cffffd7005g|r |cffc7c7cf0s|r |cffeda55f0c|r", element.textFn(0))
+			end)
+
+			it("does not color when plainTextMoneyColored is off", function()
+				ns.db.global.money.plainTextMoneyColored = false
+
+				local element = buildElement(50000) -- 5g
+
+				assert.equal("5g 0s 0c", element.textFn(0))
+			end)
+
+			it("still truncates and abbreviates the wallet total", function()
+				ns.db.global.money.showMoneyTotal = true
+				ns.db.global.money.abbreviateTotal = true
+				Money._moneyAdapter.GetMoney = function()
+					return 25123456 -- 2512g 34s 56c, truncated then abbreviated
+				end
+
+				local element = buildElement(50000)
+
+				assert.equal("2.51Kg", element.secondaryTextFn(0))
+			end)
+
+			it("puts the plain-text amount inside accountant-mode parens", function()
+				ns.db.global.money.accountantMode = true
+
+				local element = buildElement(-50000) -- -5g
+
+				-- Opening "(" from textFn (plainAmount included), closing ")" from amountTextFn
+				assert.equal("(5g 0s 0c", element.textFn(0))
+				assert.equal(")", element.amountTextFn(0))
 			end)
 		end)
 	end)

@@ -480,6 +480,7 @@ function G_RLF.BuildItemLootArgs(frameId, order)
 								type = "toggle",
 								name = G_RLF.L["Show Prices as Plain Text"],
 								desc = G_RLF.L["PlainTextPricesDesc"],
+								width = "double",
 								disabled = function()
 									return not fc().enabled or fc().pricesForSellableItems == PricesEnum.None
 								end,
@@ -490,6 +491,24 @@ function G_RLF.BuildItemLootArgs(frameId, order)
 									fc().plainTextPrices = value
 								end,
 								order = 5,
+							},
+							plainTextPricesColored = {
+								type = "toggle",
+								name = G_RLF.L["Color Code Plain Text Prices"],
+								desc = G_RLF.L["ColorCodePlainTextPricesDesc"],
+								width = "double",
+								disabled = function()
+									return not fc().enabled
+										or fc().pricesForSellableItems == PricesEnum.None
+										or not fc().plainTextPrices
+								end,
+								get = function()
+									return fc().plainTextPricesColored
+								end,
+								set = function(_, value)
+									fc().plainTextPricesColored = value
+								end,
+								order = 5.1,
 							},
 						},
 					},

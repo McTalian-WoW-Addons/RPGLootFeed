@@ -71,6 +71,38 @@ function G_RLF.BuildMoneyArgs(frameId, order)
 						end,
 						order = 0.5,
 					},
+					plainTextMoney = {
+						type = "toggle",
+						name = G_RLF.L["Show Money as Plain Text"],
+						desc = G_RLF.L["PlainTextMoneyDesc"],
+						width = "double",
+						disabled = function()
+							return not fc().enabled
+						end,
+						get = function()
+							return fc().plainTextMoney
+						end,
+						set = function(_, value)
+							fc().plainTextMoney = value
+						end,
+						order = 0.6,
+					},
+					plainTextMoneyColored = {
+						type = "toggle",
+						name = G_RLF.L["Color Code Plain Text Money"],
+						desc = G_RLF.L["ColorCodePlainTextMoneyDesc"],
+						width = "double",
+						disabled = function()
+							return not fc().enabled or not fc().plainTextMoney
+						end,
+						get = function()
+							return fc().plainTextMoneyColored
+						end,
+						set = function(_, value)
+							fc().plainTextMoneyColored = value
+						end,
+						order = 0.7,
+					},
 					-- TODO: Money total is in secondary text row, unlike other total counters
 					-- Will need to make Money consistent with other features to have the same
 					-- options for total counters.

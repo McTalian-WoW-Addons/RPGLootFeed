@@ -93,6 +93,17 @@ G_RLF.WoWAPI.Money = {
 	PlaySoundFile = function(sound)
 		return PlaySoundFile(sound)
 	end,
+	-- Client-localized gold/silver/copper abbreviations, for the plain-text
+	-- money mode -- see ItemLoot's identical adapter functions for rationale.
+	GetGoldAmountSymbol = function()
+		return GOLD_AMOUNT_SYMBOL or "g"
+	end,
+	GetSilverAmountSymbol = function()
+		return SILVER_AMOUNT_SYMBOL or "s"
+	end,
+	GetCopperAmountSymbol = function()
+		return COPPER_AMOUNT_SYMBOL or "c"
+	end,
 }
 
 -- ── TravelPoints API Adapter ──────────────────────────────────────────────────

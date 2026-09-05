@@ -51,6 +51,51 @@ function Money:PlaySoundIfEnabled()
 	end
 end
 
+--- Decomposes a non-negative copper amount into gold/silver/copper parts.
+--- Shared by coinDataFn (coin texture display) and the icon denomination
+--- picker in BuildPayload so the icon and the coin display can never disagree.
+---@param totalCopper number Non-negative copper amount
+---@return number gold, number silver, number copper
+local function DecomposeCopper(totalCopper)
+	local gold = math.floor(totalCopper / 10000)
+	local silver = math.floor((totalCopper % 10000) / 100)
+	local copper = totalCopper % 100
+	return gold, silver, copper
+end
+
+--- Format a copper amount as plain text (e.g. "1g 2s 3c") instead of the
+--- real-Texture coin display, mirroring ItemLoot's plainTextPrices formatter.
+--- No |T|/|A| markup -> no animation jank.
+---@param totalCopper number Non-negative copper amount
+---@param colored boolean? Wrap each denomination in its coin color
+---@param abbreviate boolean? Collapse to an abbreviated gold-only string at >=1000g
+---@return string
+local function PlainMoneyString(totalCopper, colored, abbreviate)
+	local gold, silver, copper = DecomposeCopper(totalCopper)
+
+	local function colorWrap(hex, text)
+		if colored then
+			return "|cff" .. hex .. text .. "|r"
+		end
+		return text
+	end
+
+	if abbreviate and gold >= 1000 then
+		local goldText = TextTemplateEngine:AbbreviateNumber(gold) .. Money._moneyAdapter.GetGoldAmountSymbol()
+		return colorWrap("ffd700", goldText)
+	end
+
+	local parts = {}
+	if gold > 0 then
+		table.insert(parts, colorWrap("ffd700", gold .. Money._moneyAdapter.GetGoldAmountSymbol()))
+	end
+	if silver > 0 or gold > 0 then
+		table.insert(parts, colorWrap("c7c7cf", silver .. Money._moneyAdapter.GetSilverAmountSymbol()))
+	end
+	table.insert(parts, colorWrap("eda55f", copper .. Money._moneyAdapter.GetCopperAmountSymbol()))
+	return table.concat(parts, " ")
+end
+
 -- Context provider function to be registered when module is enabled.
 -- Defined after Money so the inner closure can reference Money._moneyAdapter.
 local function createMoneyContextProvider()
@@ -67,6 +112,14 @@ local function createMoneyContextProvider()
 			context.coinString = ""
 		end
 
+		-- plainTextMoney: coinDataFn suppresses itself (see BuildPayload), so the
+		-- looted amount is rendered here instead, inline with the sign/parens.
+		if moneyConfig.plainTextMoney then
+			context.plainAmount = PlainMoneyString(context.absTotal, moneyConfig.plainTextMoneyColored, false)
+		else
+			context.plainAmount = ""
+		end
+
 		-- Secondary text: only retain the spacer indent when the money total is shown.
 		-- The actual coin amounts are rendered via secondaryCoinDataFn.
 		if moneyConfig.showMoneyTotal then
@@ -75,18 +128,6 @@ local function createMoneyContextProvider()
 			context.currentMoney = ""
 		end
 	end
-end
-
---- Decomposes a non-negative copper amount into gold/silver/copper parts.
---- Shared by coinDataFn (coin texture display) and the icon denomination
---- picker in BuildPayload so the icon and the coin display can never disagree.
----@param totalCopper number Non-negative copper amount
----@return number gold, number silver, number copper
-local function DecomposeCopper(totalCopper)
-	local gold = math.floor(totalCopper / 10000)
-	local silver = math.floor((totalCopper % 10000) / 100)
-	local copper = totalCopper % 100
-	return gold, silver, copper
 end
 
 --- Build a uniform payload for a money loot event.
@@ -171,13 +212,21 @@ function Money:BuildPayload(quantity)
 		end,
 		secondaryTextFn = function(existingCopper)
 			local mc = G_RLF.DbAccessor:AnyFeatureConfig("money") or {}
-			if mc.showMoneyTotal then
-				-- Return a single-space placeholder so the row layout applies the
-				-- vertical split (primary top / secondary bottom).  The actual wallet
-				-- total is rendered by SecondaryCoinDisplay (real Textures).
-				return " "
+			if not mc.showMoneyTotal then
+				return ""
 			end
-			return ""
+			if mc.plainTextMoney then
+				local currentMoney = Money._moneyAdapter.GetMoney()
+				-- Truncation: amounts over 1000g strip silver and copper
+				if currentMoney > 10000000 then
+					currentMoney = math.floor(currentMoney / 10000) * 10000
+				end
+				return PlainMoneyString(currentMoney, mc.plainTextMoneyColored, mc.abbreviateTotal)
+			end
+			-- Return a single-space placeholder so the row layout applies the
+			-- vertical split (primary top / secondary bottom).  The actual wallet
+			-- total is rendered by SecondaryCoinDisplay (real Textures).
+			return " "
 		end,
 		-- Accountant-mode closing bracket: only append ")" when the net amount is
 		-- negative (parens wrap negative amounts; positive amounts are shown plain).
@@ -192,8 +241,14 @@ function Money:BuildPayload(quantity)
 			return ""
 		end,
 		-- Primary coin display: real Texture denomination frames instead of |T| markup.
+		-- Suppressed when plainTextMoney is on -- the context provider renders the
+		-- amount as plain text inline instead (see context.plainAmount above).
 		---@param existingCopper? number
 		coinDataFn = function(existingCopper)
+			local mc = G_RLF.DbAccessor:AnyFeatureConfig("money") or {}
+			if mc.plainTextMoney then
+				return nil
+			end
 			local total = math.abs((existingCopper or 0) + quantity)
 			return DecomposeCopper(total)
 		end,
@@ -201,7 +256,7 @@ function Money:BuildPayload(quantity)
 		---@param existingCopper? number
 		secondaryCoinDataFn = function(existingCopper)
 			local mc = G_RLF.DbAccessor:AnyFeatureConfig("money") or {}
-			if not mc.showMoneyTotal then
+			if not mc.showMoneyTotal or mc.plainTextMoney then
 				return nil
 			end
 			local currentMoney = Money._moneyAdapter.GetMoney()
@@ -238,14 +293,16 @@ function Money:GenerateTextElements(quantity)
 	local elements = {}
 
 	-- Row 1: Primary money display
-	-- Template produces only the sign/bracket prefix; the actual coin amounts
-	-- are rendered by the row's CoinDisplay frame (real Textures, not |T| markup).
-	-- Template order: "{coinString}{sign}" so accountant mode produces "(-…)"
-	-- where coinString="(" comes before the sign "-".
+	-- Template produces the sign/bracket prefix, plus the plain-text amount when
+	-- plainTextMoney is enabled ({plainAmount} is "" otherwise -- see the context
+	-- provider). Normally the actual coin amounts are rendered by the row's
+	-- CoinDisplay frame (real Textures, not |T| markup).
+	-- Template order: "{coinString}{sign}{plainAmount}" so accountant mode produces
+	-- "(-…)" where coinString="(" comes before the sign "-".
 	elements[1] = {}
 	elements[1].primary = {
 		type = "primary",
-		template = "{coinString}{sign}",
+		template = "{coinString}{sign}{plainAmount}",
 		order = 1,
 		color = nil,
 	}

@@ -15,11 +15,17 @@ end
 --- To add translations, simply uncomment the line(s) and replace the English text after the equal sign (=) with the translated value.
 
 --#region 1.36.0
+-- L["Color Code Plain Text Money"] = "Color Code Plain Text Money"
+-- L["Color Code Plain Text Prices"] = "Color Code Plain Text Prices"
+-- L["ColorCodePlainTextMoneyDesc"] = "Color the gold, silver, and copper amounts when money is shown as plain text."
+-- L["ColorCodePlainTextPricesDesc"] = "Color the gold, silver, and copper amounts when prices are shown as plain text."
 -- L["InvalidRepIconTexture"] = "%s is not a valid FileDataID or texture path. Atlas textures are not supported here."
+-- L["PlainTextMoneyDesc"] = "Show looted money and the wallet total as plain text (e.g. 1g 2s 3c) instead of coin icons."
 -- L["PlainTextPricesDesc"] = "Show prices for sellable items as plain text (e.g. 1g 2s 3c) instead of coin icons. Applies to the Vendor Price, Auction Price, and Highest Price modes."
 -- L["RepIconTextureDesc"] = "The icon to use for reputation rows. Enter a FileDataID or a texture file path, and leave blank to use the default icon. This is NOT an Atlas texture."
 -- L["Reputation Icon Texture"] = "Reputation Icon Texture"
 -- L["RevertRepIconToDefaultDesc"] = "Revert the reputation icon texture to the default."
+-- L["Show Money as Plain Text"] = "Show Money as Plain Text"
 -- L["Show Prices as Plain Text"] = "Show Prices as Plain Text"
 --#endregion
 

@@ -1018,7 +1018,7 @@ describe("ItemLoot Module", function()
 					local info = makeItemInfo({ sellPrice = 10000 })
 					local payload = ItemLoot:BuildPayload(info, 1, nil)
 
-					assert.equals("1g 0s 0c", payload.secondaryTextFn())
+					assert.equals("[Interface/Icons/inv_misc_coin_01] 1g 0s 0c", payload.secondaryTextFn())
 					assert.is_nil(payload.secondaryCoinDataFn(0))
 				end)
 
@@ -1030,7 +1030,7 @@ describe("ItemLoot Module", function()
 					local info = makeItemInfo({ sellPrice = 0 })
 					local payload = ItemLoot:BuildPayload(info, 1, nil)
 
-					assert.equals("25g 0s 0c", payload.secondaryTextFn())
+					assert.equals("[Interface/Icons/inv_misc_coin_02] 25g 0s 0c", payload.secondaryTextFn())
 					assert.is_nil(payload.secondaryCoinDataFn(0))
 				end)
 
@@ -1042,7 +1042,7 @@ describe("ItemLoot Module", function()
 					local info = makeItemInfo({ sellPrice = 10000 })
 					local payload = ItemLoot:BuildPayload(info, 1, nil)
 
-					assert.equals("5g 0s 0c", payload.secondaryTextFn())
+					assert.equals("[Interface/Icons/inv_misc_coin_02] 5g 0s 0c", payload.secondaryTextFn())
 					assert.is_nil(payload.secondaryCoinDataFn(0))
 				end)
 			end)
@@ -1083,7 +1083,7 @@ describe("ItemLoot Module", function()
 					local info = makeItemInfo({ sellPrice = 10000 })
 					local payload = ItemLoot:BuildPayload(info, 1, nil)
 
-					assert.equals("1g 0s 0c", payload.secondaryTextFn())
+					assert.equals("[Interface/Icons/inv_misc_coin_01] 1g 0s 0c", payload.secondaryTextFn())
 				end)
 			end)
 
@@ -1130,7 +1130,7 @@ describe("ItemLoot Module", function()
 
 					local payload = ItemLoot:BuildPayload(info, 1, nil)
 
-					assert.equals("1au 0ag 0cu", payload.secondaryTextFn())
+					assert.equals("[Interface/Icons/inv_misc_coin_01] 1au 0ag 0cu", payload.secondaryTextFn())
 				end)
 
 				it("uses the client-localized symbols in dual-price mode", function()
