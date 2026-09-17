@@ -25,3 +25,14 @@ Here are examples of valid PR titles using various `type`s:
 - chore: tweaked dependabot config
 - style: formatted code with stylua
 - perf: improve performance of item parsing
+- toc: bump interface versions for 12.1.0
+
+## Merge labels
+
+`release-checks.yml` labels each PR on every open/push/reopen/title-edit:
+
+- `squash-valid` — PR title parses; squash merge allowed.
+- `rebase-valid` — every commit in range parses; rebase merge allowed.
+- `release:major|minor|patch|no-release` — resulting version bump.
+- Passing PR, no labels: title and commits disagree on release type.
+- Rebase merge only when `rebase-valid` is present.
