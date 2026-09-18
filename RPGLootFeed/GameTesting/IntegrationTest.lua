@@ -72,19 +72,23 @@ local function runMoneySubscriptionRoutingIntegrationTest()
 		return 0, noop, noop
 	end
 
-	-- Find the first non-Main frame that already exists.
+	-- Find the first configured non-Main frame.
 	local secondId
 	for id in pairs(framesDb) do
-		local f = lootDisplay:GetFrame(id)
-		if f and id ~= G_RLF.Frames.MAIN then
+		if id ~= G_RLF.Frames.MAIN then
 			secondId = id
 			break
 		end
 	end
 
 	local mainFrame = lootDisplay:GetFrame(G_RLF.Frames.MAIN)
-	local secondFrame = secondId and lootDisplay:GetFrame(secondId)
 	runner:assertEqual(mainFrame ~= nil, true, "LootDisplay: MainLootFrame exists for subscription routing")
+	-- A profile with only the Main frame cannot exercise routing; skip rather than fail.
+	if not secondId then
+		runner:assertEqual(true, true, "LootDisplay: Subscription routing (skipped — no second frame configured)")
+		return 0, noop, noop
+	end
+	local secondFrame = lootDisplay:GetFrame(secondId)
 	runner:assertEqual(secondFrame ~= nil, true, "LootDisplay: Second frame exists for subscription routing")
 	if not mainFrame or not secondFrame then
 		return 0, noop, noop
