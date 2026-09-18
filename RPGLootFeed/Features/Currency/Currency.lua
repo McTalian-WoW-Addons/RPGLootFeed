@@ -27,6 +27,9 @@ end
 local IsRetail = function()
 	return G_RLF:IsRetail()
 end
+local IsForever = function()
+	return G_RLF:IsForever()
+end
 local RGBAToHexFormat = function(...)
 	return G_RLF:RGBAToHexFormat(...)
 end
@@ -235,18 +238,30 @@ local function precomputeAmountPatternSegments(patterns)
 	return computedPatterns
 end
 
+-- WoW Forever reports expansion 0 but ships the Mainline currency system
+-- (C_CurrencyInfo + CURRENCY_DISPLAY_UPDATE with quantityChange).
+local function IsCurrencySupported()
+	return IsForever() or Currency._currencyAdapter.GetExpansionLevel() >= Expansion.WOTLK
+end
+
+local function UsesChatCurrencyEvents()
+	return not IsForever() and Currency._currencyAdapter.GetExpansionLevel() < Expansion.BFA
+end
+
+-- Trading Post (Blizzard_PerksProgram) is excluded from WoW Forever.
+local function HasPerksProgram()
+	return IsRetail() and not IsForever()
+end
+
 local classicCurrencyPatterns
 function Currency:OnInitialize()
-	if
-		G_RLF.DbAccessor:IsFeatureNeededByAnyFrame("currency")
-		and Currency._currencyAdapter.GetExpansionLevel() >= Expansion.WOTLK
-	then
+	if G_RLF.DbAccessor:IsFeatureNeededByAnyFrame("currency") and IsCurrencySupported() then
 		self:Enable()
 	else
 		self:Disable()
 	end
 
-	if Currency._currencyAdapter.GetExpansionLevel() < Expansion.BFA then
+	if UsesChatCurrencyEvents() then
 		local currencyConsts = {
 			Currency._currencyAdapter.GetCurrencyGainedMultiplePattern(),
 			Currency._currencyAdapter.GetCurrencyGainedMultipleBonusPattern(),
@@ -258,32 +273,32 @@ function Currency:OnInitialize()
 end
 
 function Currency:OnDisable()
-	if Currency._currencyAdapter.GetExpansionLevel() < Expansion.WOTLK then
+	if not IsCurrencySupported() then
 		self:LogDebug("OnEnable", "Disabled because expansion is below WOTLK")
 		return
 	end
-	if Currency._currencyAdapter.GetExpansionLevel() < Expansion.BFA then
+	if UsesChatCurrencyEvents() then
 		self:UnregisterEvent("CHAT_MSG_CURRENCY")
 	else
 		self:UnregisterEvent("CURRENCY_DISPLAY_UPDATE")
 	end
-	if IsRetail() then
+	if HasPerksProgram() then
 		self:UnregisterEvent("PERKS_PROGRAM_CURRENCY_AWARDED")
 		self:UnregisterEvent("PERKS_PROGRAM_CURRENCY_REFRESH")
 	end
 end
 
 function Currency:OnEnable()
-	if Currency._currencyAdapter.GetExpansionLevel() < Expansion.WOTLK then
+	if not IsCurrencySupported() then
 		self:LogDebug("OnEnable", "Disabled because expansion is below WOTLK")
 		return
 	end
-	if Currency._currencyAdapter.GetExpansionLevel() < Expansion.BFA then
+	if UsesChatCurrencyEvents() then
 		self:RegisterEvent("CHAT_MSG_CURRENCY")
 	else
 		self:RegisterEvent("CURRENCY_DISPLAY_UPDATE")
 	end
-	if IsRetail() then
+	if HasPerksProgram() then
 		self:RegisterEvent("PERKS_PROGRAM_CURRENCY_AWARDED")
 	end
 	self:LogDebug("OnEnable", "Currency module is enabled")

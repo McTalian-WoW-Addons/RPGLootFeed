@@ -25,8 +25,10 @@ end
 local LogWarn = function(...)
 	G_RLF:LogWarn(...)
 end
-local IsRetail = function()
-	return G_RLF:IsRetail()
+-- Traveler's Log / Trading Post (Blizzard_PerksProgram, Blizzard_EncounterJournal)
+-- do not load on WoW Forever, which otherwise reports as Retail.
+local HasTravelersLog = function()
+	return G_RLF:IsRetail() and not G_RLF:IsForever()
 end
 local RGBAToHexFormat = function(...)
 	return G_RLF:RGBAToHexFormat(...)
@@ -121,7 +123,7 @@ local function calcTravelersJourneyVal(activityID)
 end
 
 function TravelPoints:OnInitialize()
-	if IsRetail() and G_RLF.DbAccessor:IsFeatureNeededByAnyFrame("travelPoints") then
+	if HasTravelersLog() and G_RLF.DbAccessor:IsFeatureNeededByAnyFrame("travelPoints") then
 		self:Enable()
 	else
 		self:Disable()
@@ -129,14 +131,14 @@ function TravelPoints:OnInitialize()
 end
 
 function TravelPoints:OnDisable()
-	if not IsRetail() then
+	if not HasTravelersLog() then
 		return
 	end
 	self:UnregisterEvent("PERKS_ACTIVITY_COMPLETED")
 end
 
 function TravelPoints:OnEnable()
-	if not IsRetail() then
+	if not HasTravelersLog() then
 		return
 	end
 

@@ -77,7 +77,10 @@ local function tconcat(t1, t2)
 end
 
 local testItemIds = { 2589, 2592, 1515, 730 }
-if G_RLF:IsRetail() then
+-- WoW Forever reports as Retail but only has classic-era items.
+if G_RLF:IsForever() then
+	-- Base classic-era items only
+elseif G_RLF:IsRetail() then
 	tconcat(testItemIds, { 50818, 128827, 219325, 34494 })
 elseif G_RLF:IsClassic() then
 	tconcat(testItemIds, { 233620 })
@@ -100,7 +103,10 @@ local function initializeTestItems()
 end
 
 local testCurrencyIds = {}
-if G_RLF:IsRetail() then
+-- TODO: Add WoW Forever test currencies once any exist in-game
+if G_RLF:IsForever() then
+	-- No known currencies yet
+elseif G_RLF:IsRetail() then
 	tconcat(testCurrencyIds, { 2245, 1191, 1828, 1792, 1755, 1580, 1273, 1166, 515, 241, 1813, 2778, 3089, 1101, 1704 })
 elseif GetExpansionLevel() == G_RLF.Expansion.WOTLK then
 	tconcat(testCurrencyIds, { 221, 241, 126, 81 })
@@ -135,9 +141,12 @@ local function initializeTestCurrencies()
 end
 
 local numTestFactions = 3
+-- Upper bound on faction indices scanned; a fresh character (e.g. on WoW
+-- Forever) can have fewer than numTestFactions eligible factions.
+local maxFactionIndex = 200
 local function initializeTestFactions()
 	local j, i = 1, 1
-	while j <= numTestFactions do
+	while j <= numTestFactions and i < maxFactionIndex do
 		i = i + 1
 		local factionInfo
 		if G_RLF:IsRetail() then
@@ -275,7 +284,7 @@ local function generateRandomLoot()
 
 			-- 15% chance to show currency
 		elseif rng > 0.7 and rng <= 0.85 then
-			if GetExpansionLevel() >= G_RLF.Expansion.WOTLK then
+			if #TestMode.testCurrencies > 0 then
 				local currency = TestMode.testCurrencies[math.random(#TestMode.testCurrencies)]
 				local amountLooted = math.random(1, 500)
 				local module = G_RLF.RLF:GetModule(G_RLF.FeatureModule.Currency) --[[@as RLF_Currency]]
@@ -289,7 +298,7 @@ local function generateRandomLoot()
 			end
 
 			-- 10% chance to show reputation (least frequent)
-		elseif rng > 0.85 then
+		elseif rng > 0.85 and #TestMode.testFactions > 0 then
 			local reputationGained = math.random(10, 100)
 			local factionName = TestMode.testFactions[math.random(#TestMode.testFactions)]
 			local module = G_RLF.RLF:GetModule(G_RLF.FeatureModule.Reputation) --[[@as RLF_Reputation]]

@@ -9,7 +9,8 @@ local BossBannerOverride =
 	G_RLF.RLF:NewModule(G_RLF.BlizzModule.BossBanner, "AceEvent-3.0", "AceHook-3.0", "AceTimer-3.0")
 
 function BossBannerOverride:OnInitialize()
-	if GetExpansionLevel() >= G_RLF.Expansion.WOD then
+	-- WoW Forever reports expansion 0 but loads the Mainline BossBannerToast.
+	if GetExpansionLevel() >= G_RLF.Expansion.WOD or G_RLF:IsForever() then
 		self:RegisterEvent("PLAYER_ENTERING_WORLD", "BossBannerHook")
 	end
 end

@@ -64,7 +64,7 @@ local function testWoWGlobals()
 	runner:assertEqual(type(Enum.ItemQuality), "table", "Global: Enum.ItemQuality")
 	runner:assertEqual(type(GetFonts), "function", "Global: GetFonts")
 
-	if GetExpansionLevel() > G_RLF.Expansion.CLASSIC then
+	if GetExpansionLevel() > G_RLF.Expansion.CLASSIC or G_RLF:IsRetail() then
 		runner:assertEqual(type(GetPlayerGuid), "function", "Global: GetPlayerGuid")
 	end
 
@@ -72,7 +72,7 @@ local function testWoWGlobals()
 		runner:assertEqual(type(GetNameAndServerNameFromGUID), "function", "Global: GetNameAndServerNameFromGUID")
 	end
 
-	if GetExpansionLevel() >= G_RLF.Expansion.WOD then
+	if GetExpansionLevel() >= G_RLF.Expansion.WOD or G_RLF:IsForever() then
 		runner:assertEqual(type(BossBanner), "table", "Global: BossBanner")
 	end
 
@@ -429,8 +429,8 @@ local function testElementConstructors()
 		end
 	end
 
-	-- TravelPoints (Retail only)
-	if G_RLF:IsRetail() then
+	-- TravelPoints (Retail only; no Traveler's Log on WoW Forever)
+	if G_RLF:IsRetail() and not G_RLF:IsForever() then
 		local tpModule = G_RLF.RLF:GetModule(G_RLF.FeatureModule.TravelPoints, true)
 		if tpModule and tpModule:IsEnabled() then
 			local payload = tpModule:BuildPayload(50)
@@ -465,7 +465,7 @@ local function testElementConstructors()
 	end
 
 	-- Currency — only if test data is already cached (migrated: BuildPayload → fromPayload)
-	if GetExpansionLevel() >= G_RLF.Expansion.WOTLK then
+	if GetExpansionLevel() >= G_RLF.Expansion.WOTLK or G_RLF:IsForever() then
 		local currModule = G_RLF.RLF:GetModule(G_RLF.FeatureModule.Currency, true)
 		if currModule and currModule:IsEnabled() and #TestMode.testCurrencies > 0 then
 			local testObj = TestMode.testCurrencies[1]
@@ -558,7 +558,9 @@ local featureEventHandlers = {
 }
 if G_RLF:IsRetail() then
 	table.insert(featureEventHandlers, { G_RLF.FeatureModule.Transmog, "TRANSMOG_COLLECTION_SOURCE_ADDED" })
-	table.insert(featureEventHandlers, { G_RLF.FeatureModule.TravelPoints, "PERKS_ACTIVITY_COMPLETED" })
+	if not G_RLF:IsForever() then
+		table.insert(featureEventHandlers, { G_RLF.FeatureModule.TravelPoints, "PERKS_ACTIVITY_COMPLETED" })
+	end
 end
 
 local function testEventHandlers()
@@ -591,7 +593,7 @@ local function testEventHandlers()
 	end
 
 	-- Currency has expansion-dependent events
-	if GetExpansionLevel() >= G_RLF.Expansion.WOTLK then
+	if GetExpansionLevel() >= G_RLF.Expansion.WOTLK or G_RLF:IsForever() then
 		local currModule = G_RLF.RLF:GetModule(G_RLF.FeatureModule.Currency, true)
 		if currModule and currModule:IsEnabled() then
 			runner:assertEqual(

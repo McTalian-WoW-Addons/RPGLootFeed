@@ -88,6 +88,9 @@ describe("Currency Module", function()
 			IsRetail = function()
 				return false
 			end,
+			IsForever = function()
+				return false
+			end,
 			RGBAToHexFormat = function()
 				return "|cFFFFFFFF"
 			end,
@@ -206,6 +209,58 @@ describe("Currency Module", function()
 			CurrencyModule:OnInitialize()
 			assert.spy(spyEnable).was_not.called()
 			assert.spy(spyDisable).was.called(1)
+		end)
+
+		it("OnInitialize enables on WoW Forever despite expansion 0", function()
+			ns.IsRetail = function()
+				return true
+			end
+			ns.IsForever = function()
+				return true
+			end
+			ns.DbAccessor.IsFeatureNeededByAnyFrame = function()
+				return true
+			end
+			CurrencyModule._currencyAdapter.GetExpansionLevel = function()
+				return 0
+			end
+			local spyEnable = spy.on(CurrencyModule, "Enable")
+			local spyDisable = spy.on(CurrencyModule, "Disable")
+			CurrencyModule:OnInitialize()
+			assert.spy(spyEnable).was.called(1)
+			assert.spy(spyDisable).was_not.called()
+		end)
+
+		it("OnEnable registers only CURRENCY_DISPLAY_UPDATE on WoW Forever", function()
+			ns.IsRetail = function()
+				return true
+			end
+			ns.IsForever = function()
+				return true
+			end
+			CurrencyModule._currencyAdapter.GetExpansionLevel = function()
+				return 0
+			end
+			local spyReg = spy.on(CurrencyModule, "RegisterEvent")
+			CurrencyModule:OnEnable()
+			assert.spy(spyReg).was.called(1)
+			assert.spy(spyReg).was.called_with(_, "CURRENCY_DISPLAY_UPDATE")
+		end)
+
+		it("OnDisable unregisters only CURRENCY_DISPLAY_UPDATE on WoW Forever", function()
+			ns.IsRetail = function()
+				return true
+			end
+			ns.IsForever = function()
+				return true
+			end
+			CurrencyModule._currencyAdapter.GetExpansionLevel = function()
+				return 0
+			end
+			local spyUnreg = spy.on(CurrencyModule, "UnregisterEvent")
+			CurrencyModule:OnDisable()
+			assert.spy(spyUnreg).was.called(1)
+			assert.spy(spyUnreg).was.called_with(_, "CURRENCY_DISPLAY_UPDATE")
 		end)
 
 		it("OnEnable registers CURRENCY_DISPLAY_UPDATE + PERKS_PROGRAM for Retail >= BFA", function()

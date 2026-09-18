@@ -2,6 +2,7 @@ local nsMocks = require("RPGLootFeed_spec._mocks.Internal.addonNamespace")
 local assert = require("luassert")
 local busted = require("busted")
 local before_each = busted.before_each
+local after_each = busted.after_each
 local describe = busted.describe
 local it = busted.it
 
@@ -306,6 +307,7 @@ describe("ItemInfo", function()
 		end)
 
 		it("handles classic", function()
+			nsMocks.IsRetail.returns(false)
 			ns.armorClassMapping = { MAGE = 1 }
 			functionMocks.GetExpansionLevel.returns(ns.Expansion.CATA)
 			transmogCollectionMocks.PlayerHasTransmog.returns(false)
@@ -1200,6 +1202,91 @@ describe("ItemInfo", function()
 			assert.matches("Mythic Keystone: Dungeon 381 %(13%)", item.itemName)
 			assert.matches("^|cnIQ4:|Hkeystone:", item.itemLink)
 			assert.are.equal(13, item.itemLevel)
+		end)
+	end)
+
+	-- WoW Forever: Mainline client (IsRetail) reporting expansion 0, with only
+	-- C_SkillInfo (no bare GetNumSkillLines/GetSkillLineInfo globals).
+	describe("WoW Forever", function()
+		local function newClothChest()
+			return ItemInfo:new(
+				18805,
+				"Cloth Chest",
+				"itemLink",
+				2,
+				10,
+				1,
+				"Armor",
+				"Cloth",
+				1,
+				"INVTYPE_CHEST",
+				"texture",
+				0,
+				Enum.ItemClass.Armor,
+				Enum.ItemArmorSubclass.Cloth,
+				1,
+				1,
+				1,
+				false
+			)
+		end
+
+		before_each(function()
+			functionMocks.GetExpansionLevel.returns(ns.Expansion.CLASSIC)
+			nsMocks.IsRetail.returns(true)
+			ns.equipSlotMap = { INVTYPE_CHEST = 5 }
+			---@diagnostic disable-next-line: duplicate-set-field
+			_G.C_Item.GetItemSubClassInfo = function(itemClass, subClass)
+				local names = {
+					[Enum.ItemArmorSubclass.Cloth] = "Cloth",
+					[Enum.ItemArmorSubclass.Leather] = "Leather",
+					[Enum.ItemArmorSubclass.Mail] = "Mail",
+					[Enum.ItemArmorSubclass.Plate] = "Plate",
+				}
+				return names[subClass]
+			end
+			_G.strmatch = _G.strmatch or string.match
+			_G.GetNumSkillLines = nil
+			_G.GetSkillLineInfo = nil
+			local skills = {
+				{ name = "Weapon Skills", isHeader = true },
+				{ name = "Daggers", isHeader = false },
+				{ name = "Cloth", isHeader = false },
+			}
+			_G.C_SkillInfo = {
+				GetNumSkillLines = function()
+					return #skills
+				end,
+				GetSkillLineInfo = function(i)
+					return skills[i]
+				end,
+			}
+		end)
+
+		after_each(function()
+			_G.C_SkillInfo = nil
+		end)
+
+		it("reads armor proficiency from C_SkillInfo", function()
+			local item = newClothChest()
+			if not item then
+				assert.is_not_nil(item)
+				return
+			end
+			assert.is_true(item:IsEligibleEquipment())
+		end)
+
+		it("uses the Retail transmog check instead of the Classic branch", function()
+			transmogCollectionMocks.PlayerHasTransmogByItemInfo.returns(false)
+			transmogCollectionMocks.PlayerHasTransmog.returns(true)
+			transmogCollectionMocks.PlayerHasTransmog:clear()
+			local item = newClothChest()
+			if not item then
+				assert.is_not_nil(item)
+				return
+			end
+			assert.is_false(item:IsAppearanceCollected())
+			assert.stub(transmogCollectionMocks.PlayerHasTransmog).was_not.called()
 		end)
 	end)
 

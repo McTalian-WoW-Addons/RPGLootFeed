@@ -41,6 +41,7 @@ describe("AddonMethods", function()
 			assert.is_not_nil(ns.IsTBCClassic)
 			assert.is_not_nil(ns.IsCataClassic)
 			assert.is_not_nil(ns.IsMoPClassic)
+			assert.is_not_nil(ns.IsForever)
 			assert.is_not_nil(ns.SendMessage)
 			assert.is_not_nil(ns.RGBAToHexFormat)
 			assert.is_not_nil(ns.LogDebug)
@@ -396,6 +397,44 @@ describe("AddonMethods", function()
 				assert.are.same(major, 3)
 				assert.are.same(minor, 2)
 				assert.are.same(patch, 1)
+			end)
+		end)
+
+		describe("IsForever", function()
+			local originalGetBuildInfo, originalProjectId
+
+			before_each(function()
+				originalGetBuildInfo = _G.GetBuildInfo
+				originalProjectId = _G.WOW_PROJECT_ID
+			end)
+
+			after_each(function()
+				_G.GetBuildInfo = originalGetBuildInfo
+				_G.WOW_PROJECT_ID = originalProjectId
+			end)
+
+			local function setBuild(tocVersion)
+				_G.GetBuildInfo = function()
+					return "1.60.1", "69913", "Sep 1 2026", tocVersion
+				end
+			end
+
+			it("is true for a Mainline client with a 1.x interface version", function()
+				_G.WOW_PROJECT_ID = _G.WOW_PROJECT_MAINLINE
+				setBuild(16001)
+				assert.is_true(ns:IsForever())
+			end)
+
+			it("is false for Retail", function()
+				_G.WOW_PROJECT_ID = _G.WOW_PROJECT_MAINLINE
+				setBuild(120100)
+				assert.is_false(ns:IsForever())
+			end)
+
+			it("is false for Classic Era", function()
+				_G.WOW_PROJECT_ID = _G.WOW_PROJECT_CLASSIC
+				setBuild(11509)
+				assert.is_false(ns:IsForever())
 			end)
 		end)
 
