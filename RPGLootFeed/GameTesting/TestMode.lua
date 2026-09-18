@@ -76,20 +76,26 @@ local function tconcat(t1, t2)
 	return t1
 end
 
-local testItemIds = { 2589, 2592, 1515, 730 }
--- WoW Forever reports as Retail but only has classic-era items.
-if G_RLF:IsForever() then
-	-- Base classic-era items only
-elseif G_RLF:IsRetail() then
-	tconcat(testItemIds, { 50818, 128827, 219325, 34494 })
-elseif G_RLF:IsClassic() then
-	tconcat(testItemIds, { 233620 })
-elseif G_RLF:IsCataClassic() then
-	tconcat(testItemIds, { 71086 })
-	-- TODO: Add MoP Classic test items
-	--elseif G_RLF:IsMoPClassic() then
-	--	tconcat(testItemIds, { 123456 })
+local testItemIds = {}
+--- Flavor-specific test item IDs. Built at OnInitialize rather than file load
+--- so loading this file calls no WoW APIs.
+local function buildTestItemIds()
+	testItemIds = { 2589, 2592, 1515, 730 }
+	-- WoW Forever reports as Retail but only has classic-era items.
+	if G_RLF:IsForever() then
+		-- Base classic-era items only
+	elseif G_RLF:IsRetail() then
+		tconcat(testItemIds, { 50818, 128827, 219325, 34494 })
+	elseif G_RLF:IsClassic() then
+		tconcat(testItemIds, { 233620 })
+	elseif G_RLF:IsCataClassic() then
+		tconcat(testItemIds, { 71086 })
+		-- TODO: Add MoP Classic test items
+		--elseif G_RLF:IsMoPClassic() then
+		--	tconcat(testItemIds, { 123456 })
+	end
 end
+
 local function initializeTestItems()
 	for _, id in pairs(testItemIds) do
 		getItem(id)
@@ -103,18 +109,27 @@ local function initializeTestItems()
 end
 
 local testCurrencyIds = {}
--- TODO: Add WoW Forever test currencies once any exist in-game
-if G_RLF:IsForever() then
-	-- No known currencies yet
-elseif G_RLF:IsRetail() then
-	tconcat(testCurrencyIds, { 2245, 1191, 1828, 1792, 1755, 1580, 1273, 1166, 515, 241, 1813, 2778, 3089, 1101, 1704 })
-elseif GetExpansionLevel() == G_RLF.Expansion.WOTLK then
-	tconcat(testCurrencyIds, { 221, 241, 126, 81 })
-elseif GetExpansionLevel() == G_RLF.Expansion.CATA then
-	tconcat(testCurrencyIds, { 391, 416, 401, 402 })
-elseif GetExpansionLevel() == G_RLF.Expansion.MOP then
-	tconcat(testCurrencyIds, { 777, 738, 697, 677, 789 })
+--- Flavor-specific test currency IDs. Built at OnInitialize rather than file
+--- load so loading this file calls no WoW APIs.
+local function buildTestCurrencyIds()
+	testCurrencyIds = {}
+	-- TODO: Add WoW Forever test currencies once any exist in-game
+	if G_RLF:IsForever() then
+		-- No known currencies yet
+	elseif G_RLF:IsRetail() then
+		tconcat(
+			testCurrencyIds,
+			{ 2245, 1191, 1828, 1792, 1755, 1580, 1273, 1166, 515, 241, 1813, 2778, 3089, 1101, 1704 }
+		)
+	elseif GetExpansionLevel() == G_RLF.Expansion.WOTLK then
+		tconcat(testCurrencyIds, { 221, 241, 126, 81 })
+	elseif GetExpansionLevel() == G_RLF.Expansion.CATA then
+		tconcat(testCurrencyIds, { 391, 416, 401, 402 })
+	elseif GetExpansionLevel() == G_RLF.Expansion.MOP then
+		tconcat(testCurrencyIds, { 777, 738, 697, 677, 789 })
+	end
 end
+
 local function initializeTestCurrencies()
 	for _, id in pairs(testCurrencyIds) do
 		if not idExistsInTable(id, TestMode.testCurrencies) then
@@ -172,6 +187,8 @@ local function initializeTestFactions()
 end
 
 function TestMode:OnInitialize()
+	buildTestItemIds()
+	buildTestCurrencyIds()
 	isLootDisplayReady = false
 	allItemsInitialized = false
 	self.testCurrencies = {}

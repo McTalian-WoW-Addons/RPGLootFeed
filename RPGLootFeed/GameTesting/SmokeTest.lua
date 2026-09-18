@@ -549,22 +549,26 @@ end
 
 --- Feature module → primary event handler map
 --- Each entry is { moduleName, expectedEventHandler }
-local featureEventHandlers = {
-	{ G_RLF.FeatureModule.ItemLoot, "CHAT_MSG_LOOT" },
-	{ G_RLF.FeatureModule.Money, "PLAYER_MONEY" },
-	{ G_RLF.FeatureModule.Experience, "PLAYER_XP_UPDATE" },
-	{ G_RLF.FeatureModule.Profession, "CHAT_MSG_SKILL" },
-	{ G_RLF.FeatureModule.PartyLoot, "CHAT_MSG_LOOT" },
-}
-if G_RLF:IsRetail() then
-	table.insert(featureEventHandlers, { G_RLF.FeatureModule.Transmog, "TRANSMOG_COLLECTION_SOURCE_ADDED" })
-	if not G_RLF:IsForever() then
-		table.insert(featureEventHandlers, { G_RLF.FeatureModule.TravelPoints, "PERKS_ACTIVITY_COMPLETED" })
+--- Built on demand rather than at file load so loading this file calls no WoW APIs.
+local function getFeatureEventHandlers()
+	local featureEventHandlers = {
+		{ G_RLF.FeatureModule.ItemLoot, "CHAT_MSG_LOOT" },
+		{ G_RLF.FeatureModule.Money, "PLAYER_MONEY" },
+		{ G_RLF.FeatureModule.Experience, "PLAYER_XP_UPDATE" },
+		{ G_RLF.FeatureModule.Profession, "CHAT_MSG_SKILL" },
+		{ G_RLF.FeatureModule.PartyLoot, "CHAT_MSG_LOOT" },
+	}
+	if G_RLF:IsRetail() then
+		table.insert(featureEventHandlers, { G_RLF.FeatureModule.Transmog, "TRANSMOG_COLLECTION_SOURCE_ADDED" })
+		if not G_RLF:IsForever() then
+			table.insert(featureEventHandlers, { G_RLF.FeatureModule.TravelPoints, "PERKS_ACTIVITY_COMPLETED" })
+		end
 	end
+	return featureEventHandlers
 end
 
 local function testEventHandlers()
-	for _, entry in ipairs(featureEventHandlers) do
+	for _, entry in ipairs(getFeatureEventHandlers()) do
 		local moduleName, handlerName = entry[1], entry[2]
 		local module = G_RLF.RLF:GetModule(moduleName, true)
 		if module and module:IsEnabled() then
