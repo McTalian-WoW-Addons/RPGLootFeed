@@ -377,7 +377,7 @@ function TestMode:IntegrationTest()
 	local newRowsExpected = 0
 	newRowsExpected = newRowsExpected + runExperienceIntegrationTest()
 	newRowsExpected = newRowsExpected + runMoneyIntegrationTest()
-	if G_RLF:IsRetail() then
+	if G_RLF:IsRetail() and not G_RLF:IsForever() then
 		newRowsExpected = newRowsExpected + runTravelPointsIntegrationTest()
 	end
 	newRowsExpected = newRowsExpected + runItemLootIntegrationTest()

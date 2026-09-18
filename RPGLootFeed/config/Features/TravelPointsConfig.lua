@@ -20,7 +20,7 @@ function G_RLF.BuildTravelPointsArgs(frameId, order)
 		name = G_RLF.L["Travel Points Config"],
 		order = order,
 		disabled = function()
-			return not G_RLF:IsRetail()
+			return not G_RLF:IsRetail() or G_RLF:IsForever()
 		end,
 		args = {
 			enable = {
@@ -29,7 +29,7 @@ function G_RLF.BuildTravelPointsArgs(frameId, order)
 				desc = G_RLF.L["EnableTravelPointsDesc"],
 				width = "double",
 				disabled = function()
-					return not G_RLF:IsRetail()
+					return not G_RLF:IsRetail() or G_RLF:IsForever()
 				end,
 				get = function()
 					return fc().enabled

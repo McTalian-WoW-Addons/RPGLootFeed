@@ -63,6 +63,17 @@ function G_RLF:IsMoPClassic()
 	return WOW_PROJECT_ID == WOW_PROJECT_MISTS_CLASSIC
 end
 
+--- WoW Forever runs the Mainline client (WOW_PROJECT_MAINLINE, C_* APIs) with
+--- classic-era content (GetExpansionLevel() == 0) under a 1.x interface
+--- version, so neither IsRetail() nor GetExpansionLevel() alone describes it.
+function G_RLF:IsForever()
+	if WOW_PROJECT_ID ~= WOW_PROJECT_MAINLINE then
+		return false
+	end
+	local tocVersion = select(4, GetBuildInfo())
+	return tocVersion ~= nil and tocVersion < 20000
+end
+
 --- Check if mouse cursor is truly over a frame considering z-order.
 --- Uses GetMouseFoci() on Retail (Dragonflight+) for accurate z-order check.
 --- Falls back to IsMouseOver() on Classic where GetMouseFoci is unavailable.

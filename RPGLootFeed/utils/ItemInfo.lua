@@ -374,6 +374,11 @@ function ItemInfo:IsAppearanceCollected()
 			return true -- If we can't determine, assume it's collected
 		end
 
+		-- Retail implementation. Checked before the expansion gates below
+		-- because WoW Forever is a Mainline client reporting expansion 0.
+		if G_RLF:IsRetail() and C_TransmogCollection.PlayerHasTransmogByItemInfo then
+			return C_TransmogCollection.PlayerHasTransmogByItemInfo(self.itemLink)
+		end
 		-- Classic implementation
 		if
 			GetExpansionLevel() < G_RLF.Expansion.SL
@@ -401,10 +406,6 @@ function ItemInfo:IsAppearanceCollected()
 			and self:IsEligibleEquipment()
 			and C_TransmogCollection.PlayerHasTransmogByItemInfo
 		then
-			return C_TransmogCollection.PlayerHasTransmogByItemInfo(self.itemLink)
-		end
-		-- Retail implementation
-		if G_RLF:IsRetail() and C_TransmogCollection.PlayerHasTransmogByItemInfo then
 			return C_TransmogCollection.PlayerHasTransmogByItemInfo(self.itemLink)
 		end
 	end
@@ -501,6 +502,34 @@ function ItemInfo:GetUpgradeText(fromInfo, fontSize)
 	return "    " .. fromStr .. " " .. arrowSep .. " " .. toStr
 end
 
+---Name and header flag of the skill line at index.
+---WoW Forever (Mainline client) only exposes C_SkillInfo; Classic clients
+---only expose the bare GetNumSkillLines/GetSkillLineInfo globals.
+---@return number
+local function GetSkillLineCount()
+	if C_SkillInfo and C_SkillInfo.GetNumSkillLines then
+		return C_SkillInfo.GetNumSkillLines()
+	end
+	if GetNumSkillLines then
+		return GetNumSkillLines()
+	end
+	return 0
+end
+
+---@param index number
+---@return string | nil skillName, boolean | nil isHeader
+local function GetSkillLineNameAndHeader(index)
+	if C_SkillInfo and C_SkillInfo.GetSkillLineInfo then
+		local info = C_SkillInfo.GetSkillLineInfo(index)
+		if not info then
+			return nil, nil
+		end
+		return info.name, info.isHeader
+	end
+	local skillName, isHeader = GetSkillLineInfo(index)
+	return skillName, isHeader
+end
+
 local nameToSubClass
 local plateName
 ---Determine the highest armor proficiency the character has; Clients prior to Cata only
@@ -527,9 +556,9 @@ local function ClassicSkillLineCheck()
 	end
 
 	local armorClass = nil
-	for i = 1, GetNumSkillLines() do
-		local skillName, isHeader, a, skillRank, b, c, skillMaxRank = GetSkillLineInfo(i)
-		if not isHeader then
+	for i = 1, GetSkillLineCount() do
+		local skillName, isHeader = GetSkillLineNameAndHeader(i)
+		if skillName and not isHeader then
 			if nameToSubClass[skillName] and (armorClass == nil or armorClass < nameToSubClass[skillName]) then
 				armorClass = nameToSubClass[skillName]
 			elseif

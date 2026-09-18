@@ -20,7 +20,7 @@ function G_RLF.BuildCurrencyArgs(frameId, order)
 		name = G_RLF.L["Currency Config"],
 		order = order,
 		disabled = function()
-			return GetExpansionLevel() < G_RLF.Expansion.WOTLK
+			return not G_RLF:IsForever() and GetExpansionLevel() < G_RLF.Expansion.WOTLK
 		end,
 		args = {
 			enableCurrency = {
@@ -37,7 +37,7 @@ function G_RLF.BuildCurrencyArgs(frameId, order)
 					G_RLF.LootDisplay:RefreshSampleRowsIfShown()
 				end,
 				disabled = function()
-					return GetExpansionLevel() < G_RLF.Expansion.WOTLK
+					return not G_RLF:IsForever() and GetExpansionLevel() < G_RLF.Expansion.WOTLK
 				end,
 				order = 1,
 			},

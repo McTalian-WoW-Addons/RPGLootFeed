@@ -32,6 +32,9 @@ describe("TravelPoints module", function()
 			IsRetail = function()
 				return true
 			end,
+			IsForever = function()
+				return false
+			end,
 			-- RGBAToHexFormat is used by secondaryTextFn; return a fixed hex for tests.
 			RGBAToHexFormat = function()
 				return "|cFFFFFFFF"
@@ -255,6 +258,35 @@ describe("TravelPoints module", function()
 
 			assert.spy(disableSpy).was.called(1)
 			isRetailStub:revert()
+		end)
+
+		it("OnInitialize disables module on WoW Forever", function()
+			ns.DbAccessor.IsFeatureNeededByAnyFrame = function()
+				return true
+			end
+			local isRetailStub = stub(ns, "IsRetail").returns(true)
+			local isForeverStub = stub(ns, "IsForever").returns(true)
+			local enableSpy = spy.on(TravelPointsModule, "Enable")
+			local disableSpy = spy.on(TravelPointsModule, "Disable")
+
+			TravelPointsModule:OnInitialize()
+
+			assert.spy(enableSpy).was.not_called()
+			assert.spy(disableSpy).was.called(1)
+			isRetailStub:revert()
+			isForeverStub:revert()
+		end)
+
+		it("OnEnable does nothing on WoW Forever", function()
+			local isRetailStub = stub(ns, "IsRetail").returns(true)
+			local isForeverStub = stub(ns, "IsForever").returns(true)
+			local registerEventSpy = spy.on(TravelPointsModule, "RegisterEvent")
+
+			TravelPointsModule:OnEnable()
+
+			assert.spy(registerEventSpy).was.not_called()
+			isRetailStub:revert()
+			isForeverStub:revert()
 		end)
 
 		it("OnEnable registers PERKS_ACTIVITY_COMPLETED event when retail", function()
