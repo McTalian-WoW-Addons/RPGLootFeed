@@ -14,6 +14,33 @@ end
 --- You may translate these comments, but do not translate "region" or "endregion" as they are used by the localization tool to determine where to place the translations.
 --- To add translations, simply uncomment the line(s) and replace the English text after the equal sign (=) with the translated value.
 
+--#region 1.37.0
+-- L["1000 ms"] = "1000 ms"
+-- L["1500 ms"] = "1500 ms"
+-- L["2000 ms"] = "2000 ms"
+-- L["3000 ms"] = "3000 ms"
+-- L["500 ms"] = "500 ms"
+-- L["Close History"] = "Close History"
+-- L["Double Scroll Required"] = "Double Scroll Required"
+-- L["DoubleScrollRequiredDesc"] = "Require two scroll events within the time window to activate/deactivate history, reducing accidental triggers."
+-- L["Enable Scroll Wheel History Activation"] = "Enable Scroll Wheel History Activation"
+-- L["EnableScrollWheelActivationDesc"] = "When enabled, scrolling down on the loot frame will activate loot history. Scroll up at the top to deactivate."
+-- L["Scroll Wheel Target Anchor"] = "Scroll Wheel Target Anchor"
+-- L["Scroll Wheel Target Height"] = "Scroll Wheel Target Height"
+-- L["Scroll Wheel Target Width"] = "Scroll Wheel Target Width"
+-- L["Scroll Wheel Target X Offset"] = "Scroll Wheel Target X Offset"
+-- L["Scroll Wheel Target Y Offset"] = "Scroll Wheel Target Y Offset"
+-- L["Scroll Window (ms)"] = "Scroll Window (ms)"
+-- L["ScrollWheelTargetAnchorDesc"] = "Which corner or edge of the detection area to anchor to the matching point on the loot frame."
+-- L["ScrollWheelTargetHeightDesc"] = "Override the height of the scroll-wheel detection area in pixels. Set to 0 to auto-size to the loot frame height."
+-- L["ScrollWheelTargetWidthDesc"] = "Override the width of the scroll-wheel detection area in pixels. Set to 0 to auto-size to the loot frame width."
+-- L["ScrollWheelTargetXOffsetDesc"] = "Horizontal offset (in pixels) of the detection area relative to its anchor point on the loot frame."
+-- L["ScrollWheelTargetYOffsetDesc"] = "Vertical offset (in pixels) of the detection area relative to its anchor point on the loot frame."
+-- L["ScrollWindowDesc"] = "Time window in milliseconds within which two scroll events must occur to trigger history activation."
+-- L["Show Border on Hover"] = "Show Border on Hover"
+-- L["ShowScrollTargetBorderOnHoverDesc"] = "When enabled, hovering over the scroll-wheel detection area will show a cyan border around it. Useful for verifying its position and size."
+--#endregion
+
 --#region 1.36.0
 -- L["Color Code Plain Text Money"] = "Color Code Plain Text Money"
 -- L["Color Code Plain Text Prices"] = "Color Code Plain Text Prices"

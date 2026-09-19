@@ -384,6 +384,238 @@ function LootDisplayFrameMixin:ReleasePin(row)
 	end
 end
 
+--- Create a single scroll-wheel capture frame for the MAIN loot frame.
+--- Only called on the MAIN frame (one target for the whole addon).
+--- history activation (issue #399).  The target covers the same area as the
+--- loot frame by default; size/anchor/offset are user-configurable.
+function LootDisplayFrameMixin:CreateScrollWheelTarget()
+	-- Per-frame wheel state for double-scroll detection.
+	self.wheelState = {
+		scrollCount = 0,
+		lastScrollTime = 0,
+		lastScrollDirection = nil,
+	}
+
+	-- Capture self BEFORE any closures that reference it.
+	local selfRef = self
+
+	-- Invisible frame parented to UIParent so it sits independently.
+	-- EnableMouseWheel() is required for OnMouseWheel to fire.
+	self.scrollWheelTarget = CreateFrame("Frame", nil, UIParent)
+	self.scrollWheelTarget:SetFrameStrata(self:GetFrameStrata())
+	self.scrollWheelTarget:SetFrameLevel(self:GetFrameLevel() + 5)
+	self.scrollWheelTarget:EnableMouseWheel(true)
+	self.scrollWheelTarget:SetAlpha(0)
+
+	-- Scroll counter indicator: two small colored squares shown briefly above
+	-- the loot frame when a scroll event is detected in double-scroll mode.
+	-- Uses WHITE8x8 textures tinted gold/grey — always renders regardless of font.
+	self.scrollCounterFrame = CreateFrame("Frame", nil, UIParent)
+	self.scrollCounterFrame:SetSize(28, 10) -- two 10px squares + 8px gap
+	-- Anchor above the scroll target so the indicator follows target repositioning
+	self.scrollCounterFrame:SetPoint("BOTTOM", self.scrollWheelTarget, "TOP", 0, 6)
+	self.scrollCounterFrame:SetFrameStrata(self:GetFrameStrata())
+	self.scrollCounterFrame:SetFrameLevel(self:GetFrameLevel() + 30)
+	self.scrollCounterFrame:SetAlpha(0)
+	self._scrollCounterDots = {}
+	for i = 1, 2 do
+		local dot = self.scrollCounterFrame:CreateTexture(nil, "OVERLAY")
+		dot:SetTexture("Interface/Buttons/WHITE8x8")
+		dot:SetSize(10, 10)
+		if i == 1 then
+			dot:SetPoint("LEFT", self.scrollCounterFrame, "LEFT", 0, 0)
+		else
+			dot:SetPoint("RIGHT", self.scrollCounterFrame, "RIGHT", 0, 0)
+		end
+		self._scrollCounterDots[i] = dot
+	end
+	self._scrollCounterTimer = nil -- Cancellable fade-out timer handle
+
+	-- Border: 4 medium-thin (2px) gray edges around the scroll wheel target.
+	-- Shown when the options test area is active, or optionally on hover.
+	self._scrollTargetBorder = {}
+	local function makeBorderEdge(pt1, pt2, isHorizontal)
+		local edge = self.scrollWheelTarget:CreateTexture(nil, "OVERLAY")
+		edge:SetTexture("Interface/Buttons/WHITE8x8")
+		edge:SetVertexColor(0.55, 0.55, 0.55) -- medium gray
+		edge:SetPoint(pt1, self.scrollWheelTarget, pt1)
+		edge:SetPoint(pt2, self.scrollWheelTarget, pt2)
+		if isHorizontal then
+			edge:SetHeight(2)
+		else
+			edge:SetWidth(2)
+		end
+		edge:Hide()
+		table.insert(self._scrollTargetBorder, edge)
+	end
+	makeBorderEdge("TOPLEFT", "TOPRIGHT", true) -- top
+	makeBorderEdge("BOTTOMLEFT", "BOTTOMRIGHT", true) -- bottom
+	makeBorderEdge("TOPLEFT", "BOTTOMLEFT", false) -- left
+	makeBorderEdge("TOPRIGHT", "BOTTOMRIGHT", false) -- right
+
+	-- Make the target EnableMouse so OnEnter/OnLeave fire for hover-border feature.
+	self.scrollWheelTarget:EnableMouse(true)
+	self.scrollWheelTarget:SetScript("OnEnter", function()
+		local historyDb = G_RLF.db.global.lootHistory
+		if historyDb and historyDb.showScrollTargetBorderOnHover then
+			selfRef:SetScrollTargetBorderVisible(true)
+		end
+	end)
+	self.scrollWheelTarget:SetScript("OnLeave", function()
+		-- Only hide if the options test area is NOT currently open
+		if not (selfRef.BoundingBox and selfRef.BoundingBox:IsVisible()) then
+			selfRef:SetScrollTargetBorderVisible(false)
+		end
+	end)
+
+	self.scrollWheelTarget:SetScript("OnMouseWheel", function(_, delta)
+		local historyDb = G_RLF.db.global.lootHistory
+		-- Feature guard: must be enabled and history feature enabled
+		if not historyDb.enableScrollWheelActivation or not historyDb.enabled then
+			return
+		end
+
+		-- When history is shown, the target drives the history frame scroll.
+		-- The target is an invisible overlay; it captures all wheel events in the
+		-- area, so we must manually forward scrolling to the history ScrollFrame.
+		if G_RLF.HistoryService.historyShown then
+			if not selfRef.historyFrame then
+				return
+			end
+			local currentScroll = selfRef.historyFrame:GetVerticalScroll()
+			local sizingDb = G_RLF.DbAccessor:Sizing(selfRef.frameType)
+			local rowStep = sizingDb.rowHeight + sizingDb.padding
+			if delta > 0 then
+				-- Scroll up: already at top → deactivate; otherwise scroll one row up
+				if currentScroll <= 0 then
+					G_RLF.HistoryService:HideHistoryFrame()
+				else
+					local newScroll = math.max(currentScroll - rowStep, 0)
+					selfRef.historyFrame:SetVerticalScroll(newScroll)
+					selfRef:UpdateHistoryFrame(newScroll)
+				end
+			else
+				-- Scroll down one row
+				local maxScroll = selfRef.historyFrame:GetVerticalScrollRange()
+				local newScroll = math.min(currentScroll + rowStep, maxScroll)
+				selfRef.historyFrame:SetVerticalScroll(newScroll)
+				selfRef:UpdateHistoryFrame(newScroll)
+			end
+			return
+		end
+
+		-- History not shown — process as activation scroll
+		local threshold = historyDb.scrollWheelDoubleScrollThreshold or 500
+		local doubleMode = (historyDb.scrollWheelDoubleScrollMode ~= false)
+		local count = G_RLF.HistoryService:ProcessWheelInput(delta, selfRef.wheelState, threshold, doubleMode)
+		selfRef:ShowScrollCounterFeedback(count, doubleMode)
+	end)
+
+	self:UpdateScrollWheelTarget()
+end
+
+--- Briefly display a scroll-progress indicator above the loot frame.
+--- Two small squares: gold = reached, grey = pending.
+--- count=0 hides immediately.
+--- @param count integer
+--- @param doubleMode boolean
+function LootDisplayFrameMixin:ShowScrollCounterFeedback(count, doubleMode)
+	if not self.scrollCounterFrame then
+		return
+	end
+
+	-- Cancel any pending hide timer
+	if self._scrollCounterTimer then
+		self._scrollCounterTimer:Cancel()
+		self._scrollCounterTimer = nil
+	end
+
+	if count == 0 then
+		self.scrollCounterFrame:SetAlpha(0)
+		return
+	end
+
+	local required = doubleMode and 2 or 1
+	local filled = math.min(count, required)
+
+	-- Resize frame to fit 1 or 2 dots
+	local dotSize = 10
+	local gap = 8
+	self.scrollCounterFrame:SetSize(required * dotSize + (required - 1) * gap, dotSize)
+
+	for i, dot in ipairs(self._scrollCounterDots) do
+		if i <= required then
+			dot:Show()
+			if i <= filled then
+				dot:SetVertexColor(1, 0.85, 0) -- gold
+			else
+				dot:SetVertexColor(0.5, 0.5, 0.5) -- grey
+			end
+			-- Re-anchor to spread evenly
+			dot:ClearAllPoints()
+			dot:SetPoint("LEFT", self.scrollCounterFrame, "LEFT", (i - 1) * (dotSize + gap), 0)
+		else
+			dot:Hide()
+		end
+	end
+
+	self.scrollCounterFrame:SetAlpha(1)
+
+	-- Auto-hide after 1.5s if the sequence isn't completed
+	if count < required then
+		self._scrollCounterTimer = C_Timer.NewTimer(1.5, function()
+			self.scrollCounterFrame:SetAlpha(0)
+			self._scrollCounterTimer = nil
+		end)
+	else
+		-- Sequence complete — flash briefly then hide
+		self._scrollCounterTimer = C_Timer.NewTimer(0.5, function()
+			self.scrollCounterFrame:SetAlpha(0)
+			self._scrollCounterTimer = nil
+		end)
+	end
+end
+
+--- Show or hide the cyan border drawn around the scroll wheel target area.
+--- @param visible boolean
+function LootDisplayFrameMixin:SetScrollTargetBorderVisible(visible)
+	if not self._scrollTargetBorder then
+		return
+	end
+	for _, edge in ipairs(self._scrollTargetBorder) do
+		if visible then
+			edge:Show()
+		else
+			edge:Hide()
+		end
+	end
+	-- Make the target frame itself visible when the border is shown so the
+	-- border textures (children) are drawn; keep alpha=0 so the frame itself
+	-- doesn't tint anything — the border textures handle their own alpha.
+	self.scrollWheelTarget:SetAlpha(visible and 1 or 0)
+end
+
+--- Reposition and resize the scroll wheel target.  Applies user overrides from
+--- db.global.lootHistory (width, height, anchor, xOffset, yOffset).
+--- 0 for width/height means auto-size to match the loot frame.
+function LootDisplayFrameMixin:UpdateScrollWheelTarget()
+	if not self.scrollWheelTarget then
+		return
+	end
+	local frameW, frameH = self:GetSize()
+	local historyDb = G_RLF.db.global.lootHistory
+	local overrideW = historyDb and historyDb.scrollWheelTargetWidth or 0
+	local overrideH = historyDb and historyDb.scrollWheelTargetHeight or 0
+	local w = (overrideW and overrideW > 0) and overrideW or frameW
+	local h = (overrideH and overrideH > 0) and overrideH or frameH
+	local anchor = (historyDb and historyDb.scrollWheelTargetAnchor) or "CENTER"
+	local xOff = (historyDb and historyDb.scrollWheelTargetXOffset) or 0
+	local yOff = (historyDb and historyDb.scrollWheelTargetYOffset) or 0
+	self.scrollWheelTarget:SetSize(math.max(w, 1), math.max(h, 1))
+	self.scrollWheelTarget:ClearAllPoints()
+	self.scrollWheelTarget:SetPoint(anchor, self, anchor, xOff, yOff)
+end
+
 --- Load the loot display frame
 --- @param frame? G_RLF.Frames
 function LootDisplayFrameMixin:Load(frame)
@@ -417,6 +649,8 @@ function LootDisplayFrameMixin:Load(frame)
 	self:ConfigureTestArea()
 	if self.frameType == G_RLF.Frames.MAIN then
 		self:CreateTab()
+		-- Scroll-wheel history activation: single shared target on the main frame only.
+		self:CreateScrollWheelTarget()
 	else
 		self.tab = nil -- No tab for party frame
 	end
@@ -500,6 +734,7 @@ function LootDisplayFrameMixin:UpdateSize()
 	self:SetSize(sizingDb.feedWidth, self:getFrameHeight())
 
 	self:UpdateStyles()
+	self:UpdateScrollWheelTarget()
 end
 
 function LootDisplayFrameMixin:UpdateStyles()
@@ -548,6 +783,8 @@ function LootDisplayFrameMixin:ShowTestArea()
 	for i, a in ipairs(self.arrows) do
 		a:Show()
 	end
+	-- Show scroll wheel target border so users can see the detection area
+	self:SetScrollTargetBorderVisible(true)
 	self:UpdateTabVisibility()
 end
 
@@ -558,6 +795,8 @@ function LootDisplayFrameMixin:HideTestArea()
 	for i, a in ipairs(self.arrows) do
 		a:Hide()
 	end
+	-- Hide the border unless hover-border is active and the cursor is inside
+	self:SetScrollTargetBorderVisible(false)
 	self:UpdateTabVisibility()
 end
 
@@ -849,7 +1088,10 @@ function LootDisplayFrameMixin:UpdateRowPositions()
 end
 
 function LootDisplayFrameMixin:CreateHistoryFrame()
-	self.historyFrame = CreateFrame("ScrollFrame", nil, self, "UIPanelScrollFrameTemplate")
+	-- Parent to UIParent rather than self so the scrollbar from
+	-- UIPanelScrollFrameTemplate is not clipped by self's clipChildren="true".
+	-- Strata/level are set in UpdateOverlayFrameDepth; anchor stays on self.
+	self.historyFrame = CreateFrame("ScrollFrame", nil, UIParent, "UIPanelScrollFrameTemplate")
 	self.historyFrame:SetSize(self:GetSize())
 	self.historyFrame:SetPoint("TOPLEFT", self, "TOPLEFT", 0, 0)
 	if not self.historyTitle then
@@ -863,6 +1105,38 @@ function LootDisplayFrameMixin:CreateHistoryFrame()
 		titleText = frameName .. " " .. titleText
 	end
 	self.historyTitle:SetText(titleText)
+
+	-- Close button (×) to dismiss history mode without scrolling.
+	-- Anchored to the right of the title, using UIParent as parent so it sits
+	-- above the scroll frame in the draw order.
+	if not self.historyCloseButton then
+		self.historyCloseButton = CreateFrame("Button", nil, UIParent)
+		self.historyCloseButton:SetSize(14, 14)
+		self.historyCloseButton:SetPoint("LEFT", self.historyTitle, "RIGHT", 4, 0)
+		self.historyCloseButton:SetFrameStrata(self:GetFrameStrata())
+		self.historyCloseButton:SetFrameLevel(self:GetFrameLevel() + 25)
+		self.historyCloseButton:Hide()
+
+		-- Large "X" centered on the button; SetFontObject gives a readable glyph
+		-- even though the click area is small.
+		local closeText = self.historyCloseButton:CreateFontString(nil, "OVERLAY")
+		closeText:SetFontObject(GameFontNormalLarge)
+		closeText:SetTextColor(1, 0.25, 0.25)
+		closeText:SetText("X")
+		closeText:SetPoint("CENTER", self.historyCloseButton, "CENTER", 0, 0)
+
+		self.historyCloseButton:SetScript("OnClick", function()
+			G_RLF.HistoryService:HideHistoryFrame()
+		end)
+		self.historyCloseButton:SetScript("OnEnter", function()
+			GameTooltip:SetOwner(self.historyCloseButton, "ANCHOR_RIGHT")
+			GameTooltip:SetText(G_RLF.L["Close History"], 1, 1, 1)
+			GameTooltip:Show()
+		end)
+		self.historyCloseButton:SetScript("OnLeave", function()
+			GameTooltip:Hide()
+		end)
+	end
 
 	self.historyContent = CreateFrame("Frame", nil, self.historyFrame)
 	self.historyContent:SetSize(self:GetSize())
@@ -920,10 +1194,15 @@ function LootDisplayFrameMixin:ShowHistoryFrame()
 	if not self.historyFrame then
 		self:CreateHistoryFrame()
 	end
+	-- Move any currently visible live rows into history before switching views
+	self:ClearFeed()
 	self:UpdateHistoryFrame()
 	self.historyFrame:Show()
 	if self.historyTitle then
 		self.historyTitle:Show()
+	end
+	if self.historyCloseButton then
+		self.historyCloseButton:Show()
 	end
 end
 
@@ -934,6 +1213,13 @@ function LootDisplayFrameMixin:HideHistoryFrame()
 	end
 	if self.historyTitle then
 		self.historyTitle:Hide()
+	end
+	if self.historyCloseButton then
+		self.historyCloseButton:Hide()
+	end
+	-- Clear any in-progress scroll sequence so the next interaction starts fresh
+	if self.wheelState then
+		G_RLF.HistoryService:ResetWheelState(self.wheelState)
 	end
 end
 
