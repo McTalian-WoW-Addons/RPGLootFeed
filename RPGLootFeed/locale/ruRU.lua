@@ -13,30 +13,33 @@ end
 --- You may translate these comments, but do not translate "region" or "endregion" as they are used by the localization tool to determine where to place the translations.
 --- To add translations, simply uncomment the line(s) and replace the English text after the equal sign (=) with the translated value.
 
---#region 1.37.0
--- L["1000 ms"] = "1000 ms"
--- L["1500 ms"] = "1500 ms"
--- L["2000 ms"] = "2000 ms"
--- L["3000 ms"] = "3000 ms"
--- L["500 ms"] = "500 ms"
+--#region 1.38.0
 -- L["Beta"] = "Beta"
 -- L["BetaModuleNotice"] = "This feature is in beta: it works, but it is still changing, its options may move, and its saved settings may be reset by a future update. It is off by default. Feedback and bug reports are very welcome on GitHub."
--- L["Close History"] = "Close History"
 -- L["Disable All Interaction With Rows"] = "Disable All Interaction With Rows"
 -- L["DisableAllInteractionConfirm"] = "This will disable all mouse interaction with loot rows:|n|n|cFFFF0000•|r Loot rolls (Need/Greed/Pass)|n|cFFFF0000•|r Item tooltips on hover|n|cFFFF0000•|r Item clicks (open in-game link, dress up, chat link)|n|cFFFF0000•|r Right-click to dismiss rows|n|cFFFF0000•|r Hover highlight effects|n|cFFFF0000•|r Row lock on hover|n|nAre you sure you want to continue?"
 -- L["DisableAllInteractionConfirmAccept"] = "Yes, Disable Interactions"
 -- L["DisableAllInteractionConfirmCancel"] = "Cancel"
 -- L["DisableAllInteractionDesc"] = "Completely disables all mouse interactions with loot rows. Clicks pass through, no tooltips appear, and hovering does not pause or delay exit animations."
 -- L["DisableAllInteractionFeatureWarning"] = "Mouse interactions are currently disabled (General > Interactions). This feature will not respond to clicks or hover while active."
--- L["Double Scroll Required"] = "Double Scroll Required"
--- L["DoubleScrollRequiredDesc"] = "Require two scroll events within the time window to activate/deactivate history, reducing accidental triggers."
 -- L["Enable Loot Rolls in Feed"] = "Enable Loot Rolls in Feed"
--- L["Enable Scroll Wheel History Activation"] = "Enable Scroll Wheel History Activation"
 -- L["EnableLootRollsDesc"] = "Enable loot rolls in the loot feed"
--- L["EnableScrollWheelActivationDesc"] = "When enabled, scrolling down on the loot frame will activate loot history. Scroll up at the top to deactivate."
 -- L["Loot Rolls Config"] = "Loot Rolls Config"
 -- L["Roll Button Size"] = "Roll Button Size"
 -- L["RollButtonSizeDesc"] = "Size of the roll action buttons (Need, Greed, Pass) in pixels."
+--#endregion
+
+--#region 1.37.0
+-- L["1000 ms"] = "1000 ms"
+-- L["1500 ms"] = "1500 ms"
+-- L["2000 ms"] = "2000 ms"
+-- L["3000 ms"] = "3000 ms"
+-- L["500 ms"] = "500 ms"
+-- L["Close History"] = "Close History"
+-- L["Double Scroll Required"] = "Double Scroll Required"
+-- L["DoubleScrollRequiredDesc"] = "Require two scroll events within the time window to activate/deactivate history, reducing accidental triggers."
+-- L["Enable Scroll Wheel History Activation"] = "Enable Scroll Wheel History Activation"
+-- L["EnableScrollWheelActivationDesc"] = "When enabled, scrolling down on the loot frame will activate loot history. Scroll up at the top to deactivate."
 -- L["Scroll Wheel Target Anchor"] = "Scroll Wheel Target Anchor"
 -- L["Scroll Wheel Target Height"] = "Scroll Wheel Target Height"
 -- L["Scroll Wheel Target Width"] = "Scroll Wheel Target Width"
