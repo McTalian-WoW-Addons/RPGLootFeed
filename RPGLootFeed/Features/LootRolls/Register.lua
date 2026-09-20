@@ -7,4 +7,6 @@ G_RLF.FeatureRegistry:Register({
 	order = 10,
 	logColorARGB = "FFFF8C00",
 	logAbbrev = "ROLL",
+	-- First beta module: shipped disabled so opting in is a deliberate choice.
+	beta = true,
 })

@@ -29,6 +29,41 @@ G_RLF.FeatureRegistry = {
 ---@field logAbbrev string Short abbreviation for Logger (e.g. "ITEM")
 ---@field config? table AceConfig options table
 ---@field sampleRows? fun(): table[] Sample row factory for options preview
+---@field beta? boolean Feature still under active development: its options group is
+---       labeled and carries a notice, and its default must be disabled
+
+--- Tag appended to a beta feature's options group heading.
+---@return string
+function G_RLF.FeatureRegistry:BetaTag()
+	return " |cFF00CCFF[" .. G_RLF.L["Beta"] .. "]|r"
+end
+
+--- Notice shown at the top of a beta feature's options group.
+---@return string
+function G_RLF.FeatureRegistry:BetaNotice()
+	return "|cFF00CCFF" .. G_RLF.L["BetaModuleNotice"] .. "|r"
+end
+
+--- Is this feature key registered as beta?
+---@param key string
+---@return boolean
+function G_RLF.FeatureRegistry:IsBeta(key)
+	local registration = self.features[key]
+	return registration ~= nil and registration.beta == true
+end
+
+--- Keys of every feature registered as beta.
+---@return string[]
+function G_RLF.FeatureRegistry:BetaKeys()
+	local keys = {}
+	for key, registration in pairs(self.features) do
+		if registration.beta then
+			table.insert(keys, key)
+		end
+	end
+	table.sort(keys)
+	return keys
+end
 
 --- Register a feature module with the addon infrastructure.
 --- Must be called after the module is created but before AceAddon enable.
@@ -65,6 +100,29 @@ function G_RLF.FeatureRegistry:Register(opts)
 	if not configFn and featureModule.BuildConfigArgs then
 		configFn = function(frameId, order)
 			return featureModule:BuildConfigArgs(frameId, order)
+		end
+	end
+	-- Beta features get their label and notice here rather than in each config
+	-- builder, so every future beta module inherits both for free.
+	if configFn and opts.beta then
+		local buildArgs = configFn
+		configFn = function(frameId, order)
+			local group = buildArgs(frameId, order)
+			if type(group) ~= "table" then
+				return group
+			end
+			if type(group.name) == "string" then
+				group.name = group.name .. G_RLF.FeatureRegistry:BetaTag()
+			end
+			group.args = group.args or {}
+			group.args.betaModuleNotice = {
+				type = "description",
+				name = G_RLF.FeatureRegistry:BetaNotice(), -- nocheck
+				fontSize = "medium",
+				-- Ahead of every builder's own args, which start at 0.5 at the earliest.
+				order = 0.01,
+			}
+			return group
 		end
 	end
 	if configFn then
