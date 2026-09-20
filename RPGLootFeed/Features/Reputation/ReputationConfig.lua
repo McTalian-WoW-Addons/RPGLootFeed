@@ -4,6 +4,9 @@ local addonName, ns = ...
 ---@class G_RLF
 local G_RLF = ns
 
+--- Handler for the icon preview/validation callbacks referenced by name below.
+local ReputationConfig = {}
+
 --- Build the AceConfig options group for Reputation on the given frame.
 --- Called from the config system by function name.
 ---@param frameId integer
@@ -15,6 +18,7 @@ function G_RLF.Reputation:BuildConfigArgs(frameId, order)
 	end
 	return {
 		type = "group",
+		handler = ReputationConfig,
 		name = G_RLF.L["Reputation Config"],
 		order = order,
 		args = {
