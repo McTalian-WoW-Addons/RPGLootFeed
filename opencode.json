@@ -1,0 +1,14 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+
+  "references": {
+    "wow-ui": {
+      "path": "../wow-ui-source",
+      "description": "Blizzard UI source (branch: live). Use for Retail UI API signatures, usage patterns, and client compatibility — the de facto reference for current game state."
+    }
+  },
+
+  "permission": {
+    "external_directory": { "../wow-ui-source/**": "allow", "*": "ask" }
+  }
+}
