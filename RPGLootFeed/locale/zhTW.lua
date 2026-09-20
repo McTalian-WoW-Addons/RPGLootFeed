@@ -62,7 +62,9 @@ end
 -- L["DisableSlugDesc"] = "Turn off Slug rendering for this frame's outlined text, going back to the standard outline."
 -- L["Drain Direction"] = "Drain Direction"
 -- L["DrainDirectionDesc"] = "Which direction the timer bar empties. Right to Left is the default countdown feel."
+-- L["Enable Loot Rolls in Feed"] = "Enable Loot Rolls in Feed"
 -- L["Enable Timer Bar"] = "Enable Timer Bar"
+-- L["EnableLootRollsDesc"] = "Enable loot rolls in the loot feed"
 -- L["EnableTimerBarDesc"] = "Show a timer bar on loot rows showing how long until they fade out."
 -- L["Fade Out Timer Bar"] = "Fade Out Timer Bar"
 -- L["FadeOutTimerBarDesc"] = "Configure the timer bar that shows how long until a row fades out."
@@ -70,6 +72,7 @@ end
 -- L["IconSkinDesc"] = "Choose which addon skins the loot row icons. Automatic uses whichever supported addon you have loaded. Square crops the icon border without needing any other addon."
 -- L["IconSkinUnavailableWarning"] = "That icon skin is not available because the addon that provides it is not loaded."
 -- L["Left to Right"] = "Left to Right"
+-- L["Loot Rolls Config"] = "Loot Rolls Config"
 -- L["NotInstalledSuffix"] = " (not installed)"
 -- L["Right to Left"] = "Right to Left"
 -- L["SlugFlagNote"] = "Outlines are rendered through the Slug library for crisper glyphs at any size. It has no effect while Use Font Objects is on."
@@ -82,9 +85,6 @@ end
 -- L["TimerBarColorDesc"] = "Color of the timer bar fill."
 -- L["TimerBarHeightDesc"] = "Height of the timer bar in pixels."
 -- L["TimerBarYOffsetDesc"] = "Vertical offset of the timer bar in pixels. Use a positive value to move it above the row border."
--- L["Enable Loot Rolls in Feed"] = "Enable Loot Rolls in Feed"
--- L["EnableLootRollsDesc"] = "Enable loot rolls in the loot feed"
--- L["Loot Rolls Config"] = "Loot Rolls Config"
 --#endregion
 
 --#region 1.33.0
