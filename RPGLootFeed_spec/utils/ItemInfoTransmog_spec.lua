@@ -91,6 +91,10 @@ describe("ItemInfoTransmog", function()
 		end)
 
 		it("handles classic", function()
+			-- Retail is checked before the expansion gates (WoW Forever reports
+			-- expansion 0 but ships the Mainline transmog API), so a classic
+			-- client must be non-retail for the classic path to run.
+			nsMocks.IsRetail.returns(false)
 			ns.armorClassMapping = { MAGE = 1 }
 			functionMocks.GetExpansionLevel.returns(ns.Expansion.CATA)
 			transmogCollectionMocks.PlayerHasTransmog.returns(false)
