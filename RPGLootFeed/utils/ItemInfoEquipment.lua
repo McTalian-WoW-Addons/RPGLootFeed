@@ -6,6 +6,35 @@ local G_RLF = ns
 
 -- ── Armor class helpers ───────────────────────────────────────────────────────
 
+---Number of skill lines the client exposes.
+---WoW Forever (Mainline client) only exposes C_SkillInfo; Classic clients
+---only expose the bare GetNumSkillLines/GetSkillLineInfo globals.
+---@return number
+local function GetSkillLineCount()
+	if C_SkillInfo and C_SkillInfo.GetNumSkillLines then
+		return C_SkillInfo.GetNumSkillLines()
+	end
+	if GetNumSkillLines then
+		return GetNumSkillLines()
+	end
+	return 0
+end
+
+---Name and header flag of the skill line at index.
+---@param index number
+---@return string | nil skillName, boolean | nil isHeader
+local function GetSkillLineNameAndHeader(index)
+	if C_SkillInfo and C_SkillInfo.GetSkillLineInfo then
+		local info = C_SkillInfo.GetSkillLineInfo(index)
+		if not info then
+			return nil, nil
+		end
+		return info.name, info.isHeader
+	end
+	local skillName, isHeader = GetSkillLineInfo(index)
+	return skillName, isHeader
+end
+
 local nameToSubClass
 local plateName
 
