@@ -24,29 +24,41 @@ describe("ReputationConfig module", function()
 			repLevelColor = { 0.5, 0.5, 1, 1 },
 			repLevelTextWrapChar = 5, -- WrapCharEnum.ANGLE
 			enableIcon = true,
+			repIconTexture = "",
 		}
 	end
 
 	before_each(function()
 		-- Minimal namespace: only what ReputationConfig.lua and common.lua touch.
 		ns = {
-			L = setmetatable({}, {
+			L = setmetatable({
+				-- Carries a %s: TestIcon formats the resolved icon markup into it.
+				["Chosen Icon"] = "Your chosen icon: %s",
+			}, {
 				__index = function(_, key)
 					return key
 				end,
 			}),
 			WrapCharEnum = { BRACKET = 3, ANGLE = 5 },
+			DefaultIcons = { REPUTATION = 236681 },
 			WrapCharOptions = { [3] = "Bracket", [5] = "Angle" },
 			DbAccessor = {
 				UpdateFeatureModuleState = function() end,
 				Feature = function()
 					return nil
 				end,
+				Styling = function()
+					return { secondaryFontSize = 12 }
+				end,
 			},
 			LootDisplay = {
 				RefreshSampleRowsIfShown = function() end,
 			},
 			db = {
+				-- revertRepIconToDefault reads the "**" frame defaults through db.defaults.
+				defaults = {
+					global = { frames = { ["**"] = { features = { reputation = reputationDefaults() } } } },
+				},
 				global = {
 					frames = { [1] = { features = { reputation = reputationDefaults() } } },
 					misc = { hideAllIcons = false },
@@ -130,5 +142,91 @@ describe("ReputationConfig module", function()
 		assert.is_true(group.args.enableRep.get())
 		group.args.enableRep.set(nil, false)
 		assert.is_false(ns.db.global.frames[1].features.reputation.enabled)
+	end)
+	-- Ported from the pre-co-location RPGLootFeed_spec/config/Features/ReputationConfig_spec.lua
+	-- (main commit 2285e18). The move to Features/Reputation/ dropped these, and with them the
+	-- only guard on the handler table the named validate/preview callbacks resolve against.
+	describe("reputation icon override", function()
+		local group, fc
+
+		before_each(function()
+			group = ns.Reputation:BuildConfigArgs(1, 6)
+			fc = function()
+				return ns.db.global.frames[1].features.reputation
+			end
+		end)
+
+		it("defaults the reputation icon override to empty (use the flavor default)", function()
+			assert.equal("", fc().repIconTexture)
+		end)
+
+		it("exposes an input, a preview, and a revert-to-default button", function()
+			local args = group.args.repOptions.args
+			assert.equal("input", args.repIconTexture.type)
+			assert.equal("description", args.testRepIcon.type)
+			assert.equal("execute", args.revertRepIconToDefault.type)
+		end)
+
+		it("get/set round-trip through the per-frame reputation config", function()
+			local args = group.args.repOptions.args
+			assert.equal("", args.repIconTexture.get())
+			args.repIconTexture.set(nil, "135026")
+			assert.equal("135026", fc().repIconTexture)
+			assert.equal("135026", args.repIconTexture.get())
+		end)
+
+		it("reverts the override back to the empty default", function()
+			fc().repIconTexture = "135026"
+			group.args.repOptions.args.revertRepIconToDefault.func()
+			assert.equal("", fc().repIconTexture)
+		end)
+
+		describe("ValidateRepIcon", function()
+			local handler
+			before_each(function()
+				handler = group.handler
+			end)
+
+			it("is reachable as the options group handler", function()
+				assert.is_table(handler)
+				assert.is_function(handler.ValidateRepIcon)
+				assert.is_function(handler.TestIcon)
+			end)
+
+			it("accepts nil and empty string (meaning: use the flavor default)", function()
+				assert.is_true(handler:ValidateRepIcon(nil, nil))
+				assert.is_true(handler:ValidateRepIcon(nil, ""))
+			end)
+
+			it("accepts a numeric FileDataID", function()
+				assert.is_true(handler:ValidateRepIcon(nil, "135026"))
+			end)
+
+			it("accepts a texture file path", function()
+				assert.is_true(handler:ValidateRepIcon(nil, "interface/icons/inv_shirt_guildtabard_01"))
+			end)
+
+			it("rejects a bare Atlas-style name (not a FileDataID or path)", function()
+				local result = handler:ValidateRepIcon(nil, "some-atlas-name")
+				assert.is_string(result)
+				assert.are_not.equal(true, result)
+			end)
+		end)
+
+		describe("TestIcon", function()
+			-- These assert the actual resolved icon appears in the markup, not
+			-- just that a string comes back -- a stub that always returned the
+			-- default (or always the override) would still pass an is_string check.
+			it("embeds the flavor default icon in the markup when no override is set", function()
+				local text = group.handler:TestIcon(1, "")
+				assert.truthy(text:find(tostring(ns.DefaultIcons.REPUTATION), 1, true))
+			end)
+
+			it("embeds the override icon in the markup instead of the default when one is set", function()
+				local text = group.handler:TestIcon(1, "135026")
+				assert.truthy(text:find("135026", 1, true))
+				assert.falsy(text:find(tostring(ns.DefaultIcons.REPUTATION), 1, true))
+			end)
+		end)
 	end)
 end)
