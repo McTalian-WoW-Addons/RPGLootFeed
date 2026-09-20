@@ -1468,4 +1468,77 @@ describe("LootDisplayFrameMixin", function()
 			assert.stub(nsMocks.ApplyFontStyle).was_not.called()
 		end)
 	end)
+
+	describe("UpdateScrollWheelTargetMouse", function()
+		local target, historyDb, savedHistoryService
+
+		before_each(function()
+			savedHistoryService = ns.HistoryService
+			historyDb = ns.db.global.lootHistory
+			historyDb.enabled = true
+			historyDb.enableScrollWheelActivation = false
+			historyDb.showScrollTargetBorderOnHover = false
+			target = {
+				EnableMouseWheel = spy.new(function() end),
+				SetMouseClickEnabled = spy.new(function() end),
+				SetMouseMotionEnabled = spy.new(function() end),
+			}
+			frame.scrollWheelTarget = target
+			frame.isClickThrough = false
+			stub(frame, "SetScrollTargetBorderVisible")
+		end)
+
+		busted.after_each(function()
+			ns.HistoryService = savedHistoryService
+			ns.db.global.lootHistory = {}
+		end)
+
+		it("never enables clicks, so right-drag camera is not swallowed", function()
+			historyDb.enableScrollWheelActivation = true
+			frame:UpdateScrollWheelTargetMouse()
+			assert.spy(target.SetMouseClickEnabled).was.called_with(target, false)
+		end)
+
+		it("leaves the wheel free for camera zoom when activation is off", function()
+			frame:UpdateScrollWheelTargetMouse()
+			assert.spy(target.EnableMouseWheel).was.called_with(target, false)
+			assert.spy(target.SetMouseMotionEnabled).was.called_with(target, false)
+		end)
+
+		it("claims the wheel once activation is on", function()
+			historyDb.enableScrollWheelActivation = true
+			frame:UpdateScrollWheelTargetMouse()
+			assert.spy(target.EnableMouseWheel).was.called_with(target, true)
+		end)
+
+		it("keeps the wheel while history is open even with activation off", function()
+			ns.HistoryService = { historyShown = true }
+			frame:UpdateScrollWheelTargetMouse()
+			assert.spy(target.EnableMouseWheel).was.called_with(target, true)
+		end)
+
+		it("drops the wheel when the history feature itself is disabled", function()
+			historyDb.enabled = false
+			historyDb.enableScrollWheelActivation = true
+			ns.HistoryService = { historyShown = true }
+			frame:UpdateScrollWheelTargetMouse()
+			assert.spy(target.EnableMouseWheel).was.called_with(target, false)
+		end)
+
+		it("enables motion only for the hover border", function()
+			historyDb.enableScrollWheelActivation = true
+			historyDb.showScrollTargetBorderOnHover = true
+			frame:UpdateScrollWheelTargetMouse()
+			assert.spy(target.SetMouseMotionEnabled).was.called_with(target, true)
+		end)
+
+		it("suppresses hover motion while mouse is disabled in combat", function()
+			historyDb.enableScrollWheelActivation = true
+			historyDb.showScrollTargetBorderOnHover = true
+			frame.isClickThrough = true
+			frame:UpdateScrollWheelTargetMouse()
+			assert.spy(target.SetMouseMotionEnabled).was.called_with(target, false)
+			assert.stub(frame.SetScrollTargetBorderVisible).was.called_with(frame, false)
+		end)
+	end)
 end)
