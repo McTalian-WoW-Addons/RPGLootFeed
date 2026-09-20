@@ -118,6 +118,7 @@ G_RLF.options.args.general = {
 						---@type RLF_LootDisplayFrame
 						local frame = G_RLF.RLF_MainLootFrame
 						frame:UpdateTabVisibility()
+						frame:UpdateScrollWheelTargetMouse()
 					end,
 					order = 1,
 				},
@@ -258,6 +259,9 @@ G_RLF.options.args.general = {
 					end,
 					set = function(info, value)
 						G_RLF.db.global.lootHistory.enableScrollWheelActivation = value
+						---@type RLF_LootDisplayFrame
+						local frame = G_RLF.RLF_MainLootFrame
+						frame:UpdateScrollWheelTargetMouse()
 					end,
 					order = 8,
 				},
@@ -365,6 +369,9 @@ G_RLF.options.args.general = {
 					end,
 					set = function(info, value)
 						G_RLF.db.global.lootHistory.showScrollTargetBorderOnHover = value
+						---@type RLF_LootDisplayFrame
+						local frame = G_RLF.RLF_MainLootFrame
+						frame:UpdateScrollWheelTargetMouse()
 					end,
 					order = 13,
 				},

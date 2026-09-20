@@ -293,6 +293,7 @@ function LootDisplayFrameMixin:SetCombatClickThrough(inCombat)
 		---@cast row RLF_LootDisplayRow
 		row:SetClickThrough(shouldBeClickThrough)
 	end
+	self:UpdateScrollWheelTargetMouse()
 end
 
 --- Release the pin on a hovered row, animating it from its pinned position
@@ -400,11 +401,12 @@ function LootDisplayFrameMixin:CreateScrollWheelTarget()
 	local selfRef = self
 
 	-- Invisible frame parented to UIParent so it sits independently.
-	-- EnableMouseWheel() is required for OnMouseWheel to fire.
+	-- Mouse wheel and mouse motion are enabled on demand by
+	-- UpdateScrollWheelTargetMouse(); an always-on overlay would swallow camera
+	-- zoom and right-drag for every user (issue #621).
 	self.scrollWheelTarget = CreateFrame("Frame", nil, UIParent)
 	self.scrollWheelTarget:SetFrameStrata(self:GetFrameStrata())
 	self.scrollWheelTarget:SetFrameLevel(self:GetFrameLevel() + 5)
-	self.scrollWheelTarget:EnableMouseWheel(true)
 	self.scrollWheelTarget:SetAlpha(0)
 
 	-- Scroll counter indicator: two small colored squares shown briefly above
@@ -453,8 +455,8 @@ function LootDisplayFrameMixin:CreateScrollWheelTarget()
 	makeBorderEdge("TOPLEFT", "BOTTOMLEFT", false) -- left
 	makeBorderEdge("TOPRIGHT", "BOTTOMRIGHT", false) -- right
 
-	-- Make the target EnableMouse so OnEnter/OnLeave fire for hover-border feature.
-	self.scrollWheelTarget:EnableMouse(true)
+	-- OnEnter/OnLeave need mouse *motion* only.  EnableMouse() would also turn on
+	-- click handling, which swallows right-clicks and blocks camera drag.
 	self.scrollWheelTarget:SetScript("OnEnter", function()
 		local historyDb = G_RLF.db.global.lootHistory
 		if historyDb and historyDb.showScrollTargetBorderOnHover then
@@ -512,6 +514,7 @@ function LootDisplayFrameMixin:CreateScrollWheelTarget()
 	end)
 
 	self:UpdateScrollWheelTarget()
+	self:UpdateScrollWheelTargetMouse()
 end
 
 --- Briefly display a scroll-progress indicator above the loot frame.
@@ -614,6 +617,33 @@ function LootDisplayFrameMixin:UpdateScrollWheelTarget()
 	self.scrollWheelTarget:SetSize(math.max(w, 1), math.max(h, 1))
 	self.scrollWheelTarget:ClearAllPoints()
 	self.scrollWheelTarget:SetPoint(anchor, self, anchor, xOff, yOff)
+end
+
+--- Enable mouse wheel / mouse motion on the scroll wheel target only while
+--- something actually needs them.  The target is a full-size invisible overlay,
+--- so anything it captures is taken away from the 3D world underneath: clicks
+--- are never enabled (right-drag camera), the wheel is only claimed when it can
+--- act on it (camera zoom), and motion is only claimed for the hover border.
+function LootDisplayFrameMixin:UpdateScrollWheelTargetMouse()
+	if not self.scrollWheelTarget then
+		return
+	end
+	local historyDb = G_RLF.db and G_RLF.db.global.lootHistory
+	local historyEnabled = historyDb and historyDb.enabled or false
+	local activationOn = historyEnabled and historyDb.enableScrollWheelActivation or false
+	-- While history is open the target drives its scrolling, so keep the wheel
+	-- even if activation was turned off after the tab opened it.
+	local wheel = activationOn or (historyEnabled and G_RLF.HistoryService and G_RLF.HistoryService.historyShown)
+	-- isClickThrough is set by SetCombatClickThrough; honor disableMouseInCombat.
+	local hover = activationOn and historyDb.showScrollTargetBorderOnHover and not self.isClickThrough
+
+	self.scrollWheelTarget:EnableMouseWheel(wheel and true or false)
+	self.scrollWheelTarget:SetMouseClickEnabled(false)
+	self.scrollWheelTarget:SetMouseMotionEnabled(hover and true or false)
+	if not hover and not (self.BoundingBox and self.BoundingBox:IsVisible()) then
+		-- Cursor can no longer leave the target, so clear any border it left up.
+		self:SetScrollTargetBorderVisible(false)
+	end
 end
 
 --- Load the loot display frame
@@ -1204,6 +1234,7 @@ function LootDisplayFrameMixin:ShowHistoryFrame()
 	if self.historyCloseButton then
 		self.historyCloseButton:Show()
 	end
+	self:UpdateScrollWheelTargetMouse()
 end
 
 function LootDisplayFrameMixin:HideHistoryFrame()
@@ -1221,6 +1252,7 @@ function LootDisplayFrameMixin:HideHistoryFrame()
 	if self.wheelState then
 		G_RLF.HistoryService:ResetWheelState(self.wheelState)
 	end
+	self:UpdateScrollWheelTargetMouse()
 end
 
 function LootDisplayFrameMixin:UpdateRowItemCounts()
