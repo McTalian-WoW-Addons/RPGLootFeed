@@ -65,6 +65,9 @@ describe("RLF_LootRollRowMixin", function()
 				GetRaidClassColor = function()
 					return nil
 				end,
+				GetLootRollTimeLeft = function()
+					return nil
+				end,
 			},
 		}
 
@@ -86,6 +89,8 @@ describe("RLF_LootRollRowMixin", function()
 		row.StyleExitAnimation = function() end
 		row.ResetFadeOut = function() end
 		row.ResetTimerBar = function() end
+		row.StartTimerBar = function() end
+		stub(row, "StartTimerBar")
 		stub(row, "LayoutPrimaryLine")
 		stub(row, "StyleExitAnimation")
 		stub(row, "ResetFadeOut")
@@ -157,7 +162,7 @@ describe("RLF_LootRollRowMixin", function()
 				canNeed = true,
 				canGreed = true,
 				canTransmog = false,
-				rollDuration = 60,
+				rollDuration = 60000,
 			})
 
 			assert.are.equal(555, row.rollID)
@@ -176,9 +181,30 @@ describe("RLF_LootRollRowMixin", function()
 			assert.stub(row._CreateRollButton).was.called_with(match._, _G.GREED, _G.LOOT_ROLL_TYPE_GREED, true, nil)
 			assert.stub(row._CreateRollButton).was.called_with(match._, _G.PASS, _G.LOOT_ROLL_TYPE_PASS, true, nil)
 
-			-- Timer bar was started from the roll-action phase.
+			-- Timer bar was started from the roll-action phase, in seconds.
 			assert.is_true(row._rollTimerBarActive)
-			assert.stub(row.TimerBar.SetTimerDuration).was.called(1)
+			assert.stub(row.StartTimerBar).was.called_with(match._, 60)
+		end)
+
+		it("counts down the live time left, converted from ms to seconds", function()
+			stub(row, "_CreateRollButton", function()
+				return newDummyButton()
+			end)
+			ns.WoWAPI.LootRolls.GetLootRollTimeLeft = function(rollID)
+				assert.are.equal(555, rollID)
+				return 42500
+			end
+
+			row:PostBootstrapFromElement({
+				type = ns.FeatureModule.LootRolls,
+				rollID = 555,
+				canNeed = true,
+				canGreed = true,
+				canTransmog = false,
+				rollDuration = 60000,
+			})
+
+			assert.stub(row.StartTimerBar).was.called_with(match._, 42.5)
 		end)
 
 		it("creates a Transmog button instead of Greed when canTransmog is true", function()
@@ -192,7 +218,7 @@ describe("RLF_LootRollRowMixin", function()
 				canNeed = true,
 				canGreed = true,
 				canTransmog = true,
-				rollDuration = 60,
+				rollDuration = 60000,
 			})
 
 			assert.are.equal(3, #row._rollButtons)
@@ -281,35 +307,11 @@ describe("RLF_LootRollRowMixin", function()
 
 	describe("SetRollResults", function()
 		describe("while still waiting on other players", function()
-			it("does not touch the timer bar already running from the roll-action phase", function()
-				-- Roll-action phase: START_LOOT_ROLL already set up the
-				-- hardware-accelerated countdown via _SetupRollTimerBar.
+			it("leaves the roll countdown alone and shows the current leader", function()
 				row.rollID = 555
-				row:_SetupRollTimerBar(60)
-
-				assert.stub(row.TimerBar.SetTimerDuration).was.called(1)
-				assert.stub(row.TimerBar.SetMinMaxValues).was_not.called()
-				assert.stub(row.TimerBar.SetValue).was_not.called()
-
-				-- A LOOT_HISTORY_UPDATE_DROP event lands while a party member
-				-- is still rolling — the roll isn't resolved yet.
-				row:SetRollResults({
-					duration = 60,
-					rollInfos = {
-						{ playerName = "Bob", playerClass = "WARRIOR", state = 4 }, -- waiting
-					},
-				})
-
-				-- The static fallback must not stomp the hardware countdown
-				-- already ticking down from the roll-action phase.
-				assert.stub(row.TimerBar.SetMinMaxValues).was_not.called()
-				assert.stub(row.TimerBar.SetValue).was_not.called()
-			end)
-
-			it("shows a static full bar when no roll-action timer was ever started", function()
-				-- e.g. row replayed after a UI reload — _SetupRollTimerBar was
-				-- never called for this row, so there's nothing to clobber.
 				row._rolled = true
+				row:_SetupRollTimerBar(60000)
+				assert.stub(row.StartTimerBar).was.called(1)
 
 				row:SetRollResults({
 					duration = 60,
@@ -319,8 +321,9 @@ describe("RLF_LootRollRowMixin", function()
 					},
 				})
 
-				assert.stub(row.TimerBar.SetMinMaxValues).was.called_with(row.TimerBar, 0, 60)
-				assert.stub(row.TimerBar.SetValue).was.called_with(row.TimerBar, 60)
+				assert.stub(row.StartTimerBar).was.called(1)
+				assert.stub(row.TimerBar.SetMinMaxValues).was_not.called()
+				assert.stub(row.TimerBar.SetValue).was_not.called()
 				assert.stub(row.ItemCountText.SetText).was.called_with(row.ItemCountText, "Carl leads (33)")
 				assert.is_nil(row._resolved)
 			end)
@@ -504,7 +507,7 @@ describe("RLF_LootRollRowMixin", function()
 				key = "lootRoll:999",
 				type = ns.FeatureModule.LootRolls,
 				rollID = 999,
-				rollDuration = 60,
+				rollDuration = 60000,
 				moduleRef = moduleRef,
 			}
 			_G.GetLootRollItemInfo = function()

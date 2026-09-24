@@ -102,13 +102,15 @@ end
 
 --- Start the timer bar countdown synchronized with fadeOutDelay.
 --- Called from RowAnimationMixin:ResetFadeOut().
-function RLF_RowTimerBarMixin:StartTimerBar()
+---@param durationOverride number? Seconds to count down instead of showForSeconds
+--- (loot roll rows count down the roll, not the fade)
+function RLF_RowTimerBarMixin:StartTimerBar(durationOverride)
 	if not self:ShouldShowTimerBar() then
 		self:StopTimerBar()
 		return
 	end
 
-	local duration = self.showForSeconds or 5
+	local duration = durationOverride or self.showForSeconds or 5
 
 	-- C_DurationUtil drives the drain natively where it exists, which is every
 	-- flavor we currently ship (it is documented on live, classic, classic_era

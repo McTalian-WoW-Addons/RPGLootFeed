@@ -197,7 +197,7 @@ local function runLootRollsIntegrationTest()
 			return truncatedLink or "|cff0070dd|Hitem:14344::::::::60:::::|h[Large Brilliant Shard]|h|r"
 		end,
 		rollID = nil,
-		rollDuration = 60,
+		rollDuration = 60000, -- ms, like START_LOOT_ROLL
 		canNeed = true,
 		canGreed = true,
 		canTransmog = false,
