@@ -21,6 +21,10 @@ LootRolls._activeRolls = nil
 LootRolls._lootHandleMap = nil
 -- encounterID → { lootListID → rollID } — matched loot history drops for live updates
 LootRolls._historyMatchMap = nil
+-- "encounterID:lootListID" → true — every drop ever claimed this session.
+-- Unlike _historyMatchMap this survives _UntrackRoll, so a new roll for the
+-- same itemID can't latch onto an earlier boss's already-finished drop.
+LootRolls._claimedDrops = nil
 -- Periodic poll ticker for loot history coalescing
 LootRolls._pollTicker = nil
 
@@ -84,11 +88,24 @@ function LootRolls:_UntrackRoll(rollID)
 			end
 		end
 	end
-	-- Stop poll ticker if no more active rolls
+	-- Stop poll ticker if no more active rolls; START_LOOT_ROLL restarts it.
 	if self._activeRolls and not next(self._activeRolls) and self._pollTicker then
 		self._pollTicker:Cancel()
 		self._pollTicker = nil
 	end
+end
+
+--- Start the 1s loot history poll if it isn't running. Called per new roll:
+--- _UntrackRoll stops the ticker once the last roll row is released, so
+--- starting it only in OnEnable left every later loot batch unpolled.
+function LootRolls:_EnsurePollTicker()
+	if self._pollTicker then
+		return
+	end
+	local pollFn = G_RLF:IsRetail() and self.PollLootHistory or self.PollClassicLootHistory
+	self._pollTicker = C_Timer.NewTicker(1, function()
+		pollFn(self)
+	end)
 end
 
 -- ── Event Handlers ───────────────────────────────────────────────────────────
@@ -149,6 +166,8 @@ function LootRolls:START_LOOT_ROLL(eventName, rollID, rollTime, lootHandle)
 		end
 		self._lootHandleMap[lootHandle][rollID] = true
 	end
+
+	self:_EnsurePollTicker()
 
 	-- Send through standard pipeline
 	local element = G_RLF.LootElementBase:fromPayload(payload)
@@ -261,7 +280,19 @@ function LootRolls:_FindMatchingHistoryDrops(itemLink)
 			end
 		end
 	end
+	-- Newest first: loot history keeps every encounter this session, and the
+	-- live roll belongs to the most recent drop of this item.
+	table.sort(matches, function(a, b)
+		return (a.dropInfo.startTime or 0) > (b.dropInfo.startTime or 0)
+	end)
 	return matches
+end
+
+---@param encounterID number
+---@param lootListID number
+---@return string
+local function dropKey(encounterID, lootListID)
+	return encounterID .. ":" .. lootListID
 end
 
 --- Check if a specific encounterID + lootListID pair is already claimed in historyMatchMap.
@@ -269,6 +300,9 @@ end
 ---@param lootListID number
 ---@return boolean
 function LootRolls:_IsDropClaimed(encounterID, lootListID)
+	if self._claimedDrops and self._claimedDrops[dropKey(encounterID, lootListID)] then
+		return true
+	end
 	if not self._historyMatchMap then
 		return false
 	end
@@ -323,6 +357,10 @@ function LootRolls:PollLootHistory()
 					self._historyMatchMap[claimed.encounterID] = {}
 				end
 				self._historyMatchMap[claimed.encounterID][claimed.lootListID] = rollID
+				if not self._claimedDrops then
+					self._claimedDrops = {}
+				end
+				self._claimedDrops[dropKey(claimed.encounterID, claimed.lootListID)] = true
 
 				-- Push results to row
 				local rows = self:FindRollRows(rollID)
@@ -358,15 +396,12 @@ end
 ---@param encounterID number
 ---@param lootListID number
 function LootRolls:HandleHistoryDropUpdate(encounterID, lootListID)
-	if not self._historyMatchMap then
-		return
-	end
-	local encMap = self._historyMatchMap[encounterID]
-	if not encMap then
-		return
-	end
-	local rollID = encMap[lootListID]
+	local encMap = self._historyMatchMap and self._historyMatchMap[encounterID]
+	local rollID = encMap and encMap[lootListID]
 	if not rollID then
+		-- Drop not matched to a roll yet (first update for a new boss); try
+		-- now instead of waiting for the next poll tick.
+		self:PollLootHistory()
 		return
 	end
 
@@ -437,11 +472,8 @@ end
 ---@param encounterID number
 function LootRolls:LOOT_HISTORY_UPDATE_ENCOUNTER(eventName, encounterID)
 	self:LogDebug(eventName, G_RLF.LogEventSource.WOWEVENT, self.moduleName, encounterID)
-	-- Full re-poll for this encounter to catch any unmatched drops
-	if not self._historyMatchMap or not self._historyMatchMap[encounterID] then
-		return
-	end
-	-- Trigger a full poll on next tick
+	-- A new or changed encounter may hold drops for rolls not yet matched;
+	-- PollLootHistory skips rolls that already have a match.
 	self:PollLootHistory()
 end
 
@@ -636,25 +668,15 @@ function LootRolls:OnEnable()
 	self:RegisterEvent("LOOT_ROLLS_COMPLETE")
 	self:RegisterEvent("LOOT_ITEM_ROLL_WON")
 
-	local pollFn
 	if not G_RLF:IsRetail() then
 		-- Classic Era, TBC Anniversary, MoP Classic: same older, index-based
 		-- C_LootHistory shape (GetNumItems/GetItem/GetPlayerInfo).
 		self:RegisterEvent("LOOT_HISTORY_ROLL_CHANGED")
 		self:RegisterEvent("LOOT_HISTORY_ROLL_COMPLETE")
-		pollFn = self.PollClassicLootHistory
 	else
 		-- Retail: live updates via loot history events
 		self:RegisterEvent("LOOT_HISTORY_UPDATE_DROP")
 		self:RegisterEvent("LOOT_HISTORY_UPDATE_ENCOUNTER")
-		pollFn = self.PollLootHistory
-	end
-
-	-- Start periodic poll for loot history coalescing (1s interval)
-	if not self._pollTicker then
-		self._pollTicker = C_Timer.NewTicker(1, function()
-			pollFn(self)
-		end)
 	end
 
 	-- Replay any active rolls that exist from before (UI reload, etc.)

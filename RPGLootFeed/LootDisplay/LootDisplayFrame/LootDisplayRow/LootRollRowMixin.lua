@@ -147,46 +147,22 @@ function RLF_LootRollRowMixin:_LayoutRollButtons()
 	end
 end
 
---- Start hardware-accelerated timer bar countdown using C_DurationUtil.
---- Sets the bar once; no per-frame polling needed.
----@param rollDuration number Total roll duration in seconds (from element.rollDuration)
-function RLF_LootRollRowMixin:_SetupRollTimerBar(rollDuration)
+--- Start the timer bar counting down the roll's remaining time.
+--- START_LOOT_ROLL's rollTime and GetLootRollTimeLeft are both milliseconds
+--- (Blizzard's GroupLootFrame feeds them straight into a StatusBar together);
+--- the timer bar takes seconds.
+---@param rollDurationMs number Total roll duration in ms (from element.rollDuration)
+function RLF_LootRollRowMixin:_SetupRollTimerBar(rollDurationMs)
 	if not self.TimerBar then
 		return
 	end
 
-	local animCfg = G_RLF.DbAccessor:Animations(self.frameType)
-	if animCfg and animCfg.timerBar then
-		local cfg = animCfg.timerBar
-		if cfg.height then
-			self.TimerBar:SetHeight(cfg.height)
-		end
-		if cfg.color then
-			self.TimerBar:SetStatusBarColor(cfg.color[1], cfg.color[2], cfg.color[3], cfg.alpha or 0.7)
-		end
+	local remainingMs = (self.rollID and G_RLF.WoWAPI.LootRolls.GetLootRollTimeLeft(self.rollID)) or rollDurationMs
+	if not remainingMs or remainingMs <= 0 then
+		return
 	end
 
-	-- Use remaining time from GetLootRollTimeLeft, fall back to total duration
-	local remaining = (self.rollID and GetLootRollTimeLeft and GetLootRollTimeLeft(self.rollID)) or rollDuration
-
-	if C_DurationUtil and C_DurationUtil.CreateDuration then
-		if not self._timerBarDuration then
-			self._timerBarDuration = C_DurationUtil.CreateDuration()
-		end
-		self._timerBarDuration:SetTimeFromStart(GetTime(), remaining)
-		self.TimerBar:SetTimerDuration(
-			self._timerBarDuration,
-			Enum.StatusBarInterpolation.Immediate,
-			Enum.StatusBarTimerDirection.RemainingTime
-		)
-		self.TimerBar:Show()
-	else
-		-- Fallback: static bar
-		self.TimerBar:SetMinMaxValues(0, rollDuration)
-		self.TimerBar:SetValue(remaining)
-		self.TimerBar:Show()
-	end
-
+	self:StartTimerBar(remainingMs / 1000)
 	self._rollTimerBarActive = true
 end
 
@@ -539,24 +515,6 @@ function RLF_LootRollRowMixin:SetRollResults(dropInfo)
 	if dropInfo.winner or allPassed or (waitingCount == 0 and self._rolled) then
 		-- Fully resolved results row
 		self:OnRollResolved()
-	elseif waitingCount > 0 and dropInfo.duration and not self._rollTimerBarActive then
-		-- Unresolved and the roll-action phase never set up a timer bar
-		-- (e.g. replayed after reload) — show a static bar at full duration.
-		-- If _SetupRollTimerBar already started a countdown, leave it alone:
-		-- it's tracking the same roll duration and clobbering it here would
-		-- reset an in-progress countdown back to full on every history update.
-		G_RLF:LogDebug(
-			("SetRollResults_unresolved rollID=%s waiting=%d duration=%s"):format(
-				tostring(self.rollID or "?"),
-				waitingCount,
-				tostring(dropInfo.duration)
-			),
-			addonName,
-			self.moduleName
-		)
-		self.TimerBar:SetMinMaxValues(0, dropInfo.duration)
-		self.TimerBar:SetValue(dropInfo.duration)
-		self.TimerBar:Show()
 	end
 end
 
@@ -656,9 +614,8 @@ function RLF_LootRollRowMixin:PostBootstrapFromElement(element)
 	self:StyleExitAnimation()
 	self.showForSeconds = infinity
 
-	-- Timer bar: use hardware-accelerated countdown from C_DurationUtil.
-	-- Set once, no polling needed — bar counts down automatically.
-	self._SetupRollTimerBar(self, element.rollDuration)
+	-- Timer bar counts down the roll's remaining time until resolution.
+	self:_SetupRollTimerBar(element.rollDuration)
 
 	-- Hook the ClickableButton tooltip to append roll info after the item tooltip
 	if self.ClickableButton then

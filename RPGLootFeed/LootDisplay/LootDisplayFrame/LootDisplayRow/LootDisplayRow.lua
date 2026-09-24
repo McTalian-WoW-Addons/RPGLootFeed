@@ -551,7 +551,10 @@ function LootDisplayRowMixin:UpdateQuantity(element)
 	if not self.isPinned and self.ExitAnimation:IsPlaying() then
 		self.ExitAnimation:Stop()
 		self.ExitAnimation:Play()
-		self:StartTimerBar()
+		-- An active roll row's bar tracks the roll, not showForSeconds.
+		if not self._isLootRollRow then
+			self:StartTimerBar()
+		end
 	end
 
 	self:LogRow(self.logFn, text, false)

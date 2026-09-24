@@ -35,7 +35,7 @@ function G_RLF.LootRolls:GetSampleRows(frame, features)
 				return truncatedLink or SAMPLE_ITEM_LINK
 			end,
 			rollID = nil,
-			rollDuration = 60,
+			rollDuration = 60000, -- ms, like START_LOOT_ROLL
 			canNeed = true,
 			canGreed = true,
 			canTransmog = false,

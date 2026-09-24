@@ -49,7 +49,20 @@ describe("LootRolls Module", function()
 		end
 	end
 
+	local tickers
+
 	before_each(function()
+		tickers = {}
+		_G.C_Timer = {
+			NewTicker = function(interval, fn)
+				local ticker = { interval = interval, fn = fn, Cancel = function() end }
+				stub(ticker, "Cancel")
+				table.insert(tickers, ticker)
+				return ticker
+			end,
+			After = function() end,
+		}
+
 		-- Referenced at call time (not module-load time) by
 		-- classicRollTypeToState, so before_each is early enough.
 		_G.LOOT_ROLL_TYPE_PASS = 0
@@ -195,6 +208,41 @@ describe("LootRolls Module", function()
 			assert.are.equal(999, LootRolls._activeRolls[555].lootHandle)
 			assert.are.equal(18803, LootRolls._activeRolls[555].itemID)
 			assert.is_true(LootRolls._lootHandleMap[999][555])
+		end)
+
+		it("restarts the history poll after the previous loot batch stopped it", function()
+			LootRolls._adapter.GetLootRollItemInfo = function()
+				return 12345, "Finkle's Lava Dredger", 1, 4
+			end
+			LootRolls._adapter.GetLootRollItemLink = function()
+				return "itemlink"
+			end
+
+			-- First boss: roll starts, then its row is released.
+			LootRolls:START_LOOT_ROLL("START_LOOT_ROLL", 1, 60000, 10)
+			assert.are.equal(1, #tickers)
+			LootRolls:_UntrackRoll(1)
+			assert.stub(tickers[1].Cancel).was.called(1)
+			assert.is_nil(LootRolls._pollTicker)
+
+			-- Second boss: polling must come back.
+			LootRolls:START_LOOT_ROLL("START_LOOT_ROLL", 2, 60000, 11)
+			assert.are.equal(2, #tickers)
+			assert.are.equal(tickers[2], LootRolls._pollTicker)
+		end)
+
+		it("does not stack tickers for concurrent rolls", function()
+			LootRolls._adapter.GetLootRollItemInfo = function()
+				return 12345, "Finkle's Lava Dredger", 1, 4
+			end
+			LootRolls._adapter.GetLootRollItemLink = function()
+				return "itemlink"
+			end
+
+			LootRolls:START_LOOT_ROLL("START_LOOT_ROLL", 1, 60000, 10)
+			LootRolls:START_LOOT_ROLL("START_LOOT_ROLL", 2, 60000, 10)
+
+			assert.are.equal(1, #tickers)
 		end)
 
 		it("does nothing when the item has no name (not yet cached)", function()
@@ -450,6 +498,52 @@ describe("LootRolls Module", function()
 
 			assert.stub(row1.SetRollResults).was_not.called()
 		end)
+
+		it("never re-claims an earlier boss's drop after its roll was untracked", function()
+			LootRolls._adapter.GetItemInfoInstant = function()
+				return 18803
+			end
+			LootRolls._adapter.GetAllEncounterInfos = function()
+				return { { encounterID = 42 } }
+			end
+			LootRolls._adapter.GetSortedDropsForEncounter = function()
+				return { { lootListID = 7, itemHyperlink = "itemlink" } }
+			end
+
+			LootRolls._activeRolls = { [1] = { key = "LootRoll_1", itemLink = "itemlink" } }
+			LootRolls:PollLootHistory()
+			LootRolls:_UntrackRoll(1)
+
+			-- Same item drops again later; the old, finished drop is the only
+			-- history entry so far and must not be handed to the new roll.
+			local row2 = makeRow()
+			ns.LootDisplay.GetAllFrames = framesFrom({ makeFrame({ ["LootRoll_2"] = row2 }) })
+			LootRolls._activeRolls = { [2] = { key = "LootRoll_2", itemLink = "itemlink" } }
+			LootRolls:PollLootHistory()
+
+			assert.stub(row2.SetRollResults).was_not.called()
+		end)
+
+		it("prefers the newest matching drop across encounters", function()
+			local row = makeRow()
+			ns.LootDisplay.GetAllFrames = framesFrom({ makeFrame({ ["LootRoll_1"] = row }) })
+			LootRolls._activeRolls = { [1] = { key = "LootRoll_1", itemLink = "itemlink" } }
+			LootRolls._adapter.GetItemInfoInstant = function()
+				return 18803
+			end
+			LootRolls._adapter.GetAllEncounterInfos = function()
+				return { { encounterID = 41 }, { encounterID = 42 } }
+			end
+			local oldDrop = { lootListID = 3, itemHyperlink = "itemlink", startTime = 100 }
+			local newDrop = { lootListID = 7, itemHyperlink = "itemlink", startTime = 500 }
+			LootRolls._adapter.GetSortedDropsForEncounter = function(encounterID)
+				return { encounterID == 41 and oldDrop or newDrop }
+			end
+
+			LootRolls:PollLootHistory()
+
+			assert.stub(row.SetRollResults).was.called_with(row, newDrop)
+		end)
 	end)
 
 	describe("HandleHistoryDropUpdate", function()
@@ -508,6 +602,27 @@ describe("LootRolls Module", function()
 			assert.has_no.errors(function()
 				LootRolls:HandleHistoryDropUpdate(42, 7)
 			end)
+		end)
+
+		it("matches an unmatched drop immediately instead of waiting for the poll", function()
+			local row = makeRow()
+			ns.LootDisplay.GetAllFrames = framesFrom({ makeFrame({ ["LootRoll_1"] = row }) })
+			LootRolls._activeRolls = { [1] = { key = "LootRoll_1", itemLink = "itemlink" } }
+			LootRolls._adapter.GetItemInfoInstant = function()
+				return 18803
+			end
+			LootRolls._adapter.GetAllEncounterInfos = function()
+				return { { encounterID = 42 } }
+			end
+			local drop = { lootListID = 7, itemHyperlink = "itemlink" }
+			LootRolls._adapter.GetSortedDropsForEncounter = function()
+				return { drop }
+			end
+
+			LootRolls:LOOT_HISTORY_UPDATE_DROP("LOOT_HISTORY_UPDATE_DROP", 42, 7)
+
+			assert.stub(row.SetRollResults).was.called_with(row, drop)
+			assert.are.equal(1, LootRolls._historyMatchMap[42][7])
 		end)
 	end)
 
