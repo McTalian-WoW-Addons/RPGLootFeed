@@ -22,7 +22,7 @@ local function newDummyButton()
 end
 
 describe("RLF_LootRollRowMixin", function()
-	local ns, row
+	local ns, row, rollFramesOverride
 
 	before_each(function()
 		-- Loot-roll global constants. LOOT_ROLL_TYPE_* are indexed into the
@@ -70,6 +70,15 @@ describe("RLF_LootRollRowMixin", function()
 				end,
 			},
 		}
+
+		rollFramesOverride = { Refresh = function() end }
+		stub(rollFramesOverride, "Refresh")
+		ns.RLF.GetModule = function(_, name)
+			if name == ns.BlizzModule.LootRollFrames then
+				return rollFramesOverride
+			end
+			return {}
+		end
 
 		assert(loadfile(MIXIN_FILE))("TestAddon", ns)
 
@@ -205,6 +214,23 @@ describe("RLF_LootRollRowMixin", function()
 			})
 
 			assert.stub(row.StartTimerBar).was.called_with(match._, 42.5)
+		end)
+
+		it("asks the Blizzard roll frame override to re-check once the row exists", function()
+			stub(row, "_CreateRollButton", function()
+				return newDummyButton()
+			end)
+
+			row:PostBootstrapFromElement({
+				type = ns.FeatureModule.LootRolls,
+				rollID = 555,
+				canNeed = true,
+				canGreed = true,
+				canTransmog = false,
+				rollDuration = 60000,
+			})
+
+			assert.stub(rollFramesOverride.Refresh).was.called(1)
 		end)
 
 		it("creates a Transmog button instead of Greed when canTransmog is true", function()
@@ -439,6 +465,14 @@ describe("RLF_LootRollRowMixin", function()
 			assert.is_true(row.hasElementFadeOverride)
 			assert.stub(row.StyleExitAnimation).was.called(1)
 			assert.stub(row.ResetFadeOut).was.called(1)
+		end)
+
+		it("stays for the frame's configured results display time", function()
+			ns.db.global.frames[row.frameType].features.lootRolls = { resultsDisplaySeconds = 15 }
+
+			row:OnRollResolved()
+
+			assert.are.equal(15, row.showForSeconds)
 		end)
 
 		it("is idempotent — a second call does nothing", function()

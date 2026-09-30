@@ -609,6 +609,7 @@ G_RLF.defaults = {
 							textureColor = { 0, 0, 0, 1 },
 						},
 						buttonSize = 18,
+						resultsDisplaySeconds = 60,
 					},
 				},
 			},

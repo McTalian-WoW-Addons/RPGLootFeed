@@ -6,4 +6,6 @@
     <Script file="BossBanner.lua"/>
     <Script file="LootToasts.lua"/>
     <Script file="MoneyAlerts.lua"/>
+    <Script file="LootHistory.lua"/>
+    <Script file="LootRollFrames.lua"/>
 </Ui>
