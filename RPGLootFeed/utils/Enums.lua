@@ -111,6 +111,8 @@ G_RLF.BlizzModule = {
 	BossBanner = "BossBanner",
 	LootToasts = "LootToasts",
 	MoneyAlerts = "MoneyAlerts",
+	LootHistory = "LootHistory",
+	LootRollFrames = "LootRollFrames",
 }
 
 ---@enum G_RLF.SupportModule

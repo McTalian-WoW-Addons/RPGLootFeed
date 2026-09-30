@@ -2,6 +2,7 @@
 local assert = require("luassert")
 local match = require("luassert.match")
 local busted = require("busted")
+local after_each = busted.after_each
 local before_each = busted.before_each
 local describe = busted.describe
 local it = busted.it
@@ -49,10 +50,11 @@ describe("LootRolls Module", function()
 		end
 	end
 
-	local tickers
+	local tickers, originalCTimer
 
 	before_each(function()
 		tickers = {}
+		originalCTimer = _G.C_Timer
 		_G.C_Timer = {
 			NewTicker = function(interval, fn)
 				local ticker = { interval = interval, fn = fn, Cancel = function() end }
@@ -187,6 +189,10 @@ describe("LootRolls Module", function()
 				return nil
 			end,
 		}
+	end)
+
+	after_each(function()
+		_G.C_Timer = originalCTimer
 	end)
 
 	describe("START_LOOT_ROLL", function()

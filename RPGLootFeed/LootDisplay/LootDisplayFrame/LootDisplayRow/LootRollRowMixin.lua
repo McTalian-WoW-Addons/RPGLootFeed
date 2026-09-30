@@ -15,7 +15,7 @@ RLF_LootRollRowMixin = {}
 
 local BUTTON_GAP = 4
 local PADDING_RIGHT = 8
-local RESULTS_DISPLAY_SECONDS = 60
+local DEFAULT_RESULTS_DISPLAY_SECONDS = 60
 
 --- Atlas name suffix table matching Blizzard's loot roll button textures.
 local ROLL_BUTTON_ATLAS = {
@@ -40,13 +40,31 @@ local function _GetClassColor(className)
 	return G_RLF.WoWAPI.LootRolls.GetRaidClassColor(className)
 end
 
+---@return table?
+function RLF_LootRollRowMixin:_GetLootRollsConfig()
+	local frameConfig = G_RLF.db.global.frames[self.frameType]
+	return frameConfig and frameConfig.features and frameConfig.features.lootRolls
+end
+
 ---@return number
 function RLF_LootRollRowMixin:_GetButtonSize()
-	local frameConfig = G_RLF.db.global.frames[self.frameType]
-	if frameConfig and frameConfig.features and frameConfig.features.lootRolls then
-		return frameConfig.features.lootRolls.buttonSize or 18
+	local cfg = self:_GetLootRollsConfig()
+	return cfg and cfg.buttonSize or 18
+end
+
+---@return number
+function RLF_LootRollRowMixin:_GetResultsDisplaySeconds()
+	local cfg = self:_GetLootRollsConfig()
+	return cfg and cfg.resultsDisplaySeconds or DEFAULT_RESULTS_DISPLAY_SECONDS
+end
+
+--- Let the Blizzard roll frame override re-check whether this roll's window
+--- should be concealed now that a feed row appeared or went away.
+local function refreshBlizzardRollFrames()
+	local override = G_RLF.RLF:GetModule(G_RLF.BlizzModule.LootRollFrames, true)
+	if override then
+		override:Refresh()
 	end
-	return 18
 end
 
 ---@param label string
@@ -171,7 +189,7 @@ function RLF_LootRollRowMixin:OnCancelRoll()
 end
 
 --- Transition to resolved results row. Enables normal row behaviors:
---- auto-hide (60s), hover pause, right-click dismiss.
+--- auto-hide (per-frame results display time), hover pause, right-click dismiss.
 function RLF_LootRollRowMixin:OnRollResolved()
 	if self._resolved then
 		return
@@ -181,7 +199,7 @@ function RLF_LootRollRowMixin:OnRollResolved()
 	-- Clear roll-row flag so normal hover/exit/right-click behaviors work
 	self._isLootRollRow = false
 
-	self.showForSeconds = RESULTS_DISPLAY_SECONDS
+	self.showForSeconds = self:_GetResultsDisplaySeconds()
 	self.hasElementFadeOverride = true
 	self:StyleExitAnimation()
 	self:ResetFadeOut()
@@ -633,12 +651,17 @@ function RLF_LootRollRowMixin:PostBootstrapFromElement(element)
 			self.ClickableButton:SetScript("OnLeave", origOnLeave)
 		end
 	end
+
+	-- Deferred: the frame registers this row under its key after bootstrap.
+	RunNextFrame(refreshBlizzardRollFrames)
 end
 
 function RLF_LootRollRowMixin:CleanupLootRoll()
 	-- Notify module to drop tracking now that row is being released
 	if self.rollID ~= nil and self.moduleRef then
 		self.moduleRef:_UntrackRoll(self.rollID)
+		-- Deferred: the frame unregisters this row's key after Reset().
+		RunNextFrame(refreshBlizzardRollFrames)
 	end
 
 	self.rollID = nil

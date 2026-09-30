@@ -57,6 +57,21 @@ function G_RLF.LootRolls:BuildConfigArgs(frameId, order)
 				end,
 				order = 2,
 			},
+			resultsDisplaySeconds = {
+				type = "range",
+				name = G_RLF.L["Results Display Time"],
+				desc = G_RLF.L["ResultsDisplayTimeDesc"],
+				min = 5,
+				max = 300,
+				step = 1,
+				get = function()
+					return fc().resultsDisplaySeconds
+				end,
+				set = function(_, value)
+					fc().resultsDisplaySeconds = value
+				end,
+				order = 3,
+			},
 		},
 	}
 end

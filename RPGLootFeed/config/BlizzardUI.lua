@@ -15,6 +15,8 @@ G_RLF.defaults.global.blizzOverrides = {
 	disableBlizzLootToasts = false,
 	disableBlizzMoneyAlerts = false,
 	bossBannerConfig = G_RLF.DisableBossBanner.ENABLED,
+	disableBlizzLootHistoryAutoShow = false,
+	hideBlizzLootRollFrames = false,
 }
 
 G_RLF.options.args.blizz = {
@@ -94,6 +96,39 @@ G_RLF.options.args.blizz = {
 						[G_RLF.DisableBossBanner.DISABLE_GROUP_LOOT] = G_RLF.L["Disable Party/Raid Loot"],
 					},
 					order = 5,
+				},
+				groupLoot = {
+					type = "header",
+					name = G_RLF.L["Group Loot"],
+					order = 6,
+				},
+				disableLootHistoryAutoShow = {
+					type = "toggle",
+					name = G_RLF.L["Disable Loot History Auto-Open"],
+					desc = G_RLF.L["DisableLootHistoryAutoOpenDesc"],
+					width = "full",
+					get = function()
+						return G_RLF.db.global.blizzOverrides.disableBlizzLootHistoryAutoShow
+					end,
+					set = function(_, value)
+						G_RLF.db.global.blizzOverrides.disableBlizzLootHistoryAutoShow = value
+						G_RLF.RLF:GetModule(G_RLF.BlizzModule.LootHistory):ApplyAutoShowSetting()
+					end,
+					order = 7,
+				},
+				hideLootRollFrames = {
+					type = "toggle",
+					name = G_RLF.L["Hide Blizzard Loot Roll Windows"],
+					desc = G_RLF.L["HideBlizzLootRollFramesDesc"],
+					width = "full",
+					get = function()
+						return G_RLF.db.global.blizzOverrides.hideBlizzLootRollFrames
+					end,
+					set = function(_, value)
+						G_RLF.db.global.blizzOverrides.hideBlizzLootRollFrames = value
+						G_RLF.RLF:GetModule(G_RLF.BlizzModule.LootRollFrames):Refresh()
+					end,
+					order = 8,
 				},
 			},
 		},
