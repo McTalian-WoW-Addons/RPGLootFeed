@@ -69,24 +69,74 @@ describe("LootHistory override", function()
 		end)
 	end)
 
-	it("uses LOOT_HISTORY_AUTO_SHOW on Classic's LootHistoryFrame", function()
-		historyFrame = newHistoryFrame()
-		_G.LootHistoryFrame = historyFrame
-		ns.db.global.blizzOverrides.disableBlizzLootHistoryAutoShow = true
+	describe("Classic (LootHistoryFrame + autoOpenLootHistory CVar)", function()
+		local cvars
 
-		LootHistoryOverride:ApplyAutoShowSetting()
+		before_each(function()
+			historyFrame = newHistoryFrame()
+			_G.LootHistoryFrame = historyFrame
+			cvars = { autoOpenLootHistory = "1" }
+			ns.WoWAPI = ns.WoWAPI or {}
+			ns.WoWAPI.LootHistory = {
+				GetCVar = function(name)
+					return cvars[name]
+				end,
+				SetCVar = function(name, value)
+					cvars[name] = value
+				end,
+			}
+			ns.db.global.blizzOverrides.lootHistoryCVarBackup = nil
+		end)
 
-		assert.stub(historyFrame.UnregisterEvent).was.called_with(historyFrame, "LOOT_HISTORY_AUTO_SHOW")
+		it("sets the CVar to 0 and never unregisters the event", function()
+			ns.db.global.blizzOverrides.disableBlizzLootHistoryAutoShow = true
+
+			LootHistoryOverride:ApplyAutoShowSetting()
+
+			assert.equal("0", cvars.autoOpenLootHistory)
+			assert.equal("1", ns.db.global.blizzOverrides.lootHistoryCVarBackup)
+			assert.stub(historyFrame.UnregisterEvent).was_not.called()
+		end)
+
+		it("keeps the original backup when applied twice", function()
+			ns.db.global.blizzOverrides.disableBlizzLootHistoryAutoShow = true
+
+			LootHistoryOverride:ApplyAutoShowSetting()
+			LootHistoryOverride:ApplyAutoShowSetting()
+
+			assert.equal("1", ns.db.global.blizzOverrides.lootHistoryCVarBackup)
+		end)
+
+		it("restores the player's CVar value when turned back off", function()
+			cvars.autoOpenLootHistory = "0"
+			ns.db.global.blizzOverrides.disableBlizzLootHistoryAutoShow = true
+			LootHistoryOverride:ApplyAutoShowSetting()
+			ns.db.global.blizzOverrides.disableBlizzLootHistoryAutoShow = false
+			LootHistoryOverride:ApplyAutoShowSetting()
+
+			assert.equal("0", cvars.autoOpenLootHistory)
+			assert.is_nil(ns.db.global.blizzOverrides.lootHistoryCVarBackup)
+		end)
+
+		it("leaves the CVar alone when the option was never enabled", function()
+			LootHistoryOverride:ApplyAutoShowSetting()
+
+			assert.equal("1", cvars.autoOpenLootHistory)
+		end)
+
+		it("is unsupported when the CVar does not exist", function()
+			cvars.autoOpenLootHistory = nil
+			ns.db.global.blizzOverrides.disableBlizzLootHistoryAutoShow = true
+
+			assert.is_false(LootHistoryOverride:IsAutoShowSupported())
+			LootHistoryOverride:ApplyAutoShowSetting()
+			assert.is_nil(cvars.autoOpenLootHistory)
+		end)
 	end)
 
 	describe("IsAutoShowSupported", function()
 		it("is false when the client has no loot history frame", function()
 			assert.is_false(LootHistoryOverride:IsAutoShowSupported())
-		end)
-
-		it("is true for Classic's LootHistoryFrame", function()
-			_G.LootHistoryFrame = newHistoryFrame()
-			assert.is_true(LootHistoryOverride:IsAutoShowSupported())
 		end)
 
 		it("is true for a mainline frame without ShouldAutoOpen", function()
