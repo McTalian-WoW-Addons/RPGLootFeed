@@ -78,4 +78,33 @@ describe("LootHistory override", function()
 
 		assert.stub(historyFrame.UnregisterEvent).was.called_with(historyFrame, "LOOT_HISTORY_AUTO_SHOW")
 	end)
+
+	describe("IsAutoShowSupported", function()
+		it("is false when the client has no loot history frame", function()
+			assert.is_false(LootHistoryOverride:IsAutoShowSupported())
+		end)
+
+		it("is true for Classic's LootHistoryFrame", function()
+			_G.LootHistoryFrame = newHistoryFrame()
+			assert.is_true(LootHistoryOverride:IsAutoShowSupported())
+		end)
+
+		it("is true for a mainline frame without ShouldAutoOpen", function()
+			_G.GroupLootHistoryFrame = newHistoryFrame()
+			assert.is_true(LootHistoryOverride:IsAutoShowSupported())
+		end)
+
+		it("is false when the mainline frame's ShouldAutoOpen returns false", function()
+			historyFrame = newHistoryFrame()
+			historyFrame.ShouldAutoOpen = function()
+				return false
+			end
+			_G.GroupLootHistoryFrame = historyFrame
+			ns.db.global.blizzOverrides.disableBlizzLootHistoryAutoShow = true
+
+			assert.is_false(LootHistoryOverride:IsAutoShowSupported())
+			LootHistoryOverride:ApplyAutoShowSetting()
+			assert.stub(historyFrame.UnregisterEvent).was_not.called()
+		end)
+	end)
 end)
