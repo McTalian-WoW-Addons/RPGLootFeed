@@ -107,6 +107,10 @@ G_RLF.options.args.blizz = {
 					name = G_RLF.L["Disable Loot History Auto-Open"],
 					desc = G_RLF.L["DisableLootHistoryAutoOpenDesc"],
 					width = "full",
+					disabled = function()
+						local override = G_RLF.RLF:GetModule(G_RLF.BlizzModule.LootHistory, true)
+						return not override or not override:IsAutoShowSupported()
+					end,
 					get = function()
 						return G_RLF.db.global.blizzOverrides.disableBlizzLootHistoryAutoShow
 					end,
