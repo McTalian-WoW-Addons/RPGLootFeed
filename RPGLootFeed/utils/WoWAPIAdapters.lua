@@ -339,6 +339,16 @@ G_RLF.WoWAPI.PartyLoot = {
 	end,
 }
 
+---@class RLF_WoWAPI_LootHistory
+G_RLF.WoWAPI.LootHistory = {
+	GetCVar = function(name)
+		return C_CVar.GetCVar(name)
+	end,
+	SetCVar = function(name, value)
+		return C_CVar.SetCVar(name, value)
+	end,
+}
+
 G_RLF.WoWAPI.LootRolls = {
 	GetLootRollItemInfo = function(rollID)
 		return GetLootRollItemInfo(rollID)
