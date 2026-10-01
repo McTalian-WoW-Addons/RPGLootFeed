@@ -9,6 +9,7 @@ local G_RLF = ns
 ---@field _rolled boolean
 ---@field _rollButtons table[]
 ---@field _rollDropInfo table|nil
+---@field _rollResultsSignature string|nil
 ---@field _rollTimerFrame Frame|nil
 ---@field _resolved boolean|nil
 RLF_LootRollRowMixin = {}
@@ -211,6 +212,8 @@ end
 --- Without LayoutPrimaryLine, ItemCountText overlaps PrimaryText.
 ---@param text string
 local function _ShowRollText(self, text)
+	-- Any text write invalidates SetRollResults' unchanged-results shortcut.
+	self._rollResultsSignature = nil
 	self.ItemCountText:SetText(text)
 	self.ItemCountText:Show()
 	self:LayoutPrimaryLine()
@@ -467,6 +470,50 @@ function RLF_LootRollRowMixin:SetRollResults(dropInfo)
 		self.moduleName
 	)
 
+	-- ItemCountText: winner, all passed, or current leader on the primary line
+	local rollText
+	if dropInfo.winner then
+		local classColor = _GetClassColor(dropInfo.winner.playerClass)
+		local rollTypeStr = ""
+		if dropInfo.winner.state == 0 or dropInfo.winner.state == 1 then
+			rollTypeStr = NEED
+		elseif dropInfo.winner.state == 2 then
+			rollTypeStr = TRANSMOGRIFICATION
+		elseif dropInfo.winner.state == 3 then
+			rollTypeStr = GREED
+		elseif dropInfo.winner.state == 6 then
+			rollTypeStr = ROLL_DISENCHANT
+		end
+
+		if dropInfo.winner.isSelf then
+			rollText = ("|cff00ff00You won! (%s, %d)|r"):format(rollTypeStr, dropInfo.winner.roll)
+		else
+			local name = classColor and classColor:WrapTextInColorCode(dropInfo.winner.playerName)
+				or dropInfo.winner.playerName
+			rollText = ("%s won (%s, %d)"):format(name, rollTypeStr, dropInfo.winner.roll)
+		end
+	elseif allPassed then
+		rollText = ("|cffb0b0b0%s|r"):format(LOOT_HISTORY_ALL_PASSED)
+	elseif self._rolled and dropInfo.currentLeader then
+		local classColor = _GetClassColor(dropInfo.currentLeader.playerClass)
+		local name = classColor and classColor:WrapTextInColorCode(dropInfo.currentLeader.playerName)
+			or dropInfo.currentLeader.playerName
+		rollText = ("%s leads (%d)"):format(name, dropInfo.currentLeader.roll)
+	end
+
+	local resolved = dropInfo.winner or allPassed or (waitingCount == 0 and self._rolled)
+
+	-- The 1s history poll re-sends identical results. Re-laying out the row
+	-- every tick moves the hover target under the cursor and drops the item
+	-- tooltip, so only touch the UI when what it shows has changed.
+	local signature = ("%d|%s"):format(waitingCount, rollText or "")
+	if signature == self._rollResultsSignature then
+		if resolved then
+			self:OnRollResolved()
+		end
+		return
+	end
+
 	-- Secondary text: waiting count with tooltip
 	local stylingDb = G_RLF.DbAccessor:Styling(self.frameType)
 	if waitingCount > 0 and stylingDb.enabledSecondaryRowText then
@@ -499,38 +546,13 @@ function RLF_LootRollRowMixin:SetRollResults(dropInfo)
 		)
 	end
 
-	-- ItemCountText: show winner, all passed, or current leader on the primary line
-	if dropInfo.winner then
-		local classColor = _GetClassColor(dropInfo.winner.playerClass)
-		local rollTypeStr = ""
-		if dropInfo.winner.state == 0 or dropInfo.winner.state == 1 then
-			rollTypeStr = NEED
-		elseif dropInfo.winner.state == 2 then
-			rollTypeStr = TRANSMOGRIFICATION
-		elseif dropInfo.winner.state == 3 then
-			rollTypeStr = GREED
-		elseif dropInfo.winner.state == 6 then
-			rollTypeStr = ROLL_DISENCHANT
-		end
-
-		if dropInfo.winner.isSelf then
-			_ShowRollText(self, ("|cff00ff00You won! (%s, %d)|r"):format(rollTypeStr, dropInfo.winner.roll))
-		else
-			local name = classColor and classColor:WrapTextInColorCode(dropInfo.winner.playerName)
-				or dropInfo.winner.playerName
-			_ShowRollText(self, ("%s won (%s, %d)"):format(name, rollTypeStr, dropInfo.winner.roll))
-		end
-	elseif allPassed then
-		_ShowRollText(self, ("|cffb0b0b0%s|r"):format(LOOT_HISTORY_ALL_PASSED))
-	elseif self._rolled and dropInfo.currentLeader then
-		local classColor = _GetClassColor(dropInfo.currentLeader.playerClass)
-		local name = classColor and classColor:WrapTextInColorCode(dropInfo.currentLeader.playerName)
-			or dropInfo.currentLeader.playerName
-		_ShowRollText(self, ("%s leads (%d)"):format(name, dropInfo.currentLeader.roll))
+	if rollText then
+		_ShowRollText(self, rollText)
 	end
+	self._rollResultsSignature = signature
 
 	-- Transition: resolved (winner/allPassed) vs unresolved (waiting)
-	if dropInfo.winner or allPassed or (waitingCount == 0 and self._rolled) then
+	if resolved then
 		-- Fully resolved results row
 		self:OnRollResolved()
 	end
@@ -683,6 +705,7 @@ function RLF_LootRollRowMixin:CleanupLootRoll()
 	self.ItemCountText:Hide()
 
 	self._rollDropInfo = nil
+	self._rollResultsSignature = nil
 	self.SecondaryText:SetScript("OnEnter", nil)
 	self.SecondaryText:SetScript("OnLeave", nil)
 
