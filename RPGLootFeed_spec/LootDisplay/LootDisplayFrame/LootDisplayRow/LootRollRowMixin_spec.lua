@@ -355,6 +355,43 @@ describe("RLF_LootRollRowMixin", function()
 			end)
 		end)
 
+		describe("when the poll re-sends identical results", function()
+			local function waitingResults()
+				return {
+					currentLeader = { playerName = "Carl", playerClass = "MAGE", roll = 33 },
+					rollInfos = { { playerName = "Carl", playerClass = "MAGE", state = 4 } },
+				}
+			end
+
+			it("does not re-layout the row, which would drop the hover tooltip", function()
+				row.rollID = 555
+				row._rolled = true
+				row:SetRollResults(waitingResults())
+				spy.on(row, "LayoutPrimaryLine")
+				spy.on(row, "LayoutSecondaryLine")
+				row.ItemCountText.SetText:clear()
+
+				row:SetRollResults(waitingResults())
+
+				assert.spy(row.LayoutPrimaryLine).was_not.called()
+				assert.spy(row.LayoutSecondaryLine).was_not.called()
+				assert.stub(row.ItemCountText.SetText).was_not.called()
+			end)
+
+			it("still refreshes when the results change", function()
+				row.rollID = 555
+				row._rolled = true
+				row:SetRollResults(waitingResults())
+				local changed = waitingResults()
+				changed.currentLeader.roll = 90
+				row.ItemCountText.SetText:clear()
+
+				row:SetRollResults(changed)
+
+				assert.stub(row.ItemCountText.SetText).was.called_with(row.ItemCountText, "Carl leads (90)")
+			end)
+		end)
+
 		describe("when a winner is decided", function()
 			it("shows the self-win text and resolves the row", function()
 				row:SetRollResults({
