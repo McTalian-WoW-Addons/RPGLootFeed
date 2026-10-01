@@ -13,7 +13,7 @@ local L = LibStub("AceLocale-3.0"):NewLocale(G_RLF.localeName, "enUS", true)
 
 --#region 1.38.0
 L["Beta"] = "Beta"
-L["BetaModuleNotice"] = "This feature is in beta: it works, but it is still changing, its options may move, and its saved settings may be reset by a future update. It is off by default. Feedback and bug reports are very welcome on GitHub."
+L["BetaModuleNotice"] = "This feature is in beta: it works, but it is still changing, its options may move, and its saved settings may be reset by a future update. It is off by default. Feedback and bug reports are very welcome on GitHub or Discord."
 L["Disable All Interaction With Rows"] = "Disable All Interaction With Rows"
 L["Disable Loot History Auto-Open"] = "Disable Loot History Auto-Open"
 L["DisableAllInteractionConfirm"] = "This will disable all mouse interaction with loot rows:|n|n|cFFFF0000•|r Loot rolls (Need/Greed/Pass)|n|cFFFF0000•|r Item tooltips on hover|n|cFFFF0000•|r Item clicks (open in-game link, dress up, chat link)|n|cFFFF0000•|r Right-click to dismiss rows|n|cFFFF0000•|r Hover highlight effects|n|cFFFF0000•|r Row lock on hover|n|nAre you sure you want to continue?"
