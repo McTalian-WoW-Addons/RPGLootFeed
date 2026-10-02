@@ -248,7 +248,7 @@ function RepUtils.GetFactionData(factionId, repType)
 		local fd
 		if RepUtils.IsGuild(repType) then
 			fd = C_Reputation.GetGuildFactionData()
-		elseif G_RLF:IsRetail() then
+		elseif G_RLF:HasModernReputationAPI() then
 			fd = C_Reputation.GetFactionDataByID(factionId)
 		-- So far up through MoP Classic, there is no C_Reputation.GetFactionDataByID
 		else

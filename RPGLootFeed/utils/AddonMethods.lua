@@ -47,6 +47,16 @@ function G_RLF:IsRetail()
 	return WOW_PROJECT_ID == WOW_PROJECT_MAINLINE
 end
 
+--- Capability checks: WoW Forever may not report WOW_PROJECT_MAINLINE yet exposes
+--- the modern C_Reputation / C_LootHistory APIs, so gate on the API, not the flavor.
+function G_RLF:HasModernReputationAPI()
+	return C_Reputation ~= nil and C_Reputation.GetFactionDataByIndex ~= nil
+end
+
+function G_RLF:HasModernLootHistoryAPI()
+	return C_LootHistory ~= nil and C_LootHistory.GetAllEncounterInfos ~= nil
+end
+
 function G_RLF:IsClassic()
 	return WOW_PROJECT_ID == WOW_PROJECT_CLASSIC
 end
@@ -63,15 +73,11 @@ function G_RLF:IsMoPClassic()
 	return WOW_PROJECT_ID == WOW_PROJECT_MISTS_CLASSIC
 end
 
---- WoW Forever runs the Mainline client (WOW_PROJECT_MAINLINE, C_* APIs) with
---- classic-era content (GetExpansionLevel() == 0) under a 1.x interface
---- version, so neither IsRetail() nor GetExpansionLevel() alone describes it.
+--- WoW Forever reports WOW_PROJECT_CAMELOT (18) as its project ID while exposing
+--- the modern C_* APIs with classic-era content (GetExpansionLevel() == 0), so
+--- neither IsRetail() nor GetExpansionLevel() alone describes it.
 function G_RLF:IsForever()
-	if WOW_PROJECT_ID ~= WOW_PROJECT_MAINLINE then
-		return false
-	end
-	local tocVersion = select(4, GetBuildInfo())
-	return tocVersion ~= nil and tocVersion < 20000
+	return WOW_PROJECT_CAMELOT ~= nil and WOW_PROJECT_ID == WOW_PROJECT_CAMELOT
 end
 
 --- Check if mouse cursor is truly over a frame considering z-order.
