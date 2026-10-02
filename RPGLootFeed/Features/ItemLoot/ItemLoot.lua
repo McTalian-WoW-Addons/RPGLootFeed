@@ -14,7 +14,6 @@ local ItemLoot = G_RLF.FeatureBase:new("ItemLoot", {
 		itemInfo = "ItemInfo",
 		itemLootApi = "WoWAPI.ItemLoot",
 		textTemplateEngine = "TextTemplateEngine",
-		isRetail = "IsRetail",
 		soundService = "SoundService",
 	},
 	logging = true,
@@ -664,12 +663,12 @@ function ItemLoot:CHAT_MSG_LOOT(eventName, ...)
 		return
 	end
 
-	local me = false
-	if self.isRetail() then
+	-- Sender names may carry a realm suffix that UnitName("player") lacks, and not
+	-- every flavor provides a GUID, so match the bare name first, then the GUID.
+	local sender = (playerName2 or ""):gsub("%-.+", "")
+	local me = sender == self.itemLootApi.UnitName("player")
+	if not me and guid and guid ~= "" then
 		me = guid == self.itemLootApi.GetPlayerGuid()
-	-- So far, MoP Classic and below doesn't work with GetPlayerGuid()
-	else
-		me = playerName2 == self.itemLootApi.UnitName("player")
 	end
 
 	-- Only process our own loot now, party loot is handled by PartyLoot module

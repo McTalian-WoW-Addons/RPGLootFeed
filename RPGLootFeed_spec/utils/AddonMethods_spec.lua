@@ -414,6 +414,15 @@ describe("AddonMethods", function()
 			it("is true for the Camelot project", function()
 				_G.WOW_PROJECT_ID = _G.WOW_PROJECT_CAMELOT
 				assert.is_true(ns:IsForever())
+			end)
+
+			it("counts as Retail (modern API surface) on Camelot", function()
+				_G.WOW_PROJECT_ID = _G.WOW_PROJECT_CAMELOT
+				assert.is_true(ns:IsRetail())
+			end)
+
+			it("is not Retail on Classic Era", function()
+				_G.WOW_PROJECT_ID = _G.WOW_PROJECT_CLASSIC
 				assert.is_false(ns:IsRetail())
 			end)
 

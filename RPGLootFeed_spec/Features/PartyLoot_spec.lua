@@ -444,6 +444,17 @@ describe("PartyLoot Module", function()
 			assert.spy(sendMessageSpy).was_not.called()
 		end)
 
+		it("ignores own loot when playerName2 carries a realm suffix", function()
+			PartyLoot.partyLootApi.UnitName = function(unit)
+				if unit == "player" then
+					return "TestPlayer", nil
+				end
+				return nil, nil
+			end
+			PartyLoot:CHAT_MSG_LOOT("CHAT_MSG_LOOT", chatMsg, "TestPlayer", nil, nil, "TestPlayer-SomeRealm")
+			assert.spy(sendMessageSpy).was_not.called()
+		end)
+
 		it("ignores messages from players not in the nameUnitMap", function()
 			PartyLoot:CHAT_MSG_LOOT("CHAT_MSG_LOOT", chatMsg, "Stranger")
 			assert.spy(ns.LogDebug).was.called(1)

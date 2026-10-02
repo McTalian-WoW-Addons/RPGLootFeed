@@ -244,7 +244,7 @@ G_RLF.WoWAPI.ItemLoot = {
 		return issecretvalue and issecretvalue(msg)
 	end,
 	GetPlayerGuid = function()
-		return GetPlayerGuid()
+		return GetPlayerGuid and GetPlayerGuid()
 	end,
 	GetInventoryItemLink = function(unit, slot)
 		return GetInventoryItemLink(unit, slot)
@@ -326,7 +326,7 @@ G_RLF.WoWAPI.PartyLoot = {
 		return GetExpansionLevel()
 	end,
 	GetPlayerGuid = function()
-		return GetPlayerGuid()
+		return GetPlayerGuid and GetPlayerGuid()
 	end,
 	GetClassColor = function(className)
 		return C_ClassColor and C_ClassColor.GetClassColor and C_ClassColor.GetClassColor(className)
