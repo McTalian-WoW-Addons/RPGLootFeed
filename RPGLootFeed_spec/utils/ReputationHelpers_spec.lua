@@ -27,6 +27,9 @@ describe("ReputationHelpers", function()
 			IsRetail = function()
 				return true
 			end,
+			HasModernReputationAPI = function()
+				return true
+			end,
 			AtlasIconCoefficients = {},
 			DbAccessor = {
 				Styling = function()

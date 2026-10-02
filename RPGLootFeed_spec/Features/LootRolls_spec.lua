@@ -78,6 +78,9 @@ describe("LootRolls Module", function()
 			IsRetail = function()
 				return true
 			end,
+			HasModernLootHistoryAPI = function()
+				return true
+			end,
 			DbAccessor = {
 				IsFeatureNeededByAnyFrame = function()
 					return true

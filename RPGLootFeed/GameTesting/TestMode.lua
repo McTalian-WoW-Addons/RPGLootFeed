@@ -164,7 +164,7 @@ local function initializeTestFactions()
 	while j <= numTestFactions and i < maxFactionIndex do
 		i = i + 1
 		local factionInfo
-		if G_RLF:IsRetail() then
+		if G_RLF:HasModernReputationAPI() then
 			factionInfo = C_Reputation.GetFactionDataByIndex(i)
 		-- So far up through MoP Classic, there is no C_Reputation.GetFactionDataByIndex
 		else

@@ -102,7 +102,7 @@ function LootRolls:_EnsurePollTicker()
 	if self._pollTicker then
 		return
 	end
-	local pollFn = G_RLF:IsRetail() and self.PollLootHistory or self.PollClassicLootHistory
+	local pollFn = G_RLF:HasModernLootHistoryAPI() and self.PollLootHistory or self.PollClassicLootHistory
 	self._pollTicker = C_Timer.NewTicker(1, function()
 		pollFn(self)
 	end)
@@ -643,7 +643,7 @@ function LootRolls:OnDisable()
 	self:UnregisterEvent("LOOT_ITEM_ROLL_WON")
 	self:UnregisterEvent("LOOT_HISTORY_UPDATE_DROP")
 	self:UnregisterEvent("LOOT_HISTORY_UPDATE_ENCOUNTER")
-	if not G_RLF:IsRetail() then
+	if not G_RLF:HasModernLootHistoryAPI() then
 		self:UnregisterEvent("LOOT_HISTORY_ROLL_CHANGED")
 		self:UnregisterEvent("LOOT_HISTORY_ROLL_COMPLETE")
 	end
@@ -668,7 +668,7 @@ function LootRolls:OnEnable()
 	self:RegisterEvent("LOOT_ROLLS_COMPLETE")
 	self:RegisterEvent("LOOT_ITEM_ROLL_WON")
 
-	if not G_RLF:IsRetail() then
+	if not G_RLF:HasModernLootHistoryAPI() then
 		-- Classic Era, TBC Anniversary, MoP Classic: same older, index-based
 		-- C_LootHistory shape (GetNumItems/GetItem/GetPlayerInfo).
 		self:RegisterEvent("LOOT_HISTORY_ROLL_CHANGED")
