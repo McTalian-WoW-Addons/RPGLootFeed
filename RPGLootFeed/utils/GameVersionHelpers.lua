@@ -7,6 +7,7 @@ local G_RLF = ns
 ---@class ClassicToRetail
 ---@field ConvertFactionInfoByID fun(s: ClassicToRetail, id: number): table | nil
 ---@field ConvertFactionInfoByIndex fun(s: ClassicToRetail, index: number): table | nil
+---@field InstallItemButtonFallbacks fun(s: ClassicToRetail)
 G_RLF.ClassicToRetail = {}
 
 ---Convert faction info from Classic to Retail format
@@ -47,12 +48,36 @@ function G_RLF.ClassicToRetail:ConvertFactionInfoByIndex(index)
 	return convertFactionInfo(legacyFactionData)
 end
 
--- So far up through MoP Classic, ClearItemButtonOverlay is not defined (but is called by Blizzard code)
-if not G_RLF:IsRetail() then
-	if not ClearItemButtonOverlay then
-		function ClearItemButtonOverlay(button)
-			-- Dummy function to avoid errors
+--- Define ItemButtonMixin:SetItemButtonTexture/SetItemButtonQuality only where
+--- the client lacks them (Classic flavors through MoP Classic). Existing
+--- implementations are never replaced: ItemButtonMixin is shared with every
+--- addon's item buttons (e.g. Baganator), so overriding it globally breaks
+--- their quality borders.
+function G_RLF.ClassicToRetail:InstallItemButtonFallbacks()
+	if not ItemButtonMixin then
+		return
+	end
+
+	if not ItemButtonMixin.SetItemButtonTexture then
+		ItemButtonMixin.SetItemButtonTexture = function(button, texture)
+			button.icon:SetTexture(texture)
 		end
+	end
+
+	if not ItemButtonMixin.SetItemButtonQuality then
+		ItemButtonMixin.SetItemButtonQuality = function(button, quality, itemIDOrLink)
+			if quality and button.IconBorder then
+				local r, g, b = C_Item.GetItemQualityColor(quality)
+				button.IconBorder:SetVertexColor(r, g, b)
+			end
+		end
+	end
+end
+
+-- So far up through MoP Classic, ClearItemButtonOverlay is not defined (but is called by Blizzard code)
+if not ClearItemButtonOverlay then
+	function ClearItemButtonOverlay(button)
+		-- Dummy function to avoid errors
 	end
 end
 
