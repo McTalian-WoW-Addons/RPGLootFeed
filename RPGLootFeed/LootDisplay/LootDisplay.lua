@@ -130,37 +130,7 @@ function LootDisplay:OnEnable()
 		self:OnPlayerCombatChange()
 	end)
 
-	-- So far up through MoP Classic, some/all of these methods are not defined
-	if not G_RLF:IsRetail() then
-		if not ItemButtonMixin.SetItemButtonTexture then
-			ItemButtonMixin.SetItemButtonTexture = function(self, texture) end
-		end
-
-		self:RawHook(ItemButtonMixin, "SetItemButtonTexture", function(self, texture)
-			if SetItemButtonTexture_Base then
-				SetItemButtonTexture_Base(texture)
-			else
-				-- Handle the case where SetItemButtonTexture_Base doesn't exist
-				self.icon:SetTexture(texture)
-			end
-		end, true)
-
-		if not ItemButtonMixin.SetItemButtonQuality then
-			ItemButtonMixin.SetItemButtonQuality = function(self, quality, itemIDOrLink) end
-		end
-
-		self:RawHook(ItemButtonMixin, "SetItemButtonQuality", function(self, quality, itemIDOrLink)
-			if SetItemButtonQuality_Base then
-				SetItemButtonQuality_Base(quality, itemIDOrLink)
-			else
-				if quality then
-					-- Handle the case where SetItemButtonQuality_Base doesn't exist
-					local r, g, b = C_Item.GetItemQualityColor(quality)
-					self.IconBorder:SetVertexColor(r, g, b)
-				end
-			end
-		end, true)
-	end
+	G_RLF.ClassicToRetail:InstallItemButtonFallbacks()
 end
 
 function LootDisplay:OnDisableAllInteractionChange()

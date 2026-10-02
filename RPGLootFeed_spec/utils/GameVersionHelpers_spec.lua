@@ -61,14 +61,14 @@ describe("GameVersionHelpers", function()
 			assert.are.equal("test", ClearItemButtonOverlay())
 		end)
 
-		it("does not attempt to stub ClearItemButtonOverlay in retail version", function()
+		it("stubs ClearItemButtonOverlay whenever it is missing, regardless of flavor", function()
 			stubIsClassic.returns(false)
 			stubIsCataClassic.returns(false)
 			stubIsRetail.returns(true)
 
 			assert.is_nil(ClearItemButtonOverlay)
 			assert(loadfile("RPGLootFeed/utils/GameVersionHelpers.lua"))("TestAddon", ns)
-			assert.is_nil(ClearItemButtonOverlay)
+			assert.is_function(ClearItemButtonOverlay)
 		end)
 	end)
 
@@ -132,6 +132,60 @@ describe("GameVersionHelpers", function()
 			assert.equal(false, info.canSetInactive)
 			assert.equal(false, info.hasBonusRepGain)
 			assert.equal(false, info.isAccountWide)
+		end)
+	end)
+
+	describe("InstallItemButtonFallbacks", function()
+		local ns, origMixin, origC_Item
+
+		before_each(function()
+			ns = nsMocks:unitLoadedAfter(nsMocks.LoadSections.All)
+			assert(loadfile("RPGLootFeed/utils/GameVersionHelpers.lua"))("TestAddon", ns)
+			origMixin = _G.ItemButtonMixin
+			origC_Item = _G.C_Item
+		end)
+
+		after_each(function()
+			_G.ItemButtonMixin = origMixin
+			_G.C_Item = origC_Item
+		end)
+
+		it("never replaces ItemButtonMixin methods the client already provides", function()
+			local texture = function() end
+			local quality = function() end
+			_G.ItemButtonMixin = { SetItemButtonTexture = texture, SetItemButtonQuality = quality }
+
+			ns.ClassicToRetail:InstallItemButtonFallbacks()
+
+			assert.equal(texture, _G.ItemButtonMixin.SetItemButtonTexture)
+			assert.equal(quality, _G.ItemButtonMixin.SetItemButtonQuality)
+		end)
+
+		it("defines working fallbacks when the methods are missing", function()
+			_G.ItemButtonMixin = {}
+			_G.C_Item = {
+				GetItemQualityColor = function()
+					return 0.1, 0.2, 0.3
+				end,
+			}
+			local button = {
+				icon = { SetTexture = spy.new(function() end) },
+				IconBorder = { SetVertexColor = spy.new(function() end) },
+			}
+
+			ns.ClassicToRetail:InstallItemButtonFallbacks()
+			_G.ItemButtonMixin.SetItemButtonTexture(button, 123)
+			_G.ItemButtonMixin.SetItemButtonQuality(button, 4, "link")
+
+			assert.spy(button.icon.SetTexture).was.called_with(button.icon, 123)
+			assert.spy(button.IconBorder.SetVertexColor).was.called_with(button.IconBorder, 0.1, 0.2, 0.3)
+		end)
+
+		it("does nothing when ItemButtonMixin does not exist", function()
+			_G.ItemButtonMixin = nil
+			assert.has_no.errors(function()
+				ns.ClassicToRetail:InstallItemButtonFallbacks()
+			end)
 		end)
 	end)
 end)
