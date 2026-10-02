@@ -488,6 +488,49 @@ describe("LootRolls Module", function()
 			assert.are.equal(1, LootRolls._historyMatchMap[42][7])
 		end)
 
+		it("matches Forever drops that name the identifier lootListKey", function()
+			local row = makeRow()
+			ns.LootDisplay.GetAllFrames = framesFrom({ makeFrame({ ["LootRoll_1"] = row }) })
+			LootRolls._activeRolls = { [1] = { key = "LootRoll_1", itemLink = "itemlink" } }
+			LootRolls._adapter.GetItemInfoInstant = function()
+				return 18803
+			end
+			LootRolls._adapter.GetAllEncounterInfos = function()
+				return { { encounterID = 0 } }
+			end
+			local forever = { lootListKey = 5, itemHyperlink = "itemlink" }
+			LootRolls._adapter.GetSortedDropsForEncounter = function()
+				return { forever }
+			end
+
+			assert.has_no.errors(function()
+				LootRolls:PollLootHistory()
+			end)
+
+			assert.stub(row.SetRollResults).was.called_with(row, forever)
+			assert.are.equal(1, LootRolls._historyMatchMap[0][5])
+		end)
+
+		it("ignores drops that carry no identifier instead of erroring", function()
+			local row = makeRow()
+			ns.LootDisplay.GetAllFrames = framesFrom({ makeFrame({ ["LootRoll_1"] = row }) })
+			LootRolls._activeRolls = { [1] = { key = "LootRoll_1", itemLink = "itemlink" } }
+			LootRolls._adapter.GetItemInfoInstant = function()
+				return 18803
+			end
+			LootRolls._adapter.GetAllEncounterInfos = function()
+				return { { encounterID = 42 } }
+			end
+			LootRolls._adapter.GetSortedDropsForEncounter = function()
+				return { { itemHyperlink = "itemlink" } }
+			end
+
+			assert.has_no.errors(function()
+				LootRolls:PollLootHistory()
+			end)
+			assert.stub(row.SetRollResults).was_not.called()
+		end)
+
 		it("skips a drop that's already claimed by another roll", function()
 			local row1 = makeRow()
 			ns.LootDisplay.GetAllFrames = framesFrom({ makeFrame({ ["LootRoll_1"] = row1 }) })
