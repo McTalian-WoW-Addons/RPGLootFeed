@@ -43,8 +43,11 @@ function G_RLF:Print(...)
 	G_RLF.RLF:Print(...)
 end
 
+--- True for Mainline and for WoW Forever. Forever reports WOW_PROJECT_CAMELOT but
+--- runs the Mainline client (C_* APIs), so "Retail" here means "modern API
+--- surface". Use IsForever() to carve out Forever's classic-era content.
 function G_RLF:IsRetail()
-	return WOW_PROJECT_ID == WOW_PROJECT_MAINLINE
+	return WOW_PROJECT_ID == WOW_PROJECT_MAINLINE or G_RLF:IsForever()
 end
 
 --- Capability checks: WoW Forever may not report WOW_PROJECT_MAINLINE yet exposes

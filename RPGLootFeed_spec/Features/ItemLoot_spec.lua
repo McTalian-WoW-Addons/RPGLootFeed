@@ -661,6 +661,57 @@ describe("ItemLoot Module", function()
 			assert.spy(showSpy).was.called(1)
 		end)
 
+		it("processes own loot when playerName2 carries a realm suffix", function()
+			ItemLoot.itemLootApi.UnitName = function()
+				return "MyChar"
+			end
+			local showSpy = spy.on(ItemLoot, "ShowItemLoot")
+			local msg = "You receive loot: " .. ITEM_LINK
+
+			ItemLoot:CHAT_MSG_LOOT(
+				"CHAT_MSG_LOOT",
+				msg,
+				"Player",
+				nil,
+				nil,
+				"MyChar-SomeRealm",
+				nil,
+				nil,
+				nil,
+				nil,
+				nil,
+				nil
+			)
+
+			assert.spy(showSpy).was.called(1)
+		end)
+
+		it("processes own loot by GUID when the name does not match", function()
+			ItemLoot.itemLootApi.UnitName = function()
+				return "MyChar"
+			end
+			local showSpy = spy.on(ItemLoot, "ShowItemLoot")
+			local msg = "You receive loot: " .. ITEM_LINK
+
+			ItemLoot:CHAT_MSG_LOOT(
+				"CHAT_MSG_LOOT",
+				msg,
+				"Player",
+				nil,
+				nil,
+				"Charname Xyz",
+				nil,
+				nil,
+				nil,
+				nil,
+				nil,
+				nil,
+				GUID
+			)
+
+			assert.spy(showSpy).was.called(1)
+		end)
+
 		it("passes correct itemLink to ShowItemLoot for single-item message", function()
 			ItemLoot.isRetail = function()
 				return true
