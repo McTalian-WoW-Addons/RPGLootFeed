@@ -161,12 +161,12 @@ function StylingBase.CreateTextAlignmentSelect(handler)
 		order = 2,
 		values = {
 			[G_RLF.TextAlignment.LEFT] = G_RLF.L["Left"],
-			-- [G_RLF.TextAlignment.CENTER] = G_RLF.L["Center"],
+			[G_RLF.TextAlignment.CENTER] = G_RLF.L["Center"],
 			[G_RLF.TextAlignment.RIGHT] = G_RLF.L["Right"],
 		},
 		sorting = {
 			G_RLF.TextAlignment.LEFT,
-			-- G_RLF.TextAlignment.CENTER,
+			G_RLF.TextAlignment.CENTER,
 			G_RLF.TextAlignment.RIGHT,
 		},
 	})
