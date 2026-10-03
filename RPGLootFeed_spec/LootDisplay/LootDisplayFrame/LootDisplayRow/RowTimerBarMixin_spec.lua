@@ -63,6 +63,11 @@ describe("RLF_RowTimerBarMixin", function()
 			SetStatusBarColor = function(_, r, g, b, a)
 				styleCalls.color = { r, g, b, a }
 			end,
+			Track = {
+				SetVertexColor = function(_, r, g, b, a)
+					styleCalls.trackColor = { r, g, b, a }
+				end,
+			},
 			SetMinMaxValues = function() end,
 			SetValue = function() end,
 			SetFillStyle = function(_, direction)
@@ -139,6 +144,35 @@ describe("RLF_RowTimerBarMixin", function()
 		-- Regression: the config's "NORMAL" is not a StatusBarFillStyle, so
 		-- passing drainDirection straight to SetFillStyle errored inside the
 		-- widget for anyone who picked "Left to Right".
+		-- Regression: issue #606. The track used to be the same colour as the
+		-- fill, so the drained part was indistinguishable from the remaining part.
+		it("tints the track from the bar colour at a lower alpha than the fill", function()
+			row:StyleTimerBar()
+
+			local r, g, b, a = unpack(styleCalls.trackColor)
+			assert.are.same({ 0.5, 0.5, 0.5 }, { r, g, b })
+			assert.is_true(a < styleCalls.color[4])
+			assert.is_true(a > 0)
+		end)
+
+		it("follows a custom bar colour and alpha", function()
+			stub(ns.DbAccessor, "Animations").returns({
+				timerBar = { enabled = true, color = { 1, 0, 0 }, alpha = 1 },
+				exit = { disable = false },
+			})
+
+			row:StyleTimerBar()
+
+			assert.are.same({ 1, 0, 0, 0.3 }, styleCalls.trackColor)
+		end)
+
+		it("styles a bar that has no Track texture without errors", function()
+			row.TimerBar.Track = nil
+			assert.has_no.errors(function()
+				row:StyleTimerBar()
+			end)
+		end)
+
 		it("maps the left-to-right option to a valid fill style", function()
 			stub(ns.DbAccessor, "Animations").returns({
 				timerBar = { enabled = true, drainDirection = "NORMAL" },
