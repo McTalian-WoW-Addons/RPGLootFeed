@@ -707,7 +707,7 @@ end
 
 function RLF_RowAnimationMixin:HandlerOnRightClick()
 	self:SetScript("OnMouseUp", function(_, button)
-		if G_RLF.db.global.interactions.disableAllInteraction then
+		if not self:IsInteractionAllowed("rightClickDismiss") then
 			return
 		end
 		if button == "RightButton" and not self.isHistoryMode and not self._isLootRollRow then
@@ -796,7 +796,7 @@ function RLF_RowAnimationMixin:SetUpHoverEffect()
 
 	-- OnEnter: Play fade-in animation; show sample row tooltip if present
 	self:SetScript("OnEnter", function()
-		if G_RLF.db.global.interactions.disableAllInteraction then
+		if not self:IsRowHoverAllowed() then
 			return
 		end
 		---@type RLF_ConfigAnimations
@@ -854,7 +854,7 @@ function RLF_RowAnimationMixin:SetUpHoverEffect()
 
 	-- OnLeave: Play fade-out animation; hide sample row tooltip if present
 	self:SetScript("OnLeave", function()
-		if G_RLF.db.global.interactions.disableAllInteraction then
+		if not self:IsRowHoverAllowed() then
 			return
 		end
 		-- Prevent OnLeave from firing if the mouse is still over the row or any of its children
@@ -913,7 +913,7 @@ end
 -- Delegates to G_RLF:MouseIsOverFrame for z-order-aware check via GetMouseFoci
 -- (Retail Dragonflight+) with IsMouseOver() fallback on Classic.
 function RLF_RowAnimationMixin:HoverWatchUpdate()
-	if G_RLF.db.global.interactions.disableAllInteraction then
+	if not self:IsRowHoverAllowed() then
 		self:SetScript("OnUpdate", nil)
 		return
 	end
@@ -930,7 +930,7 @@ end
 -- cleanup logic from the OnLeave closure below so the OnUpdate watcher can
 -- trigger it without relying on OnLeave to fire.
 function RLF_RowAnimationMixin:ForceMouseLeave()
-	if G_RLF.db.global.interactions.disableAllInteraction then
+	if not self:IsRowHoverAllowed() then
 		return
 	end
 	if not self.hasMouseOver then

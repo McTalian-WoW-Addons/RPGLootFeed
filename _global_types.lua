@@ -127,10 +127,10 @@
 ---@field reposition RLF_ConfigReposition
 
 ---@class RLF_ConfigFrameInteractions
+---@field override boolean Use this frame's toggles instead of the global interaction settings.
 ---@field tooltips boolean Show item tooltips on hover.
 ---@field itemClicks boolean Item clicks (item link, dress up, chat link).
 ---@field rightClickDismiss boolean Right-click dismisses a row.
----@field hoverHighlight boolean Hover highlight effect.
 ---@field pinOnHover boolean Lock row position while hovered.
 ---@field rollButtons boolean Loot roll Need/Greed/Pass buttons respond to the mouse.
 

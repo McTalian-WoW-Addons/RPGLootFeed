@@ -41,18 +41,35 @@ function DbAccessor:Interactions(frameId)
 	return G_RLF.db.global.frames[frameId].interactions
 end
 
+--- Whether a mouse interaction is allowed by the global settings.
+--- disableAllInteraction is the baseline "everything off"; tooltips and pinOnHover
+--- keep their long-standing global homes.
+--- @param key string One of: tooltips, itemClicks, rightClickDismiss, pinOnHover, rollButtons
+--- @return boolean
+function DbAccessor:GlobalInteractionAllowed(key)
+	local global = G_RLF.db.global
+	if global.interactions.disableAllInteraction then
+		return false
+	end
+	if key == "tooltips" then
+		return global.tooltips.hover.enabled ~= false
+	end
+	return global.interactions[key] ~= false
+end
+
 --- Whether a mouse interaction is allowed on a frame's rows.
---- The global disableAllInteraction switch wins; a missing frame or key counts as allowed.
+--- A frame that overrides the global settings uses its own toggles (even past
+--- disableAllInteraction); otherwise the global settings apply.
 --- @param frameId G_RLF.Frames
 --- @param key string One of the RLF_ConfigFrameInteractions keys
 --- @return boolean
 function DbAccessor:InteractionAllowed(frameId, key)
-	if G_RLF.db.global.interactions.disableAllInteraction then
-		return false
-	end
 	local frame = G_RLF.db.global.frames[frameId]
 	local interactions = frame and frame.interactions
-	return not interactions or interactions[key] ~= false
+	if interactions and interactions.override then
+		return interactions[key] ~= false
+	end
+	return self:GlobalInteractionAllowed(key)
 end
 
 --- Get a feature's per-frame configuration.

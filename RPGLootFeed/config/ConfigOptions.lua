@@ -331,10 +331,10 @@ G_RLF.defaults = {
 			["**"] = {
 				name = "",
 				interactions = {
+					override = false,
 					tooltips = true,
 					itemClicks = true,
 					rightClickDismiss = true,
-					hoverHighlight = true,
 					pinOnHover = true,
 					rollButtons = true,
 				},

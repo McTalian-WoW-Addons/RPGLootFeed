@@ -288,8 +288,9 @@ end
 --- Called when combat state changes.
 --- @param inCombat boolean
 function LootDisplayFrameMixin:SetCombatClickThrough(inCombat)
-	local shouldBeClickThrough = inCombat and G_RLF.db.global.interactions.disableMouseInCombat
-	self.isClickThrough = shouldBeClickThrough or G_RLF.db.global.interactions.disableAllInteraction
+	-- disableAllInteraction is resolved per row (a frame can override it), so only
+	-- the combat setting makes the whole frame click-through.
+	self.isClickThrough = inCombat and G_RLF.db.global.interactions.disableMouseInCombat
 	for row in self.rows:iterate() do
 		---@cast row RLF_LootDisplayRow
 		row:SetClickThrough(self.isClickThrough)
@@ -298,7 +299,7 @@ end
 
 function LootDisplayFrameMixin:SetDisableAllInteraction(disabled)
 	local inCombat = UnitAffectingCombat("player")
-	self.isClickThrough = disabled or (inCombat and G_RLF.db.global.interactions.disableMouseInCombat)
+	self.isClickThrough = inCombat and G_RLF.db.global.interactions.disableMouseInCombat
 	for row in self.rows:iterate() do
 		---@cast row RLF_LootDisplayRow
 		row:SetClickThrough(self.isClickThrough)

@@ -142,6 +142,16 @@ function LootDisplay:OnDisableAllInteractionChange()
 	end
 end
 
+--- Re-apply interaction settings to every frame's active rows
+function LootDisplay:UpdateAllInteractions()
+	local inCombat = UnitAffectingCombat("player")
+	for _, frame in pairs(lootFrames) do
+		if frame then
+			frame:SetCombatClickThrough(inCombat)
+		end
+	end
+end
+
 function LootDisplay:OnPlayerCombatChange()
 	local inCombat = UnitAffectingCombat("player")
 	for _, frame in pairs(lootFrames) do

@@ -216,14 +216,28 @@ function LootDisplayRowMixin:Reset()
 end
 
 --- Whether a per-frame mouse interaction is allowed on this row.
---- History rows ignore per-frame toggles (only the global disable applies).
+--- History rows ignore per-frame overrides (only the global settings apply).
 --- @param key string One of the RLF_ConfigFrameInteractions keys
 --- @return boolean
 function LootDisplayRowMixin:IsInteractionAllowed(key)
 	if self.isHistoryMode then
-		return not G_RLF.db.global.interactions.disableAllInteraction
+		return G_RLF.DbAccessor:GlobalInteractionAllowed(key)
 	end
 	return G_RLF.DbAccessor:InteractionAllowed(self.frameType, key)
+end
+
+--- Whether hover handling (highlight, exit-animation pause, tooltips, pin) runs on this row at all.
+--- disableAllInteraction turns it off unless the row's frame overrides the global settings.
+--- @return boolean
+function LootDisplayRowMixin:IsRowHoverAllowed()
+	if not G_RLF.db.global.interactions.disableAllInteraction then
+		return true
+	end
+	if self.isHistoryMode then
+		return false
+	end
+	local frame = G_RLF.db.global.frames[self.frameType]
+	return frame ~= nil and frame.interactions ~= nil and frame.interactions.override == true
 end
 
 --- Enable or disable mouse interaction on this row and its interactive children.
@@ -234,8 +248,10 @@ function LootDisplayRowMixin:SetClickThrough(enabled)
 	-- would make the whole transparent feedWidth rectangle swallow clicks and block
 	-- camera drag.  ClickableButton and Icon are content-sized and keep full mouse
 	-- when any of the interactions they serve is allowed.
+	local hoverDb = G_RLF.DbAccessor:Animations(self.frameType).hover
 	local rowMotion = not enabled
-		and (self:IsInteractionAllowed("hoverHighlight") or self:IsInteractionAllowed("pinOnHover"))
+		and self:IsRowHoverAllowed()
+		and ((hoverDb and hoverDb.enabled) or self:IsInteractionAllowed("pinOnHover"))
 	local childMouse = not enabled
 		and (
 			self:IsInteractionAllowed("tooltips")
@@ -305,7 +321,7 @@ function LootDisplayRowMixin:PinPosition(frame)
 	if self.isPinned then
 		return
 	end
-	if not G_RLF.db.global.interactions.pinOnHover or not self:IsInteractionAllowed("pinOnHover") then
+	if not self:IsInteractionAllowed("pinOnHover") then
 		return
 	end
 
