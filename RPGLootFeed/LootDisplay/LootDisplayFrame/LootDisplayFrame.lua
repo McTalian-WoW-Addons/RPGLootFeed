@@ -339,6 +339,8 @@ function LootDisplayFrameMixin:ReleasePin(row)
 				-- Fallback: restore chain anchor (safe, old behaviour)
 				r:UpdatePosition(self)
 			end
+			-- The shift paused the glow; its OnFinished will not run now.
+			r:ResumeGlow()
 			r.PrimaryLineLayout:SetAlpha(1)
 			r.SecondaryLineLayout:SetAlpha(1)
 			r._textHiddenForShift = false

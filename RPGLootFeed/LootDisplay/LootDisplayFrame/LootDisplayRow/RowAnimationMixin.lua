@@ -64,10 +64,8 @@ function RLF_RowAnimationMixin:StopAllAnimations()
 	end
 	if self.ShiftAnimation then
 		self.ShiftAnimation:Stop()
-		-- If the glow was paused for a shift that got interrupted, restart it
-		if self._glowWasPlaying and self.glowAnimationGroup then
-			self.glowAnimationGroup:Play()
-		end
+		-- This only runs when a row is released (Reset), so do not restart a glow
+		-- that a shift had paused; just clear the flag so a pooled row starts clean.
 		self._glowWasPlaying = false
 	end
 
@@ -289,10 +287,7 @@ function RLF_RowAnimationMixin:StyleShiftAnimation()
 			-- Preserve correct frame level so borders render properly
 			self:SetFrameLevel(self._shiftFinalFrameLevel)
 			-- Restart glow animation if it was playing before the shift
-			if self._glowWasPlaying and self.glowAnimationGroup then
-				self.glowAnimationGroup:Play()
-				self._glowWasPlaying = false
-			end
+			self:ResumeGlow()
 			-- Decrement shift counter
 			frame.shiftingRowCount = math.max(0, (frame.shiftingRowCount or 0) - 1)
 			if frame.shiftingRowCount == 0 then
@@ -348,12 +343,10 @@ function RLF_RowAnimationMixin:AnimateShift(yDelta, oldEdgeY)
 	self._shiftFinalFrameLevel = self:GetFrameLevel()
 
 	-- Pause the glow Scale animation so it doesn't accumulate transforms
-	-- across the anchor change.  It will be restarted in OnFinished.
-	local glowWasPlaying = self.glowAnimationGroup and self.glowAnimationGroup:IsPlaying()
-	if glowWasPlaying then
-		self.glowAnimationGroup:Stop()
-	end
-	self._glowWasPlaying = glowWasPlaying
+	-- across the anchor change.  It is resumed in OnFinished.  (PauseGlow keeps
+	-- the "was playing" flag sticky, so a second shift that interrupts the first
+	-- cannot lose it.)
+	self:PauseGlow()
 
 	-- Temporarily anchor to the parent frame at the old visual position
 	self:ClearAllPoints()
@@ -978,6 +971,35 @@ function RLF_RowAnimationMixin:ForceMouseLeave()
 	end
 end
 
+--- Whether this row is mid shift-animation (its anchors are about to change).
+--- @return boolean
+function RLF_RowAnimationMixin:IsShifting()
+	return self.ShiftAnimation ~= nil and self.ShiftAnimation:IsPlaying() == true
+end
+
+--- Stop the looping icon glow before re-anchoring this row.  A running Scale
+--- animation accumulates transforms across an anchor change (the glow "cascades"
+--- larger), so every re-anchor pauses it first.  The "was playing" flag is sticky
+--- until ResumeGlow, so nested or interrupted pauses cannot lose it.
+function RLF_RowAnimationMixin:PauseGlow()
+	if self.glowAnimationGroup and self.glowAnimationGroup:IsPlaying() then
+		self.glowAnimationGroup:Stop()
+		self._glowWasPlaying = true
+	end
+end
+
+--- Restart the icon glow after a re-anchor if PauseGlow stopped it.  Stays paused
+--- while the row is still shifting; the shift's OnFinished resumes it.
+function RLF_RowAnimationMixin:ResumeGlow()
+	if not self._glowWasPlaying or self:IsShifting() then
+		return
+	end
+	self._glowWasPlaying = false
+	if self.glowAnimationGroup then
+		self.glowAnimationGroup:Play()
+	end
+end
+
 function RLF_RowAnimationMixin:HighlightIcon()
 	if self.highlight then
 		RunNextFrame(function()
@@ -987,7 +1009,13 @@ function RLF_RowAnimationMixin:HighlightIcon()
 				-- Show the glow texture and play the animation
 				self.glowTexture:SetAlpha(0.75)
 				self.glowTexture:Show()
-				self.glowAnimationGroup:Play()
+				if self:IsShifting() then
+					-- The row is about to be re-anchored; start the glow when the
+					-- shift finishes rather than animating through the move.
+					self._glowWasPlaying = true
+				else
+					self.glowAnimationGroup:Play()
+				end
 			end
 		end)
 	end
