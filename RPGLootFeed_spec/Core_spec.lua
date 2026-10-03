@@ -142,40 +142,71 @@ describe("Core module", function()
 		end)
 
 		describe("OnOptionsOpen/OnOptionsClose", function()
+			local function mockOptionsFrame(shown)
+				local rawFrame = {
+					_shown = shown ~= false,
+					IsShown = function(self)
+						return self._shown
+					end,
+					HookScript = spy.new(function(self, event, fn)
+						self.onHide = fn
+					end),
+				}
+				ns.acd = { OpenFrames = { TestAddon = { frame = rawFrame } } }
+				return rawFrame
+			end
+
 			it("shows the bounding box when the options are opened", function()
-				local spyScheduleTimer = spy.on(RLF, "ScheduleTimer")
+				local rawFrame = mockOptionsFrame()
 				local spySetBoundingBoxViz = spy.on(ns.LootDisplay, "SetBoundingBoxVisibility")
 				RLF:OnOptionsOpen(nil, "TestAddon", nil, nil)
-				assert.spy(spyScheduleTimer).was.called(1)
 				assert.spy(spySetBoundingBoxViz).was.called_with(_, true)
+				assert.spy(rawFrame.HookScript).was.called(1)
 			end)
 
 			it("does nothing if the options are already open", function()
-				local spyScheduleTimer = spy.on(RLF, "ScheduleTimer")
+				mockOptionsFrame()
 				local spySetBoundingBoxViz = spy.on(ns.LootDisplay, "SetBoundingBoxVisibility")
 				RLF:OnOptionsOpen(nil, "TestAddon", nil, nil)
 				RLF:OnOptionsOpen(nil, "TestAddon", nil, nil)
-				assert.spy(spyScheduleTimer).was.called(1)
 				assert.spy(spySetBoundingBoxViz).was.called(1)
 			end)
 
-			it("hides the bounding box when the options are closed", function()
+			it("hides the bounding box as soon as the options frame hides", function()
+				local rawFrame = mockOptionsFrame()
 				local spySetBoundingBoxViz = spy.on(ns.LootDisplay, "SetBoundingBoxVisibility")
-				local spyHook = spy.on(RLF, "Hook")
-				local stubScheduleTimer = stub(RLF, "ScheduleTimer", function(self, func, delay)
-					func()
-				end)
-				ns.acd = {
-					OpenFrames = {
-						TestAddon = {
-							Hide = function() end,
-						},
-					},
-				}
 				RLF:OnOptionsOpen(nil, "TestAddon", nil, nil)
-				RLF:OnOptionsClose(nil, "TestAddon", nil, nil)
+				rawFrame.onHide()
 				assert.spy(spySetBoundingBoxViz).was.called_with(_, false)
-				assert.spy(spyHook).was.called(1)
+			end)
+
+			it("hides the bounding box again if the options were closed before the hook installed", function()
+				mockOptionsFrame(false)
+				local spySetBoundingBoxViz = spy.on(ns.LootDisplay, "SetBoundingBoxVisibility")
+				RLF:OnOptionsOpen(nil, "TestAddon", nil, nil)
+				assert.spy(spySetBoundingBoxViz).was.called_with(_, true)
+				assert.spy(spySetBoundingBoxViz).was.called_with(_, false)
+			end)
+
+			it("hides the bounding box if the options frame cannot be found", function()
+				ns.acd = { OpenFrames = {} }
+				local spySetBoundingBoxViz = spy.on(ns.LootDisplay, "SetBoundingBoxVisibility")
+				RLF:OnOptionsOpen(nil, "TestAddon", nil, nil)
+				assert.spy(spySetBoundingBoxViz).was.called_with(_, false)
+			end)
+
+			it("only hooks a recycled options frame once", function()
+				local rawFrame = mockOptionsFrame()
+				RLF:OnOptionsOpen(nil, "TestAddon", nil, nil)
+				rawFrame.onHide()
+				RLF:OnOptionsOpen(nil, "TestAddon", nil, nil)
+				assert.spy(rawFrame.HookScript).was.called(1)
+			end)
+
+			it("ignores a hide when the options overlay is not open", function()
+				local spySetBoundingBoxViz = spy.on(ns.LootDisplay, "SetBoundingBoxVisibility")
+				RLF:OnOptionsClose()
+				assert.spy(spySetBoundingBoxViz).was_not.called()
 			end)
 		end)
 	end)
