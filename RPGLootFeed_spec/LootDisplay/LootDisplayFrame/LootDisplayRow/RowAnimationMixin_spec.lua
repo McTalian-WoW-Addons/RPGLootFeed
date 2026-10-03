@@ -93,6 +93,103 @@ describe("RLF_RowAnimationMixin shift animation", function()
 		assert.is_nil(RLF_RowAnimationMixin.HandlerOnRightClick)
 	end)
 
+	-- ── Icon glow pause / resume ──────────────────────────────────────────
+
+	describe("icon glow pause/resume", function()
+		local glow
+
+		before_each(function()
+			glow = {
+				playing = false,
+				Play = spy.new(function(self)
+					self.playing = true
+				end),
+				Stop = spy.new(function(self)
+					self.playing = false
+				end),
+				IsPlaying = function(self)
+					return self.playing
+				end,
+			}
+			row.glowAnimationGroup = glow
+			row.ShiftAnimation = nil
+		end)
+
+		it("PauseGlow stops a playing glow and remembers it was playing", function()
+			glow.playing = true
+			row:PauseGlow()
+			assert.spy(glow.Stop).was.called(1)
+			assert.is_true(row._glowWasPlaying)
+		end)
+
+		it("PauseGlow leaves an idle glow alone", function()
+			row:PauseGlow()
+			assert.spy(glow.Stop).was_not.called()
+			assert.is_falsy(row._glowWasPlaying)
+		end)
+
+		it("keeps the was-playing flag when paused again while already paused", function()
+			glow.playing = true
+			row:PauseGlow()
+			row:PauseGlow() -- glow is already stopped, e.g. a second shift interrupts the first
+			assert.is_true(row._glowWasPlaying)
+		end)
+
+		it("ResumeGlow restarts a glow that PauseGlow stopped", function()
+			glow.playing = true
+			row:PauseGlow()
+			row:ResumeGlow()
+			assert.spy(glow.Play).was.called(1)
+			assert.is_false(row._glowWasPlaying)
+		end)
+
+		it("ResumeGlow does nothing when the glow was not paused", function()
+			row:ResumeGlow()
+			assert.spy(glow.Play).was_not.called()
+		end)
+
+		it("ResumeGlow waits while the row is still shifting", function()
+			glow.playing = true
+			row:PauseGlow()
+			row.ShiftAnimation = {
+				IsPlaying = function()
+					return true
+				end,
+			}
+			row:ResumeGlow()
+			assert.spy(glow.Play).was_not.called()
+			assert.is_true(row._glowWasPlaying)
+		end)
+
+		describe("HighlightIcon", function()
+			before_each(function()
+				row.highlight = true
+				row.type = "ItemLoot"
+				row.glowTexture = { SetAlpha = function() end, Show = function() end }
+				ns.FeatureModule = ns.FeatureModule or {}
+				_G.RunNextFrame = function(fn)
+					fn()
+				end
+			end)
+
+			it("plays the glow right away when the row is not shifting", function()
+				row:HighlightIcon()
+				assert.spy(glow.Play).was.called(1)
+			end)
+
+			it("defers the glow to the shift's OnFinished when the row is shifting", function()
+				row.ShiftAnimation = {
+					IsPlaying = function()
+						return true
+					end,
+				}
+				row:HighlightIcon()
+				assert.spy(glow.Play).was_not.called()
+				assert.is_true(row._glowWasPlaying)
+			end)
+		end)
+	end)
+
 	-- ── StyleHighlightBorder ──────────────────────────────────────────────
 
 	describe("StyleHighlightBorder", function()
@@ -383,6 +480,19 @@ describe("RLF_RowAnimationMixin shift animation", function()
 			row:StopAllAnimations()
 
 			assert.stub(ag.Stop).was.called(1)
+		end)
+
+		it("does not restart a glow paused by a shift when the row is released", function()
+			local glow = {
+				Stop = spy.new(function() end),
+				Play = spy.new(function() end),
+			}
+			row.glowAnimationGroup = glow
+			row.ShiftAnimation = { Stop = spy.new(function() end) }
+			row._glowWasPlaying = true
+			row:StopAllAnimations()
+			assert.spy(glow.Play).was_not.called()
+			assert.is_false(row._glowWasPlaying)
 		end)
 
 		it("does not error when ShiftAnimation is absent", function()
