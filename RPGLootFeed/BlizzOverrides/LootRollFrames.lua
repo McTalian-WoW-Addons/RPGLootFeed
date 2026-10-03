@@ -34,14 +34,17 @@ function LootRollFramesOverride:ShouldConceal(rollID)
 	if not rollID or not G_RLF.db.global.blizzOverrides.hideBlizzLootRollFrames then
 		return false
 	end
-	if G_RLF.db.global.interactions.disableAllInteraction then
-		return false
-	end
 	local lootRolls = G_RLF.LootRolls
 	if not lootRolls or not lootRolls:IsEnabled() then
 		return false
 	end
-	return #lootRolls:FindRollRows(rollID) > 0
+	-- Only conceal when a row that shows this roll lets the player click its buttons.
+	for _, row in ipairs(lootRolls:FindRollRows(rollID)) do
+		if row:IsInteractionAllowed("rollButtons") then
+			return true
+		end
+	end
+	return false
 end
 
 ---@param frame Frame

@@ -115,7 +115,7 @@ function RLF_LootRollRowMixin:_CreateRollButton(label, id, enabled, reason)
 	end
 
 	btn:SetScript("OnEnter", function()
-		if G_RLF.db.global.interactions.disableAllInteraction then
+		if not self:IsInteractionAllowed("rollButtons") then
 			return
 		end
 		GameTooltip:SetOwner(btn, "ANCHOR_RIGHT")
@@ -129,14 +129,14 @@ function RLF_LootRollRowMixin:_CreateRollButton(label, id, enabled, reason)
 		GameTooltip:Show()
 	end)
 	btn:SetScript("OnLeave", function()
-		if G_RLF.db.global.interactions.disableAllInteraction then
+		if not self:IsInteractionAllowed("rollButtons") then
 			return
 		end
 		GameTooltip:Hide()
 	end)
 
 	btn:SetScript("OnClick", function()
-		if G_RLF.db.global.interactions.disableAllInteraction then
+		if not self:IsInteractionAllowed("rollButtons") then
 			return
 		end
 		RollOnLoot(self.rollID, id)
@@ -418,13 +418,13 @@ end
 
 function RLF_LootRollRowMixin:_SetupRollTooltip()
 	self.SecondaryText:SetScript("OnEnter", function()
-		if G_RLF.db.global.interactions.disableAllInteraction then
+		if not self:IsInteractionAllowed("tooltips") then
 			return
 		end
 		self:_ShowRollTooltip()
 	end)
 	self.SecondaryText:SetScript("OnLeave", function()
-		if G_RLF.db.global.interactions.disableAllInteraction then
+		if not self:IsInteractionAllowed("tooltips") then
 			return
 		end
 		self:_HideRollTooltip()

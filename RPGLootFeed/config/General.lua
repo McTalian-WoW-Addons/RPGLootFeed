@@ -588,8 +588,60 @@ G_RLF.options.args.general = {
 					end,
 					set = function(info, value)
 						G_RLF.db.global.interactions.pinOnHover = value
+						G_RLF.LootDisplay:UpdateAllInteractions()
 					end,
 					order = 3,
+				},
+				itemClicks = {
+					type = "toggle",
+					name = G_RLF.L["Item Clicks"],
+					desc = G_RLF.L["ItemClicksDesc"],
+					width = "double",
+					disabled = function()
+						return G_RLF.db.global.interactions.disableAllInteraction
+					end,
+					get = function()
+						return G_RLF.db.global.interactions.itemClicks
+					end,
+					set = function(info, value)
+						G_RLF.db.global.interactions.itemClicks = value
+						G_RLF.LootDisplay:UpdateAllInteractions()
+					end,
+					order = 4,
+				},
+				rightClickDismiss = {
+					type = "toggle",
+					name = G_RLF.L["Right Click To Dismiss"],
+					desc = G_RLF.L["RightClickToDismissDesc"],
+					width = "double",
+					disabled = function()
+						return G_RLF.db.global.interactions.disableAllInteraction
+					end,
+					get = function()
+						return G_RLF.db.global.interactions.rightClickDismiss
+					end,
+					set = function(info, value)
+						G_RLF.db.global.interactions.rightClickDismiss = value
+						G_RLF.LootDisplay:UpdateAllInteractions()
+					end,
+					order = 5,
+				},
+				rollButtons = {
+					type = "toggle",
+					name = G_RLF.L["Roll Buttons"],
+					desc = G_RLF.L["RollButtonsDesc"],
+					width = "double",
+					disabled = function()
+						return G_RLF.db.global.interactions.disableAllInteraction
+					end,
+					get = function()
+						return G_RLF.db.global.interactions.rollButtons
+					end,
+					set = function(info, value)
+						G_RLF.db.global.interactions.rollButtons = value
+						G_RLF.LootDisplay:UpdateAllInteractions()
+					end,
+					order = 6,
 				},
 			},
 		},

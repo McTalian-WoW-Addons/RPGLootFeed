@@ -34,6 +34,56 @@ function DbAccessor:Animations(frameId)
 	return G_RLF.db.global.frames[frameId].animations
 end
 
+--- Get the frame's interactions config from the per-frame db schema.
+--- @param frameId G_RLF.Frames
+--- @return RLF_ConfigFrameInteractions
+function DbAccessor:Interactions(frameId)
+	return G_RLF.db.global.frames[frameId].interactions
+end
+
+--- Whether a mouse interaction is allowed by the global settings.
+--- disableAllInteraction is the baseline "everything off"; tooltips and pinOnHover
+--- keep their long-standing global homes.
+--- @param key string One of: tooltips, itemClicks, rightClickDismiss, pinOnHover, rollButtons
+--- @return boolean
+function DbAccessor:GlobalInteractionAllowed(key)
+	local global = G_RLF.db.global
+	if global.interactions.disableAllInteraction then
+		return false
+	end
+	if key == "tooltips" then
+		return global.tooltips.hover.enabled ~= false
+	end
+	return global.interactions[key] ~= false
+end
+
+--- Whether a mouse interaction is allowed on a frame's rows.
+--- A frame that overrides the global settings uses its own toggles (even past
+--- disableAllInteraction); otherwise the global settings apply.
+--- @param frameId G_RLF.Frames
+--- @param key string One of the RLF_ConfigFrameInteractions keys
+--- @return boolean
+function DbAccessor:InteractionAllowed(frameId, key)
+	local frame = G_RLF.db.global.frames[frameId]
+	local interactions = frame and frame.interactions
+	if interactions and interactions.override then
+		return interactions[key] ~= false
+	end
+	return self:GlobalInteractionAllowed(key)
+end
+
+--- Whether all mouse interaction is disabled for a frame: the global disable-all
+--- switch is on and the frame does not override the global settings.
+--- @param frameId G_RLF.Frames
+--- @return boolean
+function DbAccessor:AllInteractionDisabled(frameId)
+	if not G_RLF.db.global.interactions.disableAllInteraction then
+		return false
+	end
+	local frame = G_RLF.db.global.frames[frameId]
+	return not (frame and frame.interactions and frame.interactions.override)
+end
+
 --- Get a feature's per-frame configuration.
 --- Returns the feature config table (e.g. { enabled = true, enableIcon = true, … })
 --- for the given frame and feature key, or nil if not found.

@@ -142,6 +142,16 @@ function LootDisplay:OnDisableAllInteractionChange()
 	end
 end
 
+--- Re-apply interaction settings to every frame's active rows
+function LootDisplay:UpdateAllInteractions()
+	local inCombat = UnitAffectingCombat("player")
+	for _, frame in pairs(lootFrames) do
+		if frame then
+			frame:SetCombatClickThrough(inCombat)
+		end
+	end
+end
+
 function LootDisplay:OnPlayerCombatChange()
 	local inCombat = UnitAffectingCombat("player")
 	for _, frame in pairs(lootFrames) do
@@ -263,6 +273,16 @@ function LootDisplay:UpdateRowStyles(frame)
 	end
 	f:UpdateStyles()
 	self:RefreshSampleRowsIfShown()
+end
+
+--- Re-apply per-frame interaction settings to the frame's active rows
+--- @param frame? G_RLF.Frames
+function LootDisplay:UpdateInteractions(frame)
+	local f = self:GetFrame(frame)
+	if not f then
+		return
+	end
+	f:SetCombatClickThrough(UnitAffectingCombat("player"))
 end
 
 --- Update enter animation for the frame

@@ -20,14 +20,11 @@ function RLF_RowTooltipMixin:SetupTooltip(isHistoryFrame)
 	-- Add Tooltip
 	-- Tooltip logic
 	local function showTooltip()
-		if G_RLF.db.global.interactions.disableAllInteraction then
+		if not self:IsInteractionAllowed("tooltips") then
 			return
 		end
 		---@type RLF_ConfigTooltips
 		local tooltipDb = G_RLF.db.global.tooltips
-		if not tooltipDb.hover.enabled then
-			return
-		end
 		if tooltipDb.hover.onShift and not IsShiftKeyDown() then
 			return
 		end
@@ -51,7 +48,7 @@ function RLF_RowTooltipMixin:SetupTooltip(isHistoryFrame)
 
 	-- OnEnter: Show tooltip or listen for Shift changes
 	self.ClickableButton:SetScript("OnEnter", function()
-		if G_RLF.db.global.interactions.disableAllInteraction then
+		if not self:IsRowHoverAllowed() then
 			return
 		end
 		if not isHistoryFrame and not self._isLootRollRow then
@@ -73,7 +70,7 @@ function RLF_RowTooltipMixin:SetupTooltip(isHistoryFrame)
 
 	-- OnLeave: Hide tooltip and stop listening for Shift changes
 	self.ClickableButton:SetScript("OnLeave", function()
-		if G_RLF.db.global.interactions.disableAllInteraction then
+		if not self:IsRowHoverAllowed() then
 			return
 		end
 		if not isHistoryFrame and not self._isLootRollRow then
@@ -118,7 +115,8 @@ function RLF_RowTooltipMixin:SetupTooltip(isHistoryFrame)
 	end)
 
 	local function handleClick(button)
-		if G_RLF.db.global.interactions.disableAllInteraction then
+		local interaction = button == "RightButton" and "rightClickDismiss" or "itemClicks"
+		if not self:IsInteractionAllowed(interaction) then
 			return
 		end
 		if button == "LeftButton" and not IsModifiedClick() then
@@ -190,7 +188,7 @@ function RLF_RowTooltipMixin:SetupTooltip(isHistoryFrame)
 
 	if self.Icon then
 		self.Icon:SetScript("OnEnter", function()
-			if G_RLF.db.global.interactions.disableAllInteraction then
+			if not self:IsRowHoverAllowed() then
 				return
 			end
 			if not isHistoryFrame and not self._isLootRollRow then
@@ -208,7 +206,7 @@ function RLF_RowTooltipMixin:SetupTooltip(isHistoryFrame)
 			self.Icon:RegisterEvent("MODIFIER_STATE_CHANGED")
 		end)
 		self.Icon:SetScript("OnLeave", function()
-			if G_RLF.db.global.interactions.disableAllInteraction then
+			if not self:IsRowHoverAllowed() then
 				return
 			end
 			if not isHistoryFrame and not self._isLootRollRow then

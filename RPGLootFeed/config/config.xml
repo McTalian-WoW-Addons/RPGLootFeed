@@ -10,6 +10,7 @@
     <Script file="Sizing.lua"/>
     <Script file="Styling.lua"/>
     <Script file="Animations.lua"/>
+    <Script file="Interactions.lua"/>
     <Script file="FramesConfig.lua"/>
     <Script file="BlizzardUI.lua"/>
     <Script file="DbMigrations.lua"/>

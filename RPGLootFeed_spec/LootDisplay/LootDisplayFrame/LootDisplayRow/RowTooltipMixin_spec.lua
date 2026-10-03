@@ -122,6 +122,22 @@ describe("RLF_RowTooltipMixin", function()
 					assert.spy(_G.GameTooltip.SetOwner).was.called(1)
 					assert.spy(_G.GameTooltip.Show).was.called(1)
 				end)
+
+				it("does not show a tooltip when the tooltips interaction is disallowed", function()
+					row.IsInteractionAllowed = function(_, key)
+						return key ~= "tooltips"
+					end
+					RLF_RowTooltipMixin.SetupTooltip(row)
+
+					row.ExitAnimation.Stop = function() end
+					row.HighlightAnimation.Stop = function() end
+					row.ResetHighlightBorder = function() end
+					row.StopTimerBar = function() end
+					row.ClickableButton.RegisterEvent = function() end
+					capturedCallbacks["OnEnter"]()
+
+					assert.spy(_G.GameTooltip.Show).was_not.called()
+				end)
 			end)
 		end)
 	end)
