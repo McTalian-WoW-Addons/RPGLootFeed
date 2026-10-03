@@ -16,8 +16,10 @@
 				<BarTexture file="Interface/Buttons/WHITE8x8"/>
 				<Layers>
 					<Layer level="BACKGROUND">
-						<Texture setAllPoints="true" file="Interface/Buttons/WHITE8x8">
-							<Color r="0.5" g="0.5" b="0.5" a="0.7" />
+						<!-- Track behind the fill.  StyleTimerBar() tints it from the bar
+						     colour at a lower alpha so the drained part reads as empty. -->
+						<Texture parentKey="Track" setAllPoints="true" file="Interface/Buttons/WHITE8x8">
+							<Color r="0.5" g="0.5" b="0.5" a="0.2" />
 						</Texture>
 					</Layer>
 				</Layers>
