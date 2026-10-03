@@ -1504,6 +1504,34 @@ describe("LootDisplayFrameMixin", function()
 		end)
 	end)
 
+	describe("ShowQueueLabel", function()
+		before_each(function()
+			frame.frameType = 1
+			frame.QueueLabel = {
+				IsShown = function()
+					return false
+				end,
+				ClearAllPoints = spy.new(function() end),
+				SetPoint = spy.new(function() end),
+				Show = spy.new(function() end),
+			}
+		end)
+
+		it("anchors to a corner when left aligned", function()
+			ns.DbAccessor.Styling.returns({ growUp = true, textAlignment = "LEFT" })
+			frame:ShowQueueLabel()
+			assert
+				.spy(frame.QueueLabel.SetPoint).was
+				.called_with(frame.QueueLabel, "BOTTOMLEFT", frame, "TOPLEFT", 0, 0)
+		end)
+
+		it("anchors to the bare top/bottom point (horizontally centered) when center aligned", function()
+			ns.DbAccessor.Styling.returns({ growUp = true, textAlignment = "CENTER" })
+			frame:ShowQueueLabel()
+			assert.spy(frame.QueueLabel.SetPoint).was.called_with(frame.QueueLabel, "BOTTOM", frame, "TOP", 0, 0)
+		end)
+	end)
+
 	describe("UpdateScrollWheelTargetMouse", function()
 		local target, historyDb, savedHistoryService
 
