@@ -270,10 +270,12 @@ function LootRolls:_FindMatchingHistoryDrops(itemLink)
 		if drops then
 			for _, dropInfo in ipairs(drops) do
 				local dropItemID = self._adapter.GetItemInfoInstant(dropInfo.itemHyperlink)
-				if dropItemID == itemID then
+				-- Retail names the drop identifier lootListID; Forever renamed it lootListKey.
+				local lootListID = dropInfo.lootListID or dropInfo.lootListKey
+				if dropItemID == itemID and lootListID ~= nil then
 					table.insert(matches, {
 						encounterID = encInfo.encounterID,
-						lootListID = dropInfo.lootListID,
+						lootListID = lootListID,
 						dropInfo = dropInfo,
 					})
 				end
