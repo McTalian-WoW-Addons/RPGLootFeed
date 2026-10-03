@@ -825,7 +825,7 @@ function RLF_RowAnimationMixin:SetUpHoverEffect()
 		if GetMouseFoci then
 			self:SetScript("OnUpdate", self.HoverWatchUpdate)
 		end
-		if animationsDb.hover.enabled then
+		if animationsDb.hover.enabled and self:IsInteractionAllowed("hoverHighlight") then
 			-- Stop fade-out if it's playing
 			if self.HighlightFadeOut:IsPlaying() then
 				self.HighlightFadeOut:Stop()

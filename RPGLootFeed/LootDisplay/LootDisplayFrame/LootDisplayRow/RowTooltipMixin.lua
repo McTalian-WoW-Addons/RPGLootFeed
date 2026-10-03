@@ -20,7 +20,7 @@ function RLF_RowTooltipMixin:SetupTooltip(isHistoryFrame)
 	-- Add Tooltip
 	-- Tooltip logic
 	local function showTooltip()
-		if G_RLF.db.global.interactions.disableAllInteraction then
+		if not self:IsInteractionAllowed("tooltips") then
 			return
 		end
 		---@type RLF_ConfigTooltips
@@ -118,7 +118,8 @@ function RLF_RowTooltipMixin:SetupTooltip(isHistoryFrame)
 	end)
 
 	local function handleClick(button)
-		if G_RLF.db.global.interactions.disableAllInteraction then
+		local interaction = button == "RightButton" and "rightClickDismiss" or "itemClicks"
+		if not self:IsInteractionAllowed(interaction) then
 			return
 		end
 		if button == "LeftButton" and not IsModifiedClick() then

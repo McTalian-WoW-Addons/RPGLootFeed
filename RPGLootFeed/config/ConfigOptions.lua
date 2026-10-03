@@ -330,6 +330,14 @@ G_RLF.defaults = {
 			},
 			["**"] = {
 				name = "",
+				interactions = {
+					tooltips = true,
+					itemClicks = true,
+					rightClickDismiss = true,
+					hoverHighlight = true,
+					pinOnHover = true,
+					rollButtons = true,
+				},
 				positioning = {
 					relativePoint = "UIParent",
 					anchorPoint = "BOTTOMLEFT",
