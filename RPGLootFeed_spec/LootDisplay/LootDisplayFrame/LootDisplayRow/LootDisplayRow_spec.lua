@@ -916,29 +916,38 @@ describe("LootDisplayRowMixin", function()
 			assert.spy(ns.DbAccessor.GlobalInteractionAllowed).was.called_with(ns.DbAccessor, "itemClicks")
 		end)
 
-		it("IsRowHoverAllowed is true unless all interaction is disabled", function()
+		it("IsRowHoverAllowed follows DbAccessor:AllInteractionDisabled", function()
 			row = buildClickThroughRow()
-			ns.db.global.interactions = { disableAllInteraction = false }
+			ns.DbAccessor.AllInteractionDisabled = spy.new(function()
+				return false
+			end)
 			assert.is_true(row:IsRowHoverAllowed())
 
-			ns.db.global.interactions.disableAllInteraction = true
-			ns.db.global.frames = { [row.frameType] = { interactions = { override = false } } }
+			ns.DbAccessor.AllInteractionDisabled = spy.new(function()
+				return true
+			end)
 			assert.is_false(row:IsRowHoverAllowed())
+			assert.spy(ns.DbAccessor.AllInteractionDisabled).was.called_with(ns.DbAccessor, row.frameType)
 		end)
 
-		it("IsRowHoverAllowed stays true for a frame that overrides the global disable", function()
+		it("UpdateMouseState applies row and child mouse without touching visibility", function()
 			row = buildClickThroughRow()
-			ns.db.global.interactions = { disableAllInteraction = true }
-			ns.db.global.frames = { [row.frameType] = { interactions = { override = true } } }
+			row.isClickThrough = false
+			stub(row.ClickableButton, "Hide")
+			stub(row.ClickableButton, "Show")
 
-			assert.is_true(row:IsRowHoverAllowed())
+			row:UpdateMouseState()
+
+			assert.stub(row.EnableMouse).was.called_with(row, true)
+			assert.stub(row.ClickableButton.EnableMouse).was.called_with(row.ClickableButton, true)
+			assert.stub(row.ClickableButton.Hide).was_not.called()
+			assert.stub(row.ClickableButton.Show).was_not.called()
 		end)
 
 		it("IsRowHoverAllowed is false for history rows when all interaction is disabled", function()
 			row = buildClickThroughRow()
 			row.isHistoryMode = true
 			ns.db.global.interactions = { disableAllInteraction = true }
-			ns.db.global.frames = { [row.frameType] = { interactions = { override = true } } }
 
 			assert.is_false(row:IsRowHoverAllowed())
 		end)

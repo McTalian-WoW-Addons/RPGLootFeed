@@ -72,6 +72,18 @@ function DbAccessor:InteractionAllowed(frameId, key)
 	return self:GlobalInteractionAllowed(key)
 end
 
+--- Whether all mouse interaction is disabled for a frame: the global disable-all
+--- switch is on and the frame does not override the global settings.
+--- @param frameId G_RLF.Frames
+--- @return boolean
+function DbAccessor:AllInteractionDisabled(frameId)
+	if not G_RLF.db.global.interactions.disableAllInteraction then
+		return false
+	end
+	local frame = G_RLF.db.global.frames[frameId]
+	return not (frame and frame.interactions and frame.interactions.override)
+end
+
 --- Get a feature's per-frame configuration.
 --- Returns the feature config table (e.g. { enabled = true, enableIcon = true, … })
 --- for the given frame and feature key, or nil if not found.
