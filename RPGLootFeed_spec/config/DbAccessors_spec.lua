@@ -93,6 +93,13 @@ describe("DbAccessors module", function()
 			assert.is_false(DbAccessor:InteractionAllowed(2, "pinOnHover"))
 		end)
 
+		it("AllInteractionDisabled is true only for a non-overriding frame with disableAll on", function()
+			assert.is_false(DbAccessor:AllInteractionDisabled(2))
+			mockDb.global.interactions.disableAllInteraction = true
+			assert.is_true(DbAccessor:AllInteractionDisabled(2))
+			assert.is_false(DbAccessor:AllInteractionDisabled(1))
+		end)
+
 		it("a missing frame follows the global settings", function()
 			assert.is_true(DbAccessor:InteractionAllowed(99, "itemClicks"))
 			mockDb.global.interactions.itemClicks = false

@@ -888,6 +888,11 @@ function LootDisplayFrameMixin:LeaseRow(key, isSampleRow)
 
 	if self.isClickThrough then
 		row:SetClickThrough(true)
+	else
+		-- Fresh/recycled rows need their mouse state applied too, not only after a
+		-- combat or settings change.
+		row.isClickThrough = false
+		row:UpdateMouseState()
 	end
 
 	self.keyRowMap[key] = row

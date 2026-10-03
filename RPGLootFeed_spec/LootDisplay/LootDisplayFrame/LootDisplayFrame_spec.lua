@@ -150,6 +150,7 @@ describe("LootDisplayFrameMixin", function()
 			UpdatePosition = spy.new(function() end),
 			Hide = spy.new(function() end),
 			ResetHighlightBorder = spy.new(function() end),
+			UpdateMouseState = spy.new(function() end),
 		}
 		frame.rowFramePool = {
 			Acquire = spy.new(function()
@@ -181,7 +182,8 @@ describe("LootDisplayFrameMixin", function()
 		-- Check that necessary methods were called
 		assert.spy(frame.rowFramePool.Acquire).was.called(1)
 		assert.spy(frame.rows.push).was.called(1)
-		assert.spy(frame.rows.push).was.called_with(frame.rows, mockRow)
+		-- (compare by reference: the row is mutated after push, which defeats deep compare)
+		assert.equal(mockRow, frame.rows.push.calls[1].refs[2])
 		assert.spy(mockRow.Init).was.called(1)
 		assert.spy(mockRow.SetParent).was.called(1)
 		assert.equal(frame, mockRow.SetParent.calls[1].refs[2])
@@ -218,6 +220,7 @@ describe("LootDisplayFrameMixin", function()
 			UpdatePosition = spy.new(function() end),
 			Hide = spy.new(function() end),
 			ResetHighlightBorder = spy.new(function() end),
+			UpdateMouseState = spy.new(function() end),
 		}
 		frame.rowFramePool = {
 			Acquire = spy.new(function()
@@ -783,6 +786,7 @@ describe("LootDisplayFrameMixin", function()
 				UpdatePosition = spy.new(function() end),
 				Hide = spy.new(function() end),
 				ResetHighlightBorder = spy.new(function() end),
+				UpdateMouseState = spy.new(function() end),
 				SetClickThrough = spy.new(function() end),
 			}
 			frame.rowFramePool = {
@@ -808,6 +812,36 @@ describe("LootDisplayFrameMixin", function()
 			assert.spy(mockRow.SetClickThrough).was.called_with(mockRow, true)
 		end)
 
+		it("applies the mouse state to a new row when frame is not in click-through mode", function()
+			local mockRow = {
+				Init = spy.new(function() end),
+				SetParent = spy.new(function() end),
+				UpdatePosition = spy.new(function() end),
+				Hide = spy.new(function() end),
+				ResetHighlightBorder = spy.new(function() end),
+				UpdateMouseState = spy.new(function() end),
+				SetClickThrough = spy.new(function() end),
+			}
+			frame.rowFramePool = {
+				Acquire = spy.new(function()
+					return mockRow
+				end),
+			}
+			frame.frameType = ns.Frames.MAIN
+			frame.rows = {
+				push = spy.new(function()
+					return true
+				end),
+				length = 0,
+			}
+			frame.keyRowMap = { length = 0 }
+			frame.isClickThrough = false
+			frame:LeaseRow("testKey")
+
+			assert.spy(mockRow.UpdateMouseState).was.called()
+			assert.is_false(mockRow.isClickThrough)
+		end)
+
 		it("does not call SetClickThrough when frame is not in click-through mode", function()
 			local mockRow = {
 				Init = spy.new(function() end),
@@ -815,6 +849,7 @@ describe("LootDisplayFrameMixin", function()
 				UpdatePosition = spy.new(function() end),
 				Hide = spy.new(function() end),
 				ResetHighlightBorder = spy.new(function() end),
+				UpdateMouseState = spy.new(function() end),
 				SetClickThrough = spy.new(function() end),
 			}
 			frame.rowFramePool = {

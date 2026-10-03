@@ -230,29 +230,25 @@ end
 --- disableAllInteraction turns it off unless the row's frame overrides the global settings.
 --- @return boolean
 function LootDisplayRowMixin:IsRowHoverAllowed()
-	if not G_RLF.db.global.interactions.disableAllInteraction then
-		return true
-	end
 	if self.isHistoryMode then
-		return false
+		return not G_RLF.db.global.interactions.disableAllInteraction
 	end
-	local frame = G_RLF.db.global.frames[self.frameType]
-	return frame ~= nil and frame.interactions ~= nil and frame.interactions.override == true
+	return not G_RLF.DbAccessor:AllInteractionDisabled(self.frameType)
 end
 
---- Enable or disable mouse interaction on this row and its interactive children.
---- @param enabled boolean true = click-through (mouse disabled), false = interactive
-function LootDisplayRowMixin:SetClickThrough(enabled)
-	self.isClickThrough = enabled
-	-- The row only needs mouse *motion* (hover highlight / pin).  Full EnableMouse
-	-- would make the whole transparent feedWidth rectangle swallow clicks and block
-	-- camera drag.  ClickableButton and Icon are content-sized and keep full mouse
-	-- when any of the interactions they serve is allowed.
+--- Apply the mouse-enable state for this row and its interactive children from
+--- isClickThrough and the frame's interaction settings.  Does not touch visibility.
+--- The row only needs mouse *motion* (hover highlight / pin).  Full EnableMouse
+--- would make the whole transparent feedWidth rectangle swallow clicks and block
+--- camera drag.  ClickableButton and Icon are content-sized and keep full mouse
+--- when any of the interactions they serve is allowed.
+function LootDisplayRowMixin:UpdateMouseState()
+	local interactive = not self.isClickThrough
 	local hoverDb = G_RLF.DbAccessor:Animations(self.frameType).hover
-	local rowMotion = not enabled
+	local rowMotion = interactive
 		and self:IsRowHoverAllowed()
 		and ((hoverDb and hoverDb.enabled) or self:IsInteractionAllowed("pinOnHover"))
-	local childMouse = not enabled
+	local childMouse = interactive
 		and (
 			self:IsInteractionAllowed("tooltips")
 			or self:IsInteractionAllowed("itemClicks")
@@ -266,6 +262,13 @@ function LootDisplayRowMixin:SetClickThrough(enabled)
 	if self.Icon then
 		self.Icon:EnableMouse(childMouse)
 	end
+end
+
+--- Enable or disable mouse interaction on this row and its interactive children.
+--- @param enabled boolean true = click-through (mouse disabled), false = interactive
+function LootDisplayRowMixin:SetClickThrough(enabled)
+	self.isClickThrough = enabled
+	self:UpdateMouseState()
 	if enabled then
 		self.ClickableButton:Hide()
 		if self.Icon then
