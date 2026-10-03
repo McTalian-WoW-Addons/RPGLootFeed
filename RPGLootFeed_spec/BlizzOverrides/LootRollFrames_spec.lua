@@ -85,7 +85,11 @@ describe("LootRollFrames override", function()
 	end)
 
 	it("conceals Blizzard's frame for a roll the feed is showing", function()
-		rowsByRollID[7] = { {} }
+		rowsByRollID[7] = { {
+			IsInteractionAllowed = function()
+				return true
+			end,
+		} }
 
 		Override:Refresh()
 
@@ -102,7 +106,11 @@ describe("LootRollFrames override", function()
 	end)
 
 	it("keeps Blizzard's frame while the option is off (default)", function()
-		rowsByRollID[7] = { {} }
+		rowsByRollID[7] = { {
+			IsInteractionAllowed = function()
+				return true
+			end,
+		} }
 		ns.db.global.blizzOverrides.hideBlizzLootRollFrames = false
 
 		Override:Refresh()
@@ -110,9 +118,12 @@ describe("LootRollFrames override", function()
 		assert.are.equal(1, rollFrame._alpha)
 	end)
 
-	it("keeps Blizzard's frame when row interaction is disabled", function()
-		rowsByRollID[7] = { {} }
-		ns.db.global.interactions.disableAllInteraction = true
+	it("keeps Blizzard's frame when the row doesn't allow roll buttons", function()
+		rowsByRollID[7] = { {
+			IsInteractionAllowed = function()
+				return false
+			end,
+		} }
 
 		Override:Refresh()
 
@@ -120,7 +131,11 @@ describe("LootRollFrames override", function()
 	end)
 
 	it("restores Blizzard's frame once the feed row goes away", function()
-		rowsByRollID[7] = { {} }
+		rowsByRollID[7] = { {
+			IsInteractionAllowed = function()
+				return true
+			end,
+		} }
 		Override:Refresh()
 		rowsByRollID[7] = nil
 

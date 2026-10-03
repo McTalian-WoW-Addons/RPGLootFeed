@@ -923,16 +923,46 @@ describe("LootDisplayRowMixin", function()
 			assert.spy(ns.DbAccessor.InteractionAllowed).was.called_with(ns.DbAccessor, 2, "tooltips")
 		end)
 
-		it("IsInteractionAllowed ignores per-frame toggles for history rows", function()
+		it("IsInteractionAllowed uses only the global settings for history rows", function()
 			row = buildClickThroughRow()
 			row.isHistoryMode = true
-			ns.db.global.interactions = { disableAllInteraction = false }
 			ns.DbAccessor.InteractionAllowed = spy.new(function()
 				return false
+			end)
+			ns.DbAccessor.GlobalInteractionAllowed = spy.new(function()
+				return true
 			end)
 
 			assert.is_true(row:IsInteractionAllowed("itemClicks"))
 			assert.spy(ns.DbAccessor.InteractionAllowed).was_not.called()
+			assert.spy(ns.DbAccessor.GlobalInteractionAllowed).was.called_with(ns.DbAccessor, "itemClicks")
+		end)
+
+		it("IsRowHoverAllowed is true unless all interaction is disabled", function()
+			row = buildClickThroughRow()
+			ns.db.global.interactions = { disableAllInteraction = false }
+			assert.is_true(row:IsRowHoverAllowed())
+
+			ns.db.global.interactions.disableAllInteraction = true
+			ns.db.global.frames = { [row.frameType] = { interactions = { override = false } } }
+			assert.is_false(row:IsRowHoverAllowed())
+		end)
+
+		it("IsRowHoverAllowed stays true for a frame that overrides the global disable", function()
+			row = buildClickThroughRow()
+			ns.db.global.interactions = { disableAllInteraction = true }
+			ns.db.global.frames = { [row.frameType] = { interactions = { override = true } } }
+
+			assert.is_true(row:IsRowHoverAllowed())
+		end)
+
+		it("IsRowHoverAllowed is false for history rows when all interaction is disabled", function()
+			row = buildClickThroughRow()
+			row.isHistoryMode = true
+			ns.db.global.interactions = { disableAllInteraction = true }
+			ns.db.global.frames = { [row.frameType] = { interactions = { override = true } } }
+
+			assert.is_false(row:IsRowHoverAllowed())
 		end)
 
 		it("drops row mouse when hover highlight and pin are both disallowed", function()
@@ -1118,7 +1148,9 @@ describe("LootDisplayRowMixin", function()
 
 		it("is a no-op when pinOnHover setting is disabled", function()
 			row = buildPinRow()
-			ns.db.global.interactions = { pinOnHover = false }
+			ns.DbAccessor.InteractionAllowed = function(_, _, key)
+				return key ~= "pinOnHover"
+			end
 			local mockFrame = { vertDir = "BOTTOM", hasPinnedRow = false }
 
 			row:PinPosition(mockFrame)

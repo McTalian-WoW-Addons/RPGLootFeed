@@ -208,6 +208,9 @@ function M.new(frameType)
 	row.IsInteractionAllowed = function()
 		return true
 	end
+	row.IsRowHoverAllowed = function()
+		return true
+	end
 
 	-- ── Backdrop sub-elements (RowBackdropMixin) ──────────────────────────
 	row.Background = stubMethods(mockTexture(), { "SetGradient" })
