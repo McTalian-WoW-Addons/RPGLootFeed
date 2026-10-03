@@ -326,6 +326,7 @@ function RLF_RowTextMixin:_LayoutRowLines(textAlignment, iconOnLeft, padding, sp
 		self.SecondaryLineLayout:SetPoint("TOP", self, "CENTER", 0, -padding)
 		self.SecondaryLineLayout:SetShown(true)
 	end
+	self:ApplyCenterAlignment()
 end
 
 function RLF_RowTextMixin:CreateTopLeftText()
@@ -538,7 +539,8 @@ function RLF_RowTextMixin:LayoutPrimaryLine()
 	self.PrimaryText:SetText(self.rawPrimaryText)
 	-- SetWordWrap(false) was already called once in CreatePrimaryLineLayout().
 
-	self.PrimaryLineLayout.fixedWidth = availableWidth
+	-- Centered rows size the layout to its content so the group can be centered.
+	self.PrimaryLineLayout.fixedWidth = (not self:IsCenterAligned()) and availableWidth or nil
 	self.PrimaryLineLayout:Layout()
 
 	-- ClickableButton geometry is owned exclusively here (not in ShowText or
@@ -547,6 +549,67 @@ function RLF_RowTextMixin:LayoutPrimaryLine()
 		self.ClickableButton:ClearAllPoints()
 		self.ClickableButton:SetPoint("LEFT", self.PrimaryText, "LEFT")
 		self.ClickableButton:SetSize(self.PrimaryText:GetStringWidth(), self.PrimaryText:GetStringHeight())
+	end
+	self:ApplyCenterAlignment()
+end
+
+--- Whether this row's frame uses centered alignment.
+--- @return boolean
+function RLF_RowTextMixin:IsCenterAligned()
+	local stylingDb = G_RLF.DbAccessor:Styling(self.frameType)
+	return stylingDb ~= nil and stylingDb.textAlignment == G_RLF.TextAlignment.CENTER
+end
+
+--- Center the icon and text block of this row as one group (TextAlignment.CENTER).
+--- The icon moves to the group's left edge, and each text line is centered within
+--- the widest line, so a secondary line sits centered under the primary line.
+--- Everything else (portrait, click button, timer bar) is anchored to the icon or
+--- the lines, so it follows.  Safe to call any time; no-op unless centered.
+function RLF_RowTextMixin:ApplyCenterAlignment()
+	if not self:IsCenterAligned() then
+		return
+	end
+
+	local sizingDb = G_RLF.DbAccessor:Sizing(self.frameType)
+	local iconSize = sizingDb.iconSize
+	local feedWidth = sizingDb.feedWidth
+	local spacing = self.PrimaryLineLayout.spacing or 0
+
+	local primaryWidth = self.PrimaryLineLayout:GetWidth() or 0
+	local hasSecondary = self.SecondaryLineLayout
+		and self.SecondaryLineLayout:IsShown()
+		and self.secondaryText ~= nil
+		and self.secondaryText ~= ""
+	local secondaryWidth = hasSecondary and (self.SecondaryLineLayout:GetWidth() or 0) or 0
+	local blockWidth = math.max(primaryWidth, secondaryWidth)
+
+	-- Text is anchored to the party portrait when one is shown, otherwise the icon.
+	local partyConfig = G_RLF.DbAccessor:Feature(self.frameType, "partyLoot") or {}
+	local textAnchor = self.Icon
+	local leading = 0
+	if self.icon then
+		leading = iconSize + spacing
+		if self.unit and partyConfig.enablePartyAvatar then
+			textAnchor = self.UnitPortrait
+			leading = iconSize + (iconSize / 4) + (iconSize * 0.8) + spacing
+		end
+	end
+
+	local groupWidth = leading + blockWidth
+	local iconLeft = math.max(iconSize / 4, (feedWidth - groupWidth) / 2)
+	self.Icon:SetPoint("LEFT", self, "LEFT", iconLeft, 0)
+
+	local function placeLine(line, lineWidth)
+		local centerOffset = (blockWidth - lineWidth) / 2
+		if self.icon then
+			line:SetPoint("LEFT", textAnchor, "RIGHT", spacing + centerOffset, 0)
+		else
+			line:SetPoint("LEFT", self.Icon, "LEFT", centerOffset, 0)
+		end
+	end
+	placeLine(self.PrimaryLineLayout, primaryWidth)
+	if hasSecondary then
+		placeLine(self.SecondaryLineLayout, secondaryWidth)
 	end
 end
 
@@ -582,12 +645,20 @@ function RLF_RowTextMixin:LayoutSecondaryLine()
 
 	-- Constrain SecondaryText to availableWidth, then re-set its text so the
 	-- engine renders the "." ellipsis against the original (untruncated) string.
+	local secondaryText = self.secondaryText or ""
+	if self:IsCenterAligned() then
+		-- Some secondary text (currency caps) is indented with leading spaces for
+		-- the left-aligned layout; that would skew the centering.
+		secondaryText = (secondaryText:gsub("^%s+", ""))
+		self.SecondaryText:SetText(secondaryText)
+	end
 	local naturalWidth = self.SecondaryText:GetUnboundedStringWidth()
 	self.SecondaryText:SetWidth(math.max(1, math.min(naturalWidth, availableWidth - secondaryCoinWidth)))
-	self.SecondaryText:SetText(self.secondaryText or "")
+	self.SecondaryText:SetText(secondaryText)
 
-	self.SecondaryLineLayout.fixedWidth = availableWidth
+	self.SecondaryLineLayout.fixedWidth = (not self:IsCenterAligned()) and availableWidth or nil
 	self.SecondaryLineLayout:Layout()
+	self:ApplyCenterAlignment()
 end
 
 function RLF_RowTextMixin:ShowText(rawText, r, g, b, a)

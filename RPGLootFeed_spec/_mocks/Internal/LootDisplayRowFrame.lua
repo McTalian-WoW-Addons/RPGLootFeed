@@ -113,6 +113,14 @@ local function mockLayoutFrame()
 	frame.spacing = 0
 	frame.childLayoutDirection = nil
 	frame.fixedWidth = nil
+	-- Content width the layout would compute; tests set frame._width.
+	frame._width = 0
+	frame.GetWidth = function(self)
+		return self._width
+	end
+	frame.IsShown = function()
+		return true
+	end
 	return frame
 end
 
