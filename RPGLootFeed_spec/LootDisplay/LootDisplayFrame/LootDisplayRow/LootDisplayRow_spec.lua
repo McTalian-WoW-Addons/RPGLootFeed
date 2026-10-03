@@ -1078,6 +1078,8 @@ describe("LootDisplayRowMixin", function()
 			stub(r, "GetTop").returns(322)
 			stub(r, "ClearAllPoints")
 			stub(r, "SetPoint")
+			r.PauseGlow = function() end
+			r.ResumeGlow = function() end
 			r.isPinned = false
 			r.pinnedFrameOffset = nil
 			return r
