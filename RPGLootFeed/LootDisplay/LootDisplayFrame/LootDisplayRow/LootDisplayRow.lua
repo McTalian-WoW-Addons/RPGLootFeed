@@ -219,7 +219,13 @@ end
 --- @param enabled boolean true = click-through (mouse disabled), false = interactive
 function LootDisplayRowMixin:SetClickThrough(enabled)
 	self.isClickThrough = enabled
+	-- The row only needs mouse *motion* (hover highlight / pin).  Full EnableMouse
+	-- would make the whole transparent feedWidth rectangle swallow clicks and block
+	-- camera drag.  ClickableButton and Icon are content-sized and keep full mouse.
 	self:EnableMouse(not enabled)
+	if not enabled then
+		self:SetMouseClickEnabled(false)
+	end
 	self.ClickableButton:EnableMouse(not enabled)
 	if self.Icon then
 		self.Icon:EnableMouse(not enabled)
