@@ -912,6 +912,53 @@ describe("LootDisplayRowMixin", function()
 			assert.stub(row.Icon.EnableMouse).was.called_with(row.Icon, true)
 		end)
 
+		it("IsInteractionAllowed asks DbAccessor with the row's frame type", function()
+			row = buildClickThroughRow()
+			row.frameType = 2
+			ns.DbAccessor.InteractionAllowed = spy.new(function()
+				return false
+			end)
+
+			assert.is_false(row:IsInteractionAllowed("tooltips"))
+			assert.spy(ns.DbAccessor.InteractionAllowed).was.called_with(ns.DbAccessor, 2, "tooltips")
+		end)
+
+		it("IsInteractionAllowed ignores per-frame toggles for history rows", function()
+			row = buildClickThroughRow()
+			row.isHistoryMode = true
+			ns.db.global.interactions = { disableAllInteraction = false }
+			ns.DbAccessor.InteractionAllowed = spy.new(function()
+				return false
+			end)
+
+			assert.is_true(row:IsInteractionAllowed("itemClicks"))
+			assert.spy(ns.DbAccessor.InteractionAllowed).was_not.called()
+		end)
+
+		it("drops row mouse when hover highlight and pin are both disallowed", function()
+			row = buildClickThroughRow()
+			ns.DbAccessor.InteractionAllowed = function(_, _, key)
+				return key ~= "hoverHighlight" and key ~= "pinOnHover"
+			end
+			row:SetClickThrough(false)
+
+			assert.stub(row.EnableMouse).was.called_with(row, false)
+			assert.stub(row.SetMouseClickEnabled).was_not.called()
+			assert.stub(row.ClickableButton.EnableMouse).was.called_with(row.ClickableButton, true)
+		end)
+
+		it("drops child mouse when tooltips, item clicks and right-click dismiss are all disallowed", function()
+			row = buildClickThroughRow()
+			ns.DbAccessor.InteractionAllowed = function(_, _, key)
+				return key ~= "tooltips" and key ~= "itemClicks" and key ~= "rightClickDismiss"
+			end
+			row:SetClickThrough(false)
+
+			assert.stub(row.ClickableButton.EnableMouse).was.called_with(row.ClickableButton, false)
+			assert.stub(row.Icon.EnableMouse).was.called_with(row.Icon, false)
+			assert.stub(row.EnableMouse).was.called_with(row, true)
+		end)
+
 		it("keeps the row motion-only (no click capture) when interactive", function()
 			row = buildClickThroughRow()
 			row:SetClickThrough(false)

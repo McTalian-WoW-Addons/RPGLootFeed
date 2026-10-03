@@ -83,6 +83,7 @@ local function buildFrameGroup(id)
 					animations = G_RLF.BuildAnimationsArgs(id, 5),
 				},
 			},
+			interactions = G_RLF.BuildInteractionsArgs(id, 3),
 			lootFeeds = {
 				type = "group",
 				name = G_RLF.L["Loot Feeds"],
@@ -307,6 +308,7 @@ function FramesConfig:RebuildArgs()
 				sizing = deepCopy(mainCfg.sizing),
 				styling = deepCopy(mainCfg.styling),
 				animations = deepCopy(mainCfg.animations),
+				interactions = deepCopy(mainCfg.interactions),
 				features = newFeatures,
 			}
 

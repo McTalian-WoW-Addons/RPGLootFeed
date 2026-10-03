@@ -22,6 +22,7 @@ describe("DbAccessors module", function()
 						positioning = { mockFrameMainPositioning = true },
 						styling = { mockFrameMainStyling = true },
 						animations = { mockFrameMainAnimations = true },
+						interactions = { tooltips = true, rollButtons = false },
 					},
 					[2] = {
 						sizing = { mockFramePartySizing = true },
@@ -35,6 +36,7 @@ describe("DbAccessors module", function()
 
 		-- Attach mock db to namespace
 		ns.db = mockDb
+		mockDb.global.interactions = { disableAllInteraction = false }
 
 		-- Define frame types
 		ns.Frames = {
@@ -44,6 +46,29 @@ describe("DbAccessors module", function()
 		-- Load the module being tested
 		assert(loadfile("RPGLootFeed/config/DbAccessors.lua"))("TestAddon", ns)
 		DbAccessor = ns.DbAccessor
+	end)
+
+	describe("Interactions", function()
+		it("returns per-frame interactions", function()
+			assert.is_false(DbAccessor:Interactions(1).rollButtons)
+		end)
+
+		it("InteractionAllowed reads the per-frame toggle", function()
+			assert.is_true(DbAccessor:InteractionAllowed(1, "tooltips"))
+			assert.is_false(DbAccessor:InteractionAllowed(1, "rollButtons"))
+		end)
+
+		it("InteractionAllowed treats a missing key or frame as allowed", function()
+			assert.is_true(DbAccessor:InteractionAllowed(1, "itemClicks"))
+			assert.is_true(DbAccessor:InteractionAllowed(2, "tooltips"))
+			assert.is_true(DbAccessor:InteractionAllowed(99, "tooltips"))
+		end)
+
+		it("InteractionAllowed is false for everything when all interaction is disabled", function()
+			mockDb.global.interactions.disableAllInteraction = true
+			assert.is_false(DbAccessor:InteractionAllowed(1, "tooltips"))
+			assert.is_false(DbAccessor:InteractionAllowed(2, "tooltips"))
+		end)
 	end)
 
 	describe("Sizing", function()

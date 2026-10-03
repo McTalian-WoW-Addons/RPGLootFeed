@@ -265,6 +265,16 @@ function LootDisplay:UpdateRowStyles(frame)
 	self:RefreshSampleRowsIfShown()
 end
 
+--- Re-apply per-frame interaction settings to the frame's active rows
+--- @param frame? G_RLF.Frames
+function LootDisplay:UpdateInteractions(frame)
+	local f = self:GetFrame(frame)
+	if not f then
+		return
+	end
+	f:SetCombatClickThrough(UnitAffectingCombat("player"))
+end
+
 --- Update enter animation for the frame
 --- @param frame? G_RLF.Frames
 function LootDisplay:UpdateEnterAnimation(frame)

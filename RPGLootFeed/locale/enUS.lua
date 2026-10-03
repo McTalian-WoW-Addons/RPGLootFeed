@@ -11,6 +11,22 @@ local L = LibStub("AceLocale-3.0"):NewLocale(G_RLF.localeName, "enUS", true)
 --- You may translate these comments, but do not translate "region" or "endregion" as they are used by the localization tool to determine where to place the translations.
 --- To add translations, simply uncomment the line(s) and replace the English text after the equal sign (=) with the translated value.
 
+--#region 1.39.0
+L["FrameInteractionsDesc"] = "Choose which mouse interactions are allowed on this frame's rows. These apply on top of the global Interactions settings in General."
+L["Hover Highlight"] = "Hover Highlight"
+L["HoverHighlightDesc"] = "Show the hover highlight effect when the mouse is over a row."
+L["Item Clicks"] = "Item Clicks"
+L["ItemClicksDesc"] = "Allow clicking an item to open its link, dress up, or link it in chat."
+L["Pin Rows On Hover"] = "Lock Rows On Hover"
+L["PinRowsOnHoverDesc"] = "Lock a row's position while the mouse is over it so it does not shift when other rows exit."
+L["Right Click To Dismiss"] = "Right Click To Dismiss"
+L["RightClickToDismissDesc"] = "Allow right-clicking a row to dismiss it."
+L["Roll Buttons"] = "Roll Buttons"
+L["RollButtonsDesc"] = "Allow clicking the Need, Greed, and Pass buttons on loot roll rows."
+L["Show Tooltips"] = "Show Tooltips"
+L["ShowTooltipsDesc"] = "Show item tooltips when the mouse is over a row. Also requires tooltips enabled in General."
+--#endregion
+
 --#region 1.38.0
 L["Beta"] = "Beta"
 L["BetaModuleNotice"] = "This feature is in beta: it works, but it is still changing, its options may move, and its saved settings may be reset by a future update. It is off by default. Feedback and bug reports are very welcome on GitHub or Discord."

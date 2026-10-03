@@ -34,6 +34,27 @@ function DbAccessor:Animations(frameId)
 	return G_RLF.db.global.frames[frameId].animations
 end
 
+--- Get the frame's interactions config from the per-frame db schema.
+--- @param frameId G_RLF.Frames
+--- @return RLF_ConfigFrameInteractions
+function DbAccessor:Interactions(frameId)
+	return G_RLF.db.global.frames[frameId].interactions
+end
+
+--- Whether a mouse interaction is allowed on a frame's rows.
+--- The global disableAllInteraction switch wins; a missing frame or key counts as allowed.
+--- @param frameId G_RLF.Frames
+--- @param key string One of the RLF_ConfigFrameInteractions keys
+--- @return boolean
+function DbAccessor:InteractionAllowed(frameId, key)
+	if G_RLF.db.global.interactions.disableAllInteraction then
+		return false
+	end
+	local frame = G_RLF.db.global.frames[frameId]
+	local interactions = frame and frame.interactions
+	return not interactions or interactions[key] ~= false
+end
+
 --- Get a feature's per-frame configuration.
 --- Returns the feature config table (e.g. { enabled = true, enableIcon = true, … })
 --- for the given frame and feature key, or nil if not found.

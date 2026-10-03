@@ -204,6 +204,10 @@ end
 function M.new(frameType)
 	local row = {}
 	row.frameType = frameType or "MAIN"
+	-- Per-frame interactions are all allowed unless a test overrides this.
+	row.IsInteractionAllowed = function()
+		return true
+	end
 
 	-- ── Backdrop sub-elements (RowBackdropMixin) ──────────────────────────
 	row.Background = stubMethods(mockTexture(), { "SetGradient" })
