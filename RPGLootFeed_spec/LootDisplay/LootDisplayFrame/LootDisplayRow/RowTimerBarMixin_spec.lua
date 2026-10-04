@@ -78,7 +78,10 @@ describe("RLF_RowTimerBarMixin", function()
 				return timerBarShown
 			end,
 			ClearAllPoints = function() end,
-			SetPoint = function() end,
+			SetPoint = function(_, point, _, _, _, y)
+				styleCalls.pointYOffsets = styleCalls.pointYOffsets or {}
+				styleCalls.pointYOffsets[point] = y
+			end,
 		}
 
 		stub(ns.DbAccessor, "Animations").returns({
@@ -153,6 +156,24 @@ describe("RLF_RowTimerBarMixin", function()
 			assert.are.same({ 0.5, 0.5, 0.5 }, { r, g, b })
 			assert.is_true(a < styleCalls.color[4])
 			assert.is_true(a > 0)
+		end)
+
+		-- A 2px bar at a fractional UI scale renders unevenly unless it is a whole
+		-- number of physical pixels.
+		it("pixel-snaps the bar height and offset", function()
+			ns.PerfPixel.PScale = function(v)
+				return v + 0.5
+			end
+			stub(ns.DbAccessor, "Animations").returns({
+				timerBar = { enabled = true, height = 2, yOffset = 1, color = { 1, 1, 1 }, alpha = 1 },
+				exit = { disable = false },
+			})
+
+			row:StyleTimerBar()
+
+			assert.are.equal(2.5, styleCalls.height)
+			assert.are.equal(1.5, styleCalls.pointYOffsets.BOTTOMLEFT)
+			assert.are.equal(1.5, styleCalls.pointYOffsets.BOTTOMRIGHT)
 		end)
 
 		it("follows a custom bar colour and alpha", function()

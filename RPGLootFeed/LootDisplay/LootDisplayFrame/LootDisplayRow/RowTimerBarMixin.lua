@@ -45,11 +45,11 @@ function RLF_RowTimerBarMixin:StyleTimerBar()
 		return
 	end
 
-	-- Set height
-	self.TimerBar:SetHeight(timerBarCfg.height or 2)
+	-- Set height (pixel-snapped so a thin bar renders at a whole number of pixels)
+	self.TimerBar:SetHeight(G_RLF.PerfPixel.PScale(timerBarCfg.height or 2))
 
 	-- Reposition with yOffset so the bar can sit above the row border
-	local yOffset = timerBarCfg.yOffset or 0
+	local yOffset = G_RLF.PerfPixel.PScale(timerBarCfg.yOffset or 0)
 	self.TimerBar:ClearAllPoints()
 	self.TimerBar:SetPoint("BOTTOMLEFT", self, "BOTTOMLEFT", 0, yOffset)
 	self.TimerBar:SetPoint("BOTTOMRIGHT", self, "BOTTOMRIGHT", 0, yOffset)
