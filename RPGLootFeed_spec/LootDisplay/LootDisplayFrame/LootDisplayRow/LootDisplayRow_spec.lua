@@ -128,6 +128,28 @@ describe("LootDisplayRowMixin", function()
 
 			assert.stub(r.StyleTimerBar).was.called()
 		end)
+
+		-- A row-level OnMouseUp turns on full mouse for the whole transparent row
+		-- and blocks camera drag over its empty space.
+		it("does not install a row-level click handler", function()
+			local r = buildRow()
+			for _, method in ipairs({
+				"StyleBackground",
+				"StyleRowBackdrop",
+				"StyleIcon",
+				"StyleIconHighlight",
+				"StyleUnitPortrait",
+				"StyleTimerBar",
+				"HandlerOnRightClick",
+			}) do
+				r[method] = function() end
+				stub(r, method)
+			end
+
+			r:Styles()
+
+			assert.stub(r.HandlerOnRightClick).was_not.called()
+		end)
 	end)
 
 	-- ── UpdateQuantity ─────────────────────────────────────────────────────
@@ -857,6 +879,8 @@ describe("LootDisplayRowMixin", function()
 			local r = buildRow()
 			-- Add EnableMouse to row and its children
 			stub(r, "EnableMouse")
+			r.SetMouseClickEnabled = function() end
+			stub(r, "SetMouseClickEnabled")
 			r.ClickableButton.EnableMouse = function() end
 			stub(r.ClickableButton, "EnableMouse")
 			r.Icon.EnableMouse = function() end
@@ -886,6 +910,20 @@ describe("LootDisplayRowMixin", function()
 			assert.stub(row.EnableMouse).was.called_with(row, true)
 			assert.stub(row.ClickableButton.EnableMouse).was.called_with(row.ClickableButton, true)
 			assert.stub(row.Icon.EnableMouse).was.called_with(row.Icon, true)
+		end)
+
+		it("keeps the row motion-only (no click capture) when interactive", function()
+			row = buildClickThroughRow()
+			row:SetClickThrough(false)
+
+			assert.stub(row.SetMouseClickEnabled).was.called_with(row, false)
+		end)
+
+		it("does not touch row click capture when click-through", function()
+			row = buildClickThroughRow()
+			row:SetClickThrough(true)
+
+			assert.stub(row.SetMouseClickEnabled).was_not.called()
 		end)
 
 		it("cleans up hover state when enabled=true and hasMouseOver is true", function()

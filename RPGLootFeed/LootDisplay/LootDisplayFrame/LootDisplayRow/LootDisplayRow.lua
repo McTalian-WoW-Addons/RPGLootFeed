@@ -219,7 +219,13 @@ end
 --- @param enabled boolean true = click-through (mouse disabled), false = interactive
 function LootDisplayRowMixin:SetClickThrough(enabled)
 	self.isClickThrough = enabled
+	-- The row only needs mouse *motion* (hover highlight / pin).  Full EnableMouse
+	-- would make the whole transparent feedWidth rectangle swallow clicks and block
+	-- camera drag.  ClickableButton and Icon are content-sized and keep full mouse.
 	self:EnableMouse(not enabled)
+	if not enabled then
+		self:SetMouseClickEnabled(false)
+	end
 	self.ClickableButton:EnableMouse(not enabled)
 	if self.Icon then
 		self.Icon:EnableMouse(not enabled)
@@ -308,7 +314,9 @@ function LootDisplayRowMixin:Styles()
 	self:StyleUnitPortrait()
 	self:StyleText()
 	self:StyleTimerBar()
-	self:HandlerOnRightClick()
+	-- Do not (re)install a row-level OnMouseUp here: the row must stay mouse-motion
+	-- only so empty row space does not capture clicks (camera drag).  Right-click
+	-- dismiss is handled by the ClickableButton.
 end
 
 --- Bootstrap a row from an RLF_LootElement
