@@ -166,6 +166,7 @@ describe("RLF_RowTextMixin", function()
 			local db = makeDefaultStylingDb()
 			db.textAlignment = "CENTER"
 			stub(ns.DbAccessor, "Styling").returns(db)
+			stub(ns.DbAccessor, "Sizing").returns({ padding = 4, iconSize = 32, feedWidth = 300 })
 			RLF_RowTextMixin.StyleText(row)
 			assert.is_nil(row.PrimaryLineLayout.childLayoutDirection)
 		end)
@@ -597,6 +598,122 @@ describe("RLF_RowTextMixin", function()
 			assert.stub(row.SecondaryLineLayout.Layout).was.called(1)
 		end)
 	end)
+	-- ── ApplyCenterAlignment ───────────────────────────────────────────────
+
+	describe("ApplyCenterAlignment", function()
+		local function useAlignment(alignment, feedWidth)
+			local styling = makeDefaultStylingDb()
+			styling.textAlignment = alignment
+			stub(ns.DbAccessor, "Styling").returns(styling)
+			stub(ns.DbAccessor, "Sizing").returns({ padding = 4, iconSize = 32, feedWidth = feedWidth or 300 })
+			stub(ns.DbAccessor, "Feature").returns(nil)
+		end
+
+		before_each(function()
+			stub(row.Icon, "SetPoint")
+			row.icon = 12345
+			row.PrimaryLineLayout.spacing = 8
+			row.PrimaryLineLayout._width = 100
+		end)
+
+		it("does nothing when the alignment is not CENTER", function()
+			useAlignment("LEFT")
+			row:ApplyCenterAlignment()
+			assert.stub(row.Icon.SetPoint).was_not.called()
+			assert.stub(row.PrimaryLineLayout.SetPoint).was_not.called()
+		end)
+
+		it("centers the icon and text block as one group", function()
+			useAlignment("CENTER")
+			row:ApplyCenterAlignment()
+
+			-- group = icon 32 + spacing 8 + text 100 = 140; (300 - 140) / 2 = 80
+			assert.stub(row.Icon.SetPoint).was.called_with(row.Icon, "LEFT", row, "LEFT", 80, 0)
+			assert
+				.stub(row.PrimaryLineLayout.SetPoint).was
+				.called_with(row.PrimaryLineLayout, "LEFT", row.Icon, "RIGHT", 8, 0)
+		end)
+
+		it("centers a shorter secondary line under the primary line", function()
+			useAlignment("CENTER")
+			row.secondaryText = "[Finger]"
+			row.SecondaryLineLayout._width = 60
+			row:ApplyCenterAlignment()
+
+			-- the block stays 100 wide, so the 60 wide line sits 20 in from the primary line's left
+			assert.stub(row.Icon.SetPoint).was.called_with(row.Icon, "LEFT", row, "LEFT", 80, 0)
+			assert
+				.stub(row.SecondaryLineLayout.SetPoint).was
+				.called_with(row.SecondaryLineLayout, "LEFT", row.Icon, "RIGHT", 28, 0)
+			assert
+				.stub(row.PrimaryLineLayout.SetPoint).was
+				.called_with(row.PrimaryLineLayout, "LEFT", row.Icon, "RIGHT", 8, 0)
+		end)
+
+		it("widens the block to a longer secondary line and centers the primary line in it", function()
+			useAlignment("CENTER")
+			row.secondaryText = "A much longer secondary line"
+			row.SecondaryLineLayout._width = 140
+			row:ApplyCenterAlignment()
+
+			-- group = 32 + 8 + 140 = 180; (300 - 180) / 2 = 60; primary is 40 narrower => +20
+			assert.stub(row.Icon.SetPoint).was.called_with(row.Icon, "LEFT", row, "LEFT", 60, 0)
+			assert
+				.stub(row.PrimaryLineLayout.SetPoint).was
+				.called_with(row.PrimaryLineLayout, "LEFT", row.Icon, "RIGHT", 28, 0)
+			assert
+				.stub(row.SecondaryLineLayout.SetPoint).was
+				.called_with(row.SecondaryLineLayout, "LEFT", row.Icon, "RIGHT", 8, 0)
+		end)
+
+		it("never moves the icon left of its normal inset when the group is wider than the feed", function()
+			useAlignment("CENTER", 100)
+			row:ApplyCenterAlignment()
+			assert.stub(row.Icon.SetPoint).was.called_with(row.Icon, "LEFT", row, "LEFT", 8, 0)
+		end)
+
+		it("anchors text to the icon's left edge when the row has no icon", function()
+			useAlignment("CENTER")
+			row.icon = nil
+			row:ApplyCenterAlignment()
+
+			-- group = text 100; (300 - 100) / 2 = 100
+			assert.stub(row.Icon.SetPoint).was.called_with(row.Icon, "LEFT", row, "LEFT", 100, 0)
+			assert
+				.stub(row.PrimaryLineLayout.SetPoint).was
+				.called_with(row.PrimaryLineLayout, "LEFT", row.Icon, "LEFT", 0, 0)
+		end)
+
+		it("anchors text to the party portrait and includes it in the group width", function()
+			useAlignment("CENTER")
+			stub(ns.DbAccessor, "Feature").returns({ enablePartyAvatar = true })
+			row.unit = "party1"
+			row:ApplyCenterAlignment()
+
+			-- group = icon 32 + gap 8 + portrait 25.6 + spacing 8 + text 100 = 173.6
+			assert.stub(row.Icon.SetPoint).was.called_with(row.Icon, "LEFT", row, "LEFT", (300 - 173.6) / 2, 0)
+			assert
+				.stub(row.PrimaryLineLayout.SetPoint).was
+				.called_with(row.PrimaryLineLayout, "LEFT", row.UnitPortrait, "RIGHT", 8, 0)
+		end)
+
+		it("sizes the line layouts to their content (no fixedWidth) when centered", function()
+			useAlignment("CENTER")
+			row.PrimaryLineLayout.fixedWidth = 999
+			row.PrimaryText.GetUnboundedStringWidth = function()
+				return 50
+			end
+			row.ItemCountText.GetUnboundedStringWidth = function()
+				return 0
+			end
+			row.AmountText.GetUnboundedStringWidth = function()
+				return 0
+			end
+			row:LayoutPrimaryLine()
+			assert.is_nil(row.PrimaryLineLayout.fixedWidth)
+		end)
+	end)
+
 	-- ── UpdateSecondaryText ────────────────────────────────────────────────
 
 	describe("UpdateSecondaryText", function()

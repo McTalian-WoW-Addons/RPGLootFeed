@@ -152,6 +152,10 @@ function RLF_RowIconMixin:StyleIcon()
 		if not SQUARE_BORDER_SKINS[iconSkin] then
 			self:ClearQualityBorder(true)
 		end
+		-- Re-anchoring above dropped any centering offset.
+		if self.ApplyCenterAlignment then
+			self:ApplyCenterAlignment()
+		end
 	end
 	self.Icon:SetShown(self.icon ~= nil)
 end

@@ -739,6 +739,10 @@ function LootDisplayFrameMixin:ShowQueueLabel()
 		return
 	end
 	local vertDir, opposite, _, horizDir = self:getPositioningDetails()
+	if G_RLF.DbAccessor:Styling(self.frameType).textAlignment == G_RLF.TextAlignment.CENTER then
+		-- A bare TOP/BOTTOM point centers horizontally.
+		horizDir = ""
+	end
 	self.QueueLabel:ClearAllPoints()
 	self.QueueLabel:SetPoint(vertDir .. horizDir, self, opposite .. horizDir, 0, 0)
 	self.QueueLabel:Show()
