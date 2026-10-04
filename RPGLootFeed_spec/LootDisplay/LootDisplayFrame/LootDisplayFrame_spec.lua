@@ -122,6 +122,34 @@ describe("LootDisplayFrameMixin", function()
 		assert.equal(3, result)
 	end)
 
+	-- Rows stack at rowHeight + padding.  If that pitch is not a whole number of
+	-- physical pixels, row edges drift off the pixel grid and 1px borders vanish
+	-- on some rows, so the pitch must go through PerfPixel.
+	describe("pixel-snapped row pitch", function()
+		before_each(function()
+			ns.PerfPixel.PScale = function(v)
+				return v + 0.5
+			end
+			frame.frameType = ns.Frames.MAIN
+			mockSizing.returns({ maxRows = 4, rowHeight = 22, padding = 2, feedWidth = 300 })
+		end)
+
+		it("snaps the padding used as the row-to-row offset", function()
+			mockStyling.returns({ growUp = true })
+			local _, _, yOffset = frame:getPositioningDetails()
+			assert.equal(2.5, yOffset)
+
+			mockStyling.returns({ growUp = false })
+			_, _, yOffset = frame:getPositioningDetails()
+			assert.equal(-2.5, yOffset)
+		end)
+
+		it("sizes the frame from the snapped row height and padding", function()
+			-- 4 rows * (22.5 + 2.5) - 2.5
+			assert.equal(97.5, frame:getFrameHeight())
+		end)
+	end)
+
 	it("retrieves positioning details correctly with getPositioningDetails", function()
 		mockStyling.returns({ growUp = true })
 		frame.frameType = ns.Frames.MAIN

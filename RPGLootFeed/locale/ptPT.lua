@@ -24,7 +24,7 @@ end
 -- L["Pin Rows On Hover"] = "Lock Rows On Hover"
 -- L["PinRowsOnHoverDesc"] = "Lock a row's position while the mouse is over it so it does not shift when other rows exit."
 -- L["Right Click To Dismiss"] = "Right Click To Dismiss"
--- L["RightClickToDismissDesc"] = "Allow right-clicking a row to dismiss it."
+-- L["RightClickToDismissDesc"] = "Allow right-clicking anywhere on a row to dismiss it. While on, the whole row captures clicks, so the camera cannot be dragged over empty row space. Turn this off to let clicks and camera drag pass through; rows can then only be dismissed by waiting."
 -- L["Roll Buttons"] = "Roll Buttons"
 -- L["RollButtonsDesc"] = "Allow clicking the Need, Greed, and Pass buttons on loot roll rows."
 -- L["Show Tooltips"] = "Show Tooltips"
