@@ -89,7 +89,10 @@ function LootDisplayRowMixin:Init()
 
 	local sizingDb = G_RLF.DbAccessor:Sizing(self.frameType)
 
-	self:SetSize(sizingDb.feedWidth, sizingDb.rowHeight)
+	-- Pixel-snap the row size.  Rows stack at a pitch of rowHeight + padding, so a
+	-- fractional-pixel pitch drifts row edges off the pixel grid and 1px borders
+	-- vanish on some rows.
+	self:SetSize(G_RLF.PerfPixel.PScale(sizingDb.feedWidth), G_RLF.PerfPixel.PScale(sizingDb.rowHeight))
 	self.RLFUser:SetTexture("Interface/AddOns/RPGLootFeed/Icons/logo.blp")
 	self.RLFUser:SetDrawLayer("OVERLAY")
 	self.RLFUser:Hide()

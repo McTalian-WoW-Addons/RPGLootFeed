@@ -110,8 +110,8 @@ end
 
 function LootDisplayFrameMixin:getFrameHeight()
 	local sizingDb = G_RLF.DbAccessor:Sizing(self.frameType)
-	local padding = sizingDb.padding
-	return sizingDb.maxRows * (sizingDb.rowHeight + padding) - padding
+	local padding = G_RLF.PerfPixel.PScale(sizingDb.padding)
+	return sizingDb.maxRows * (G_RLF.PerfPixel.PScale(sizingDb.rowHeight) + padding) - padding
 end
 
 function LootDisplayFrameMixin:getNumberOfRows()
@@ -127,7 +127,7 @@ function LootDisplayFrameMixin:getPositioningDetails()
 	local vertDir = growUp and "BOTTOM" or "TOP"
 	local opposite = growUp and "TOP" or "BOTTOM"
 	local sizingDb = G_RLF.DbAccessor:Sizing(self.frameType)
-	local yOffset = sizingDb.padding
+	local yOffset = G_RLF.PerfPixel.PScale(sizingDb.padding)
 	if not growUp then
 		yOffset = -yOffset
 	end
@@ -502,7 +502,7 @@ function LootDisplayFrameMixin:CreateScrollWheelTarget()
 			end
 			local currentScroll = selfRef.historyFrame:GetVerticalScroll()
 			local sizingDb = G_RLF.DbAccessor:Sizing(selfRef.frameType)
-			local rowStep = sizingDb.rowHeight + sizingDb.padding
+			local rowStep = G_RLF.PerfPixel.PScale(sizingDb.rowHeight) + G_RLF.PerfPixel.PScale(sizingDb.padding)
 			if delta > 0 then
 				-- Scroll up: already at top → deactivate; otherwise scroll one row up
 				if currentScroll <= 0 then
