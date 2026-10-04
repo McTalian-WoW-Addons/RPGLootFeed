@@ -23,7 +23,7 @@ function G_RLF.LootRolls:BuildConfigArgs(frameId, order)
 				name = "|cFFFFAA00" .. G_RLF.L["DisableAllInteractionFeatureWarning"] .. "|r", -- nocheck
 				order = 0.9,
 				hidden = function()
-					return not G_RLF.db.global.interactions.disableAllInteraction
+					return not G_RLF.DbAccessor:AllInteractionDisabled(frameId)
 				end,
 			},
 			enableLootRolls = {

@@ -35,6 +35,7 @@ describe("DbAccessors module", function()
 
 		-- Attach mock db to namespace
 		ns.db = mockDb
+		mockDb.global.interactions = { disableAllInteraction = false }
 
 		-- Define frame types
 		ns.Frames = {
@@ -44,6 +45,66 @@ describe("DbAccessors module", function()
 		-- Load the module being tested
 		assert(loadfile("RPGLootFeed/config/DbAccessors.lua"))("TestAddon", ns)
 		DbAccessor = ns.DbAccessor
+	end)
+
+	describe("Interactions", function()
+		before_each(function()
+			mockDb.global.interactions = {
+				disableAllInteraction = false,
+				itemClicks = true,
+				rightClickDismiss = true,
+				pinOnHover = true,
+				rollButtons = true,
+			}
+			mockDb.global.tooltips = { hover = { enabled = true } }
+			mockDb.global.frames[1].interactions = { override = true, tooltips = true, rollButtons = false }
+			mockDb.global.frames[2].interactions = { override = false, tooltips = false }
+		end)
+
+		it("returns per-frame interactions", function()
+			assert.is_false(DbAccessor:Interactions(1).rollButtons)
+		end)
+
+		it("an overriding frame uses its own toggles", function()
+			assert.is_true(DbAccessor:InteractionAllowed(1, "tooltips"))
+			assert.is_false(DbAccessor:InteractionAllowed(1, "rollButtons"))
+		end)
+
+		it("an overriding frame treats a missing toggle as allowed", function()
+			assert.is_true(DbAccessor:InteractionAllowed(1, "itemClicks"))
+		end)
+
+		it("an overriding frame beats disableAllInteraction", function()
+			mockDb.global.interactions.disableAllInteraction = true
+			assert.is_true(DbAccessor:InteractionAllowed(1, "tooltips"))
+		end)
+
+		it("a non-overriding frame follows the global settings", function()
+			assert.is_true(DbAccessor:InteractionAllowed(2, "tooltips"))
+			mockDb.global.tooltips.hover.enabled = false
+			assert.is_false(DbAccessor:InteractionAllowed(2, "tooltips"))
+			mockDb.global.interactions.rollButtons = false
+			assert.is_false(DbAccessor:InteractionAllowed(2, "rollButtons"))
+		end)
+
+		it("a non-overriding frame is fully disabled by disableAllInteraction", function()
+			mockDb.global.interactions.disableAllInteraction = true
+			assert.is_false(DbAccessor:InteractionAllowed(2, "tooltips"))
+			assert.is_false(DbAccessor:InteractionAllowed(2, "pinOnHover"))
+		end)
+
+		it("AllInteractionDisabled is true only for a non-overriding frame with disableAll on", function()
+			assert.is_false(DbAccessor:AllInteractionDisabled(2))
+			mockDb.global.interactions.disableAllInteraction = true
+			assert.is_true(DbAccessor:AllInteractionDisabled(2))
+			assert.is_false(DbAccessor:AllInteractionDisabled(1))
+		end)
+
+		it("a missing frame follows the global settings", function()
+			assert.is_true(DbAccessor:InteractionAllowed(99, "itemClicks"))
+			mockDb.global.interactions.itemClicks = false
+			assert.is_false(DbAccessor:InteractionAllowed(99, "itemClicks"))
+		end)
 	end)
 
 	describe("Sizing", function()

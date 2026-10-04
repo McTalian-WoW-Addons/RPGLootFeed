@@ -107,6 +107,9 @@ function LootDisplayRowMixin:Init()
 	self:StyleTimerBar()
 	RunNextFrame(function()
 		self:SetUpHoverEffect()
+		-- Installing the row's hover scripts must not leave click capture on:
+		-- reassert the interaction-derived mouse state afterwards.
+		self:UpdateMouseState()
 	end)
 end
 
@@ -215,21 +218,60 @@ function LootDisplayRowMixin:Reset()
 	self:CleanupLootRoll()
 end
 
+--- Whether a per-frame mouse interaction is allowed on this row.
+--- History rows ignore per-frame overrides (only the global settings apply).
+--- @param key string One of the RLF_ConfigFrameInteractions keys
+--- @return boolean
+function LootDisplayRowMixin:IsInteractionAllowed(key)
+	if self.isHistoryMode then
+		return G_RLF.DbAccessor:GlobalInteractionAllowed(key)
+	end
+	return G_RLF.DbAccessor:InteractionAllowed(self.frameType, key)
+end
+
+--- Whether hover handling (highlight, exit-animation pause, tooltips, pin) runs on this row at all.
+--- disableAllInteraction turns it off unless the row's frame overrides the global settings.
+--- @return boolean
+function LootDisplayRowMixin:IsRowHoverAllowed()
+	if self.isHistoryMode then
+		return not G_RLF.db.global.interactions.disableAllInteraction
+	end
+	return not G_RLF.DbAccessor:AllInteractionDisabled(self.frameType)
+end
+
+--- Apply the mouse-enable state for this row and its interactive children from
+--- isClickThrough and the frame's interaction settings.  Does not touch visibility.
+--- The row only needs mouse *motion* (hover highlight / pin).  Full EnableMouse
+--- would make the whole transparent feedWidth rectangle swallow clicks and block
+--- camera drag.  ClickableButton and Icon are content-sized and keep full mouse
+--- when any of the interactions they serve is allowed.
+function LootDisplayRowMixin:UpdateMouseState()
+	local interactive = not self.isClickThrough
+	local hoverDb = G_RLF.DbAccessor:Animations(self.frameType).hover
+	local rowMotion = interactive
+		and self:IsRowHoverAllowed()
+		and ((hoverDb and hoverDb.enabled) or self:IsInteractionAllowed("pinOnHover"))
+	local childMouse = interactive
+		and (
+			self:IsInteractionAllowed("tooltips")
+			or self:IsInteractionAllowed("itemClicks")
+			or self:IsInteractionAllowed("rightClickDismiss")
+		)
+	self:EnableMouse(rowMotion)
+	if rowMotion then
+		self:SetMouseClickEnabled(false)
+	end
+	self.ClickableButton:EnableMouse(childMouse)
+	if self.Icon then
+		self.Icon:EnableMouse(childMouse)
+	end
+end
+
 --- Enable or disable mouse interaction on this row and its interactive children.
 --- @param enabled boolean true = click-through (mouse disabled), false = interactive
 function LootDisplayRowMixin:SetClickThrough(enabled)
 	self.isClickThrough = enabled
-	-- The row only needs mouse *motion* (hover highlight / pin).  Full EnableMouse
-	-- would make the whole transparent feedWidth rectangle swallow clicks and block
-	-- camera drag.  ClickableButton and Icon are content-sized and keep full mouse.
-	self:EnableMouse(not enabled)
-	if not enabled then
-		self:SetMouseClickEnabled(false)
-	end
-	self.ClickableButton:EnableMouse(not enabled)
-	if self.Icon then
-		self.Icon:EnableMouse(not enabled)
-	end
+	self:UpdateMouseState()
 	if enabled then
 		self.ClickableButton:Hide()
 		if self.Icon then
@@ -285,7 +327,7 @@ function LootDisplayRowMixin:PinPosition(frame)
 	if self.isPinned then
 		return
 	end
-	if not G_RLF.db.global.interactions.pinOnHover then
+	if not self:IsInteractionAllowed("pinOnHover") then
 		return
 	end
 
