@@ -335,8 +335,10 @@ function LootDisplayRowMixin:PinPosition(frame)
 	local edgeY = (frame.vertDir == "BOTTOM") and self:GetBottom() or self:GetTop()
 
 	self.pinnedFrameOffset = edgeY - frameEdgeY
+	self:PauseGlow()
 	self:ClearAllPoints()
 	self:SetPoint(frame.vertDir, frame, frame.vertDir, 0, self.pinnedFrameOffset)
+	self:ResumeGlow()
 
 	self.isPinned = true
 	frame.hasPinnedRow = true
@@ -617,6 +619,7 @@ end
 function LootDisplayRowMixin:UpdatePosition(frame)
 	-- Position the new row at the bottom (or top if growing down)
 	local vertDir, opposite, yOffset = frame.vertDir, frame.opposite, frame.yOffset
+	self:PauseGlow()
 	self:ClearAllPoints()
 	if self._prev then
 		self:SetPoint(vertDir, self._prev, opposite, 0, yOffset)
@@ -638,6 +641,7 @@ function LootDisplayRowMixin:UpdatePosition(frame)
 		self.anchorTo = frame
 		self:SetFrameLevel(500)
 	end
+	self:ResumeGlow()
 end
 
 function LootDisplayRowMixin:UpdateNeighborPositions(frame)
@@ -648,6 +652,7 @@ function LootDisplayRowMixin:UpdateNeighborPositions(frame)
 	-- Do not disturb a pinned row's anchor.  It is visually fixed; it will
 	-- re-anchor itself in ReleasePin → UpdatePosition when the hover ends.
 	if _next and not _next.isPinned then
+		_next:PauseGlow()
 		_next:ClearAllPoints()
 		if _prev then
 			_next:SetPoint(vertDir, _prev, opposite, 0, yOffset)
@@ -664,6 +669,7 @@ function LootDisplayRowMixin:UpdateNeighborPositions(frame)
 			_next.anchorTo = frame
 			_next:SetFrameLevel(500)
 		end
+		_next:ResumeGlow()
 	end
 end
 

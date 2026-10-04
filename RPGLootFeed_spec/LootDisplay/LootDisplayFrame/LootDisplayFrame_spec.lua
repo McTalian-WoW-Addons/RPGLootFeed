@@ -1278,6 +1278,7 @@ describe("LootDisplayFrameMixin", function()
 			return {
 				isPinned = true,
 				pinnedFrameOffset = 50,
+				ResumeGlow = spy.new(function() end),
 				UpdatePosition = spy.new(function() end),
 				AnimateShift = spy.new(function() end),
 				ClearAllPoints = spy.new(function() end),
@@ -1379,6 +1380,23 @@ describe("LootDisplayFrameMixin", function()
 			frame:ReleasePin(row)
 
 			assert.spy(nsMocks.SendMessage).was_not.called()
+		end)
+
+		it("resumes the glow on a fast-forwarded shifting row, whose OnFinished will not run", function()
+			local row = makePinnedRow(200)
+			row._shiftFinalFrameOffset = 42
+			row.ShiftAnimation = {
+				IsPlaying = function()
+					return true
+				end,
+				Stop = spy.new(function() end),
+			}
+			frame.shiftingRowCount = 1
+			frame.rows = makeIterableRows({ row })
+
+			frame:ReleasePin(row)
+
+			assert.spy(row.ResumeGlow).was.called()
 		end)
 
 		it("stops in-progress ShiftAnimation and fast-forwards to final offset", function()
