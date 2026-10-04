@@ -145,7 +145,8 @@ function RLF:OnInitialize()
 	G_RLF.supportsSlug = G_RLF:ProbeSlugSupport()
 	G_RLF.DBIcon:Register(addonName, rlfLDB, G_RLF.db.global.minimap)
 	G_RLF.DBIcon:AddButtonToCompartment(addonName)
-	self:Hook(G_RLF.acd, "Open", "OnOptionsOpen")
+	-- Post-hook so the options frame already exists in acd.OpenFrames when we look.
+	self:SecureHook(G_RLF.acd, "Open", "OnOptionsOpen")
 	self:RegisterEvent("PLAYER_ENTERING_WORLD")
 	self:RegisterChatCommand("rlf", "SlashCommand")
 	self:RegisterChatCommand("RLF", "SlashCommand")
@@ -252,8 +253,35 @@ function RLF:PLAYER_ENTERING_WORLD(event, isLogin, isReload)
 	end
 end
 
-local optionsFrame
 local isOpen = false
+
+--- Close the edit/test overlay as soon as the options frame hides, however it
+--- was closed (X button, Escape, or code).  Hooks the raw frame's OnHide, which
+--- every close path goes through, and installs it right away so a quick close
+--- cannot leave the container capturing the mouse.
+---@param name string
+function RLF:WatchOptionsFrame(name)
+	local widget = G_RLF.acd.OpenFrames and G_RLF.acd.OpenFrames[name]
+	local rawFrame = widget and widget.frame
+	if not rawFrame then
+		-- Already closed (or never opened): nothing will ever fire OnHide.
+		self:OnOptionsClose()
+		return
+	end
+	if not rawFrame.IsShown(rawFrame) then
+		self:OnOptionsClose()
+		return
+	end
+	-- AceGUI recycles frames, so only hook each raw frame once; the handler is a
+	-- no-op unless our overlay is open.
+	if not rawFrame._rlfOptionsWatched then
+		rawFrame._rlfOptionsWatched = true
+		rawFrame:HookScript("OnHide", function()
+			RLF:OnOptionsClose()
+		end)
+	end
+end
+
 function RLF:OnOptionsOpen(...)
 	local _, name, container, path = ...
 	G_RLF:fn(function()
@@ -265,27 +293,20 @@ function RLF:OnOptionsOpen(...)
 			G_RLF.LootDisplay:SetBoundingBoxVisibility(true)
 			-- Show sample rows in existing frames
 			G_RLF.LootDisplay:ShowSampleRows()
-			self:ScheduleTimer(function()
-				optionsFrame = G_RLF.acd.OpenFrames[name]
-				if self:IsHooked(optionsFrame, "Hide") then
-					self:Unhook(optionsFrame, "Hide")
-				end
-				if optionsFrame and optionsFrame.Hide then
-					self:Hook(optionsFrame, "Hide", "OnOptionsClose", true)
-				end
-			end, 0.25)
+			self:WatchOptionsFrame(name)
 		end
 	end)
 end
 
 function RLF:OnOptionsClose(...)
 	G_RLF:fn(function()
+		if not isOpen then
+			return
+		end
 		isOpen = false
 		G_RLF.LootDisplay:SetBoundingBoxVisibility(false)
 		-- Hide sample rows when options close
 		G_RLF.LootDisplay:HideSampleRows()
-		self:Unhook(optionsFrame, "Hide")
-		optionsFrame = nil
 	end)
 end
 

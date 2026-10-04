@@ -93,6 +93,70 @@ describe("RLF_RowAnimationMixin shift animation", function()
 		assert.is_nil(RLF_RowAnimationMixin.HandlerOnRightClick)
 	end)
 
+	-- ── StyleHighlightBorder ──────────────────────────────────────────────
+
+	describe("StyleHighlightBorder", function()
+		local scripts
+
+		before_each(function()
+			scripts = {}
+			local ag = {}
+			stub(ag, "SetToFinalAlpha")
+			stub(ag, "SetLooping")
+			ag.SetScript = function(_, event, fn)
+				scripts[event] = fn
+			end
+			ag.CreateAnimation = function()
+				local a = {}
+				stub(a, "SetTarget")
+				stub(a, "SetOrder")
+				stub(a, "SetFromAlpha")
+				stub(a, "SetToAlpha")
+				stub(a, "SetSmoothing")
+				stub(a, "SetDuration")
+				stub(a, "SetStartDelay")
+				return a
+			end
+			row.HighlightAnimation = nil -- the shared row mock pre-creates one
+			row.CreateAnimationGroup = function()
+				return ag
+			end
+			for _, name in ipairs({ "TopBorder", "RightBorder", "BottomBorder", "LeftBorder" }) do
+				row[name] = row[name] or {}
+				stub(row[name], "SetHeight")
+				stub(row[name], "SetWidth")
+			end
+			stub(row, "ResetHighlightBorder")
+			ns.DbAccessor.Animations.returns({
+				update = { disableHighlight = false, duration = 0.3, loop = true },
+			})
+			ns.PerfPixel = {
+				PScale = function(v)
+					return v
+				end,
+			}
+		end)
+
+		it("resets the borders when the highlight animation finishes", function()
+			row:StyleHighlightBorder()
+			scripts.OnFinished()
+			assert.stub(row.ResetHighlightBorder).was.called(1)
+		end)
+
+		it("resets the borders when the highlight animation is stopped mid-fade", function()
+			row:StyleHighlightBorder()
+			scripts.OnStop()
+			assert.stub(row.ResetHighlightBorder).was.called(1)
+		end)
+
+		it("only installs the reset scripts once per row", function()
+			row:StyleHighlightBorder()
+			local onStop = scripts.OnStop
+			row:StyleHighlightBorder()
+			assert.equal(onStop, scripts.OnStop)
+		end)
+	end)
+
 	-- ── StyleShiftAnimation ───────────────────────────────────────────────
 
 	describe("StyleShiftAnimation", function()

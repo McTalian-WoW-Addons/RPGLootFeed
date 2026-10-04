@@ -203,6 +203,14 @@ function RLF_RowAnimationMixin:StyleHighlightBorder()
 	if not self.HighlightAnimation then
 		self.HighlightAnimation = self:CreateAnimationGroup()
 		self.HighlightAnimation:SetToFinalAlpha(true)
+		-- A looping (BOUNCE) group never finishes on its own, and stopping any group
+		-- mid-fade can leave a full-alpha border behind (a stuck white line across
+		-- the row).  Force the borders invisible whenever the group ends or is stopped.
+		local function resetBorders()
+			self:ResetHighlightBorder()
+		end
+		self.HighlightAnimation:SetScript("OnFinished", resetBorders)
+		self.HighlightAnimation:SetScript("OnStop", resetBorders)
 	end
 
 	---@type RLF_ConfigAnimations
