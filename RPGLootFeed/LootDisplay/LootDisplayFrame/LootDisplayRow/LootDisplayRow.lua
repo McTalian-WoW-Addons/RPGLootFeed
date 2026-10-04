@@ -244,24 +244,33 @@ end
 
 --- Apply the mouse-enable state for this row and its interactive children from
 --- isClickThrough and the frame's interaction settings.  Does not touch visibility.
---- The row only needs mouse *motion* (hover highlight / pin).  Full EnableMouse
---- would make the whole transparent feedWidth rectangle swallow clicks and block
---- camera drag.  ClickableButton and Icon are content-sized and keep full mouse
---- when any of the interactions they serve is allowed.
+--- The row needs mouse *motion* for the hover highlight and pin.  It only keeps
+--- click capture across its whole (transparent) feedWidth rectangle while Right
+--- Click To Dismiss is on, since right-click works anywhere on the row; that also
+--- means clicks and camera drag cannot pass through empty row space.  With it off
+--- the row is motion-only and clicks pass through.  ClickableButton and Icon are
+--- content-sized and keep full mouse when any interaction they serve is allowed.
 function LootDisplayRowMixin:UpdateMouseState()
 	local interactive = not self.isClickThrough
 	local hoverDb = G_RLF.DbAccessor:Animations(self.frameType).hover
 	local rowMotion = interactive
 		and self:IsRowHoverAllowed()
 		and ((hoverDb and hoverDb.enabled) or self:IsInteractionAllowed("pinOnHover"))
+	local rowClick = interactive
+		and not self.isHistoryMode
+		and not self._isLootRollRow
+		and self:IsInteractionAllowed("rightClickDismiss")
 	local childMouse = interactive
 		and (
 			self:IsInteractionAllowed("tooltips")
 			or self:IsInteractionAllowed("itemClicks")
 			or self:IsInteractionAllowed("rightClickDismiss")
 		)
-	self:EnableMouse(rowMotion)
-	if rowMotion then
+	self:EnableMouse(rowMotion or rowClick)
+	if rowClick then
+		self:SetMouseClickEnabled(true)
+		self:SetMouseMotionEnabled(rowMotion)
+	elseif rowMotion then
 		self:SetMouseClickEnabled(false)
 	end
 	self.ClickableButton:EnableMouse(childMouse)
@@ -361,9 +370,9 @@ function LootDisplayRowMixin:Styles()
 	self:StyleUnitPortrait()
 	self:StyleText()
 	self:StyleTimerBar()
-	-- Do not (re)install a row-level OnMouseUp here: the row must stay mouse-motion
-	-- only so empty row space does not capture clicks (camera drag).  Right-click
-	-- dismiss is handled by the ClickableButton.
+	self:HandlerOnRightClick()
+	-- Installing scripts can change the row's mouse flags; reassert them.
+	self:UpdateMouseState()
 end
 
 --- Bootstrap a row from an RLF_LootElement
