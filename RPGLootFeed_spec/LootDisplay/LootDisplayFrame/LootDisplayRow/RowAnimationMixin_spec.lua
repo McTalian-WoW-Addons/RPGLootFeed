@@ -87,106 +87,57 @@ describe("RLF_RowAnimationMixin shift animation", function()
 		})
 	end)
 
-	-- A row-level OnMouseUp would leave the whole transparent row click-enabled and
-	-- block camera drag; right-click dismiss lives on the ClickableButton.
-	it("does not provide a row-level right-click handler", function()
-		assert.is_nil(RLF_RowAnimationMixin.HandlerOnRightClick)
-	end)
+	-- ── HandlerOnRightClick ───────────────────────────────────────────────
 
-	-- ── Icon glow pause / resume ──────────────────────────────────────────
-
-	describe("icon glow pause/resume", function()
-		local glow
+	describe("HandlerOnRightClick", function()
+		local onMouseUp
 
 		before_each(function()
-			glow = {
-				playing = false,
-				Play = spy.new(function(self)
-					self.playing = true
-				end),
-				Stop = spy.new(function(self)
-					self.playing = false
-				end),
-				IsPlaying = function(self)
-					return self.playing
-				end,
-			}
-			row.glowAnimationGroup = glow
-			row.ShiftAnimation = nil
-		end)
-
-		it("PauseGlow stops a playing glow and remembers it was playing", function()
-			glow.playing = true
-			row:PauseGlow()
-			assert.spy(glow.Stop).was.called(1)
-			assert.is_true(row._glowWasPlaying)
-		end)
-
-		it("PauseGlow leaves an idle glow alone", function()
-			row:PauseGlow()
-			assert.spy(glow.Stop).was_not.called()
-			assert.is_falsy(row._glowWasPlaying)
-		end)
-
-		it("keeps the was-playing flag when paused again while already paused", function()
-			glow.playing = true
-			row:PauseGlow()
-			row:PauseGlow() -- glow is already stopped, e.g. a second shift interrupts the first
-			assert.is_true(row._glowWasPlaying)
-		end)
-
-		it("ResumeGlow restarts a glow that PauseGlow stopped", function()
-			glow.playing = true
-			row:PauseGlow()
-			row:ResumeGlow()
-			assert.spy(glow.Play).was.called(1)
-			assert.is_false(row._glowWasPlaying)
-		end)
-
-		it("ResumeGlow does nothing when the glow was not paused", function()
-			row:ResumeGlow()
-			assert.spy(glow.Play).was_not.called()
-		end)
-
-		it("ResumeGlow waits while the row is still shifting", function()
-			glow.playing = true
-			row:PauseGlow()
-			row.ShiftAnimation = {
+			row.SetScript = function(_, event, fn)
+				if event == "OnMouseUp" then
+					onMouseUp = fn
+				end
+			end
+			row.ExitAnimation = {
 				IsPlaying = function()
 					return true
 				end,
+				Stop = spy.new(function() end),
+				Play = spy.new(function() end),
+				fadeOut = { SetStartDelay = spy.new(function() end) },
 			}
-			row:ResumeGlow()
-			assert.spy(glow.Play).was_not.called()
-			assert.is_true(row._glowWasPlaying)
+			row.IsInteractionAllowed = function()
+				return true
+			end
+			row:HandlerOnRightClick()
 		end)
 
-		describe("HighlightIcon", function()
-			before_each(function()
-				row.highlight = true
-				row.type = "ItemLoot"
-				row.glowTexture = { SetAlpha = function() end, Show = function() end }
-				ns.FeatureModule = ns.FeatureModule or {}
-				_G.RunNextFrame = function(fn)
-					fn()
-				end
-			end)
+		it("dismisses the row on right-click", function()
+			onMouseUp(row, "RightButton")
+			assert.spy(row.ExitAnimation.Play).was.called(1)
+			assert.spy(row.ExitAnimation.fadeOut.SetStartDelay).was.called_with(row.ExitAnimation.fadeOut, 0)
+		end)
 
-			it("plays the glow right away when the row is not shifting", function()
-				row:HighlightIcon()
-				assert.spy(glow.Play).was.called(1)
-			end)
+		it("ignores other buttons", function()
+			onMouseUp(row, "LeftButton")
+			assert.spy(row.ExitAnimation.Play).was_not.called()
+		end)
 
-			it("defers the glow to the shift's OnFinished when the row is shifting", function()
-				row.ShiftAnimation = {
-					IsPlaying = function()
-						return true
-					end,
-				}
-				row:HighlightIcon()
-				assert.spy(glow.Play).was_not.called()
-				assert.is_true(row._glowWasPlaying)
-			end)
+		it("ignores right-click when right-click dismiss is not allowed", function()
+			row.IsInteractionAllowed = function()
+				return false
+			end
+			onMouseUp(row, "RightButton")
+			assert.spy(row.ExitAnimation.Play).was_not.called()
+		end)
+
+		it("does not dismiss history rows or loot roll rows", function()
+			row.isHistoryMode = true
+			onMouseUp(row, "RightButton")
+			row.isHistoryMode = false
+			row._isLootRollRow = true
+			onMouseUp(row, "RightButton")
+			assert.spy(row.ExitAnimation.Play).was_not.called()
 		end)
 	end)
 

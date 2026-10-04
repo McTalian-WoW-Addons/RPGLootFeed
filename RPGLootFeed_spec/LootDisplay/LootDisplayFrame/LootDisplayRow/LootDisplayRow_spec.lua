@@ -118,6 +118,8 @@ describe("LootDisplayRowMixin", function()
 				"StyleIconHighlight",
 				"StyleUnitPortrait",
 				"StyleTimerBar",
+				"HandlerOnRightClick",
+				"UpdateMouseState",
 			}) do
 				r[method] = function() end
 				stub(r, method)
@@ -126,6 +128,10 @@ describe("LootDisplayRowMixin", function()
 			r:Styles()
 
 			assert.stub(r.StyleTimerBar).was.called()
+			-- Installing the row's scripts can change its mouse flags, so styling
+			-- installs the right-click handler and then reasserts the mouse state.
+			assert.stub(r.HandlerOnRightClick).was.called()
+			assert.stub(r.UpdateMouseState).was.called()
 		end)
 	end)
 
@@ -858,6 +864,8 @@ describe("LootDisplayRowMixin", function()
 			stub(r, "EnableMouse")
 			r.SetMouseClickEnabled = function() end
 			stub(r, "SetMouseClickEnabled")
+			r.SetMouseMotionEnabled = function() end
+			stub(r, "SetMouseMotionEnabled")
 			r.ClickableButton.EnableMouse = function() end
 			stub(r.ClickableButton, "EnableMouse")
 			r.Icon.EnableMouse = function() end
@@ -958,8 +966,8 @@ describe("LootDisplayRowMixin", function()
 			end
 			row:SetClickThrough(false)
 
-			assert.stub(row.EnableMouse).was.called_with(row, false)
-			assert.stub(row.SetMouseClickEnabled).was_not.called()
+			assert.stub(row.EnableMouse).was.called_with(row, true) -- right-click dismiss still captures clicks
+			assert.stub(row.SetMouseMotionEnabled).was.called_with(row, false)
 			assert.stub(row.ClickableButton.EnableMouse).was.called_with(row.ClickableButton, true)
 		end)
 
@@ -975,11 +983,36 @@ describe("LootDisplayRowMixin", function()
 			assert.stub(row.EnableMouse).was.called_with(row, true)
 		end)
 
-		it("keeps the row motion-only (no click capture) when interactive", function()
+		it("captures clicks across the row while right-click dismiss is on", function()
 			row = buildClickThroughRow()
 			row:SetClickThrough(false)
 
+			assert.stub(row.EnableMouse).was.called_with(row, true)
+			assert.stub(row.SetMouseClickEnabled).was.called_with(row, true)
+			assert.stub(row.SetMouseMotionEnabled).was.called_with(row, true)
+		end)
+
+		it("keeps the row motion-only (clicks pass through) when right-click dismiss is off", function()
+			row = buildClickThroughRow()
+			ns.DbAccessor.InteractionAllowed = function(_, _, key)
+				return key ~= "rightClickDismiss"
+			end
+			row:SetClickThrough(false)
+
+			assert.stub(row.EnableMouse).was.called_with(row, true)
 			assert.stub(row.SetMouseClickEnabled).was.called_with(row, false)
+		end)
+
+		it("never captures clicks across history rows or loot roll rows", function()
+			row = buildClickThroughRow()
+			row.isHistoryMode = true
+			row:SetClickThrough(false)
+			assert.stub(row.SetMouseClickEnabled).was_not.called_with(row, true)
+
+			row = buildClickThroughRow()
+			row._isLootRollRow = true
+			row:SetClickThrough(false)
+			assert.stub(row.SetMouseClickEnabled).was_not.called_with(row, true)
 		end)
 
 		it("does not touch row click capture when click-through", function()
