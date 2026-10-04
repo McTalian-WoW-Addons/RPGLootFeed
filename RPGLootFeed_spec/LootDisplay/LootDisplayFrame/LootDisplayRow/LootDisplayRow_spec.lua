@@ -118,7 +118,6 @@ describe("LootDisplayRowMixin", function()
 				"StyleIconHighlight",
 				"StyleUnitPortrait",
 				"StyleTimerBar",
-				"HandlerOnRightClick",
 			}) do
 				r[method] = function() end
 				stub(r, method)
@@ -127,28 +126,6 @@ describe("LootDisplayRowMixin", function()
 			r:Styles()
 
 			assert.stub(r.StyleTimerBar).was.called()
-		end)
-
-		-- A row-level OnMouseUp turns on full mouse for the whole transparent row
-		-- and blocks camera drag over its empty space.
-		it("does not install a row-level click handler", function()
-			local r = buildRow()
-			for _, method in ipairs({
-				"StyleBackground",
-				"StyleRowBackdrop",
-				"StyleIcon",
-				"StyleIconHighlight",
-				"StyleUnitPortrait",
-				"StyleTimerBar",
-				"HandlerOnRightClick",
-			}) do
-				r[method] = function() end
-				stub(r, method)
-			end
-
-			r:Styles()
-
-			assert.stub(r.HandlerOnRightClick).was_not.called()
 		end)
 	end)
 

@@ -87,6 +87,12 @@ describe("RLF_RowAnimationMixin shift animation", function()
 		})
 	end)
 
+	-- A row-level OnMouseUp would leave the whole transparent row click-enabled and
+	-- block camera drag; right-click dismiss lives on the ClickableButton.
+	it("does not provide a row-level right-click handler", function()
+		assert.is_nil(RLF_RowAnimationMixin.HandlerOnRightClick)
+	end)
+
 	-- ── StyleShiftAnimation ───────────────────────────────────────────────
 
 	describe("StyleShiftAnimation", function()

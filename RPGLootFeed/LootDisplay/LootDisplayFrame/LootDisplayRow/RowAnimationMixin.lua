@@ -705,33 +705,6 @@ function RLF_RowAnimationMixin:Enter()
 	end)
 end
 
-function RLF_RowAnimationMixin:HandlerOnRightClick()
-	self:SetScript("OnMouseUp", function(_, button)
-		if not self:IsInteractionAllowed("rightClickDismiss") then
-			return
-		end
-		if button == "RightButton" and not self.isHistoryMode and not self._isLootRollRow then
-			if not self.ExitAnimation then
-				return
-			end
-			-- Stop any ongoing animation
-			if self.ExitAnimation:IsPlaying() then
-				self.ExitAnimation:Stop()
-			end
-
-			if self.ExitAnimation.noop then
-				self.ExitAnimation.noop:SetStartDelay(0)
-			elseif self.ExitAnimation.fadeOut then
-				self.ExitAnimation.fadeOut:SetStartDelay(0)
-			end
-			self.bustCacheExitAnimation = true
-
-			-- Start the fade-out animation
-			self.ExitAnimation:Play()
-		end
-	end)
-end
-
 function RLF_RowAnimationMixin:UpdateEnterAnimation()
 	self:StyleEnterAnimation()
 end

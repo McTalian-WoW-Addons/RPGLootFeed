@@ -107,6 +107,9 @@ function LootDisplayRowMixin:Init()
 	self:StyleTimerBar()
 	RunNextFrame(function()
 		self:SetUpHoverEffect()
+		-- Installing the row's hover scripts must not leave click capture on:
+		-- reassert the interaction-derived mouse state afterwards.
+		self:UpdateMouseState()
 	end)
 end
 
