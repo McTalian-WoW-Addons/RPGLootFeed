@@ -23,6 +23,11 @@ local fillStyleByDrainDirection = Enum.StatusBarFillStyle
 		}
 	or {}
 
+--- The track behind the fill is the bar colour at this fraction of the bar alpha,
+--- so the drained part is visibly dimmer than the remaining fill (a same-colour
+--- track made the bar look solid and never drain).
+local TRACK_ALPHA_FACTOR = 0.3
+
 --- Apply configuration to the timer bar (height, color, alpha, drain direction).
 --- Called during row initialization and when animation settings change.
 function RLF_RowTimerBarMixin:StyleTimerBar()
@@ -53,6 +58,9 @@ function RLF_RowTimerBarMixin:StyleTimerBar()
 	local color = timerBarCfg.color or { 0.5, 0.5, 0.5 }
 	local alpha = timerBarCfg.alpha or 0.7
 	self.TimerBar:SetStatusBarColor(color[1], color[2], color[3], alpha)
+	if self.TimerBar.Track then
+		self.TimerBar.Track:SetVertexColor(color[1], color[2], color[3], alpha * TRACK_ALPHA_FACTOR)
+	end
 
 	-- Set fill style (drain direction)
 	-- SetFillStyle is a StatusBar widget method, so probe the widget itself.
