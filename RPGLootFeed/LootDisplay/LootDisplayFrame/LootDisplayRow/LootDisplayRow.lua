@@ -314,7 +314,9 @@ function LootDisplayRowMixin:Styles()
 	self:StyleUnitPortrait()
 	self:StyleText()
 	self:StyleTimerBar()
-	self:HandlerOnRightClick()
+	-- Do not (re)install a row-level OnMouseUp here: the row must stay mouse-motion
+	-- only so empty row space does not capture clicks (camera drag).  Right-click
+	-- dismiss is handled by the ClickableButton.
 end
 
 --- Bootstrap a row from an RLF_LootElement
