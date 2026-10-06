@@ -193,6 +193,9 @@ describe("PartyLoot Module", function()
 			GetRaidClassColor = function(className)
 				return nil
 			end,
+			GetItemIDForItemInfo = function(itemLink)
+				return tonumber(itemLink:match("Hitem:(%d+)"))
+			end,
 			GetItemInfo = function(itemLink)
 				return "Finkle's Lava Dredger",
 					itemLink,
@@ -516,6 +519,65 @@ describe("PartyLoot Module", function()
 			-- pendingPartyRequests entry must be cleared after resolution
 			assert.is_nil(PartyLoot.pendingPartyRequests[18803])
 			assert.spy(sendMessageSpy).was.called(1)
+		end)
+
+		-- Regression: the pending request was keyed by the string from the item link
+		-- ("18803") but the event reports a number, so an item that was not cached when
+		-- the loot message arrived was never shown.
+		it("shows an item that was not cached when ShowPartyLoot ran", function()
+			local itemLink = "|cffa335ee|Hitem:18803::::::::60:::::|h[Finkle's Lava Dredger]|h|r"
+			local itemInfo = {
+				itemId = 18803,
+				itemName = "Finkle's Lava Dredger",
+				itemQuality = 4,
+				itemTexture = 123456,
+				itemLink = itemLink,
+				keystoneInfo = nil,
+				GetEquipmentTypeText = function()
+					return nil
+				end,
+			}
+			local calls = 0
+			stub(PartyLoot.itemInfo, "new", function()
+				calls = calls + 1
+				if calls == 1 then
+					return nil -- not cached yet
+				end
+				return itemInfo
+			end)
+			ns.db.global.partyLoot.itemQualityFilter = { [4] = true }
+
+			PartyLoot:ShowPartyLoot("PartyMember receives loot: " .. itemLink .. ".", itemLink, "party1")
+			assert.spy(sendMessageSpy).was_not.called()
+			assert.is_not_nil(PartyLoot.pendingPartyRequests[18803]) -- numeric key
+
+			PartyLoot:GET_ITEM_INFO_RECEIVED("GET_ITEM_INFO_RECEIVED", 18803, true)
+
+			assert.spy(sendMessageSpy).was.called(1)
+			assert.is_nil(PartyLoot.pendingPartyRequests[18803])
+		end)
+
+		it("falls back to the id in the item link when the adapter returns no id", function()
+			local itemLink = "|cffa335ee|Hitem:18803::::::::60:::::|h[Finkle's Lava Dredger]|h|r"
+			PartyLoot.partyLootApi.GetItemIDForItemInfo = function()
+				return nil
+			end
+			stub(PartyLoot.itemInfo, "new").returns(nil)
+
+			PartyLoot:ShowPartyLoot("PartyMember receives loot: " .. itemLink .. ".", itemLink, "party1")
+
+			assert.is_not_nil(PartyLoot.pendingPartyRequests[18803])
+		end)
+
+		it("ignores a resolved item that still has no item info", function()
+			local itemLink = "|cffa335ee|Hitem:18803::::::::60:::::|h[Finkle's Lava Dredger]|h|r"
+			stub(PartyLoot.itemInfo, "new").returns(nil)
+			PartyLoot.pendingPartyRequests[18803] = { itemLink, 1, "party1" }
+
+			assert.has_no_error(function()
+				PartyLoot:GET_ITEM_INFO_RECEIVED("GET_ITEM_INFO_RECEIVED", 18803, true)
+			end)
+			assert.spy(sendMessageSpy).was_not.called()
 		end)
 
 		it("errors when item load fails", function()

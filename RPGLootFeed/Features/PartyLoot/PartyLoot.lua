@@ -188,7 +188,9 @@ end
 
 function PartyLoot:ShowPartyLoot(msg, itemLink, unit)
 	local amount = tonumber(msg:match("r ?x(%d+)") or 1)
-	local itemId = itemLink:match("Hitem:(%d+)")
+	-- A numeric id, like ItemLoot: GET_ITEM_INFO_RECEIVED reports the id as a number,
+	-- so a string key here would never match and uncached items would be dropped.
+	local itemId = self.partyLootApi.GetItemIDForItemInfo(itemLink) or tonumber(itemLink:match("Hitem:(%d+)"))
 	self.pendingPartyRequests[itemId] = { itemLink, amount, unit }
 	local info = self.itemInfo:new(itemId, self.partyLootApi.GetItemInfo(itemLink))
 	if info ~= nil then
@@ -278,6 +280,7 @@ function PartyLoot:CHAT_MSG_LOOT(eventName, ...)
 end
 
 function PartyLoot:GET_ITEM_INFO_RECEIVED(eventName, itemID, success)
+	self:LogInfo(eventName, "WOWEVENT", self.moduleName, nil, eventName .. " " .. itemID)
 	if self.pendingPartyRequests[itemID] then
 		local itemLink, amount, unit = unpack(self.pendingPartyRequests[itemID])
 
@@ -285,6 +288,10 @@ function PartyLoot:GET_ITEM_INFO_RECEIVED(eventName, itemID, success)
 			error("Failed to load item: " .. itemID .. " " .. itemLink .. " x" .. amount .. " for " .. unit)
 		else
 			local info = self.itemInfo:new(itemID, self.partyLootApi.GetItemInfo(itemLink))
+			if info == nil then
+				self:LogDebug("ItemInfo is nil for " .. itemLink, addonName, self.moduleName)
+				return
+			end
 			self:OnPartyReadyToShow(info, amount, unit)
 		end
 	end
