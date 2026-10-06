@@ -348,6 +348,9 @@ G_RLF.WoWAPI.PartyLoot = {
 	GetItemInfo = function(itemLink)
 		return C.Item.GetItemInfo(itemLink)
 	end,
+	GetItemIDForItemInfo = function(itemLink)
+		return C.Item.GetItemIDForItemInfo(itemLink)
+	end,
 }
 
 ---@class RLF_WoWAPI_LootHistory
