@@ -307,6 +307,14 @@ G_RLF.WoWAPI.PartyLoot = {
 	UnitName = function(unit)
 		return UnitName(unit)
 	end,
+	-- Forever shows first + last names in chat; GetUnitName and UnitGUID give
+	-- us ways to match a CHAT_MSG_LOOT sender that UnitName alone may not.
+	GetUnitName = function(unit, showServer)
+		return GetUnitName and GetUnitName(unit, showServer)
+	end,
+	UnitGUID = function(unit)
+		return UnitGUID and UnitGUID(unit)
+	end,
 	UnitClass = function(unit)
 		return UnitClass(unit)
 	end,

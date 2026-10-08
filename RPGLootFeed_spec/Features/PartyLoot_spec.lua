@@ -158,6 +158,12 @@ describe("PartyLoot Module", function()
 		-- Inject a fresh mock adapter per-test so WoW API calls are controlled
 		-- without patching _G directly.  Tests override individual methods as needed.
 		PartyLoot.partyLootApi = {
+			GetUnitName = function()
+				return nil
+			end,
+			UnitGUID = function()
+				return nil
+			end,
 			UnitName = function(unit)
 				if unit == "player" then
 					return "TestPlayer", nil
@@ -458,6 +464,59 @@ describe("PartyLoot Module", function()
 		it("ignores messages from players not in the nameUnitMap", function()
 			PartyLoot:CHAT_MSG_LOOT("CHAT_MSG_LOOT", chatMsg, "Stranger")
 			assert.spy(ns.LogDebug).was.called(1)
+		end)
+
+		describe("first + last names (Forever)", function()
+			local fullMsg = "Party Member received |cffa335ee|Hitem:18803::::::::60:::::|h[Finkle's Lava Dredger]|h|r"
+
+			before_each(function()
+				PartyLoot.partyLootApi.IsInRaid = function()
+					return false
+				end
+				PartyLoot.partyLootApi.GetNumGroupMembers = function()
+					return 2
+				end
+				PartyLoot.partyLootApi.UnitName = function(unit)
+					return unit == "party1" and "Party" or "TestPlayer"
+				end
+				PartyLoot.partyLootApi.GetUnitName = function(unit)
+					return unit == "party1" and "Party Member" or "TestPlayer"
+				end
+				PartyLoot.partyLootApi.UnitGUID = function(unit)
+					return "guid-" .. unit
+				end
+				PartyLoot:SetNameUnitMap()
+			end)
+
+			it("matches the full display name from chat", function()
+				assert.equals("party1", PartyLoot.nameUnitMap["Party Member"])
+			end)
+
+			it("falls back to the sender GUID", function()
+				PartyLoot:CHAT_MSG_LOOT(
+					"CHAT_MSG_LOOT",
+					fullMsg,
+					"Someone Else",
+					nil,
+					nil,
+					nil,
+					nil,
+					nil,
+					nil,
+					nil,
+					nil,
+					nil,
+					"guid-party1"
+				)
+				assert.spy(ns.LogDebug).was_not.called()
+			end)
+
+			it("matches a chat name that extends the unit name", function()
+				PartyLoot.nameUnitMap = { Party = "party1" }
+				PartyLoot.guidUnitMap = {}
+				PartyLoot:CHAT_MSG_LOOT("CHAT_MSG_LOOT", fullMsg, "Party Member")
+				assert.spy(ns.LogDebug).was_not.called()
+			end)
 		end)
 
 		it("ignores double-link messages (item upgrades)", function()
