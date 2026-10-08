@@ -933,6 +933,19 @@ function LootDisplayFrameMixin:ReleaseRow(row)
 	-- including any ongoing Translation offset)
 	local animationsDb = G_RLF.DbAccessor:Animations(self.frameType)
 	local useShiftAnimation = not self.bypassShiftAnimation and animationsDb.reposition.duration > 0.04
+	-- Handle the releasing row itself: stop and restore text alpha. Runs even
+	-- when shift animations are bypassed (ClearFeed) or disabled — a shift
+	-- stopped here never fires OnFinished, so skipping the decrement leaves
+	-- shiftingRowCount stuck above 0 and the queue never drains.
+	-- No position restore needed — the row is about to be removed.
+	if row.ShiftAnimation and row.ShiftAnimation:IsPlaying() then
+		row.ShiftAnimation:Stop()
+		row.PrimaryLineLayout:SetAlpha(1)
+		row.SecondaryLineLayout:SetAlpha(1)
+		row._textHiddenForShift = false
+		self.shiftingRowCount = math.max(0, self.shiftingRowCount - 1)
+	end
+
 	local snapshots = {}
 
 	if useShiftAnimation then
@@ -964,16 +977,6 @@ function LootDisplayFrameMixin:ReleaseRow(row)
 				r._textHiddenForShift = false
 				self.shiftingRowCount = math.max(0, self.shiftingRowCount - 1)
 			end
-		end
-
-		-- Handle the releasing row itself: stop and restore text alpha.
-		-- No position restore needed — the row is about to be removed.
-		if row.ShiftAnimation and row.ShiftAnimation:IsPlaying() then
-			row.ShiftAnimation:Stop()
-			row.PrimaryLineLayout:SetAlpha(1)
-			row.SecondaryLineLayout:SetAlpha(1)
-			row._textHiddenForShift = false
-			self.shiftingRowCount = math.max(0, self.shiftingRowCount - 1)
 		end
 
 		-- Snapshot visual edge positions AFTER fast-forwarding so the base
