@@ -104,6 +104,7 @@ function PartyLoot:OnInitialize()
 	self.pendingItemRequests = {}
 	self.pendingPartyRequests = {}
 	self.nameUnitMap = {}
+	self.guidUnitMap = {}
 	if G_RLF.DbAccessor:IsFeatureNeededByAnyFrame("partyLoot") then
 		self:Enable()
 	else
@@ -142,10 +143,21 @@ function PartyLoot:SetNameUnitMap()
 	end
 
 	self.nameUnitMap = {}
+	self.guidUnitMap = {}
 	for _, unit in ipairs(units) do
 		local name, server = self.partyLootApi.UnitName(unit)
 		if name then
 			self.nameUnitMap[name] = unit
+			-- Flavors with first + last names may report a longer name in chat
+			-- than UnitName returns, so index the full display name too.
+			local fullName = self.partyLootApi.GetUnitName(unit, false)
+			if fullName and fullName ~= "" then
+				self.nameUnitMap[fullName] = unit
+			end
+			local unitGuid = self.partyLootApi.UnitGUID(unit)
+			if unitGuid then
+				self.guidUnitMap[unitGuid] = unit
+			end
 		else
 			self:LogError("Failed to get name for unit: " .. unit, addonName, self.moduleName)
 		end
@@ -248,6 +260,18 @@ function PartyLoot:CHAT_MSG_LOOT(eventName, ...)
 	end
 	local sanitizedPlayerName = name:gsub("%-.+", "")
 	local unit = self.nameUnitMap[sanitizedPlayerName]
+	if not unit and guid and guid ~= "" then
+		unit = self.guidUnitMap[guid]
+	end
+	if not unit then
+		-- Last resort: chat carries "First Last" while the map holds "First".
+		for mapName, mapUnit in pairs(self.nameUnitMap) do
+			if sanitizedPlayerName:sub(1, #mapName + 1) == mapName .. " " then
+				unit = mapUnit
+				break
+			end
+		end
+	end
 	if not unit then
 		self:LogDebug(
 			"Party Loot Ignored - no matching party member (" .. sanitizedPlayerName .. ")",
