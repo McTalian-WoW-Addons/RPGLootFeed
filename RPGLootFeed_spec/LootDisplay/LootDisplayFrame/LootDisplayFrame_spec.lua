@@ -965,6 +965,44 @@ describe("LootDisplayFrameMixin", function()
 			stub(frame, "GetBottom").returns(0)
 		end)
 
+		describe("releasing a row that is mid-shift", function()
+			local function midShiftRow()
+				local r = makeShiftRow("key1", 100)
+				r.ShiftAnimation = {
+					IsPlaying = function()
+						return true
+					end,
+					Stop = spy.new(function() end),
+				}
+				return r
+			end
+
+			it("decrements shiftingRowCount when shifts are bypassed (ClearFeed)", function()
+				mockAnimations.returns({ reposition = { duration = 0.2 } })
+				frame.bypassShiftAnimation = true
+				frame.shiftingRowCount = 1
+				local releasedRow = midShiftRow()
+				frame.rows = makeIterableRows({ releasedRow })
+				frame.keyRowMap = { length = 1, key1 = releasedRow }
+
+				frame:ReleaseRow(releasedRow)
+
+				assert.equal(0, frame.shiftingRowCount)
+			end)
+
+			it("decrements shiftingRowCount when reposition duration is too short", function()
+				mockAnimations.returns({ reposition = { duration = 0 } })
+				frame.shiftingRowCount = 1
+				local releasedRow = midShiftRow()
+				frame.rows = makeIterableRows({ releasedRow })
+				frame.keyRowMap = { length = 1, key1 = releasedRow }
+
+				frame:ReleaseRow(releasedRow)
+
+				assert.equal(0, frame.shiftingRowCount)
+			end)
+		end)
+
 		it("skips FLIP and sends RLF_ROW_RETURNED immediately when duration <= 0.04", function()
 			mockAnimations.returns({ reposition = { duration = 0 } })
 			local releasedRow = makeShiftRow("key1", 100)
