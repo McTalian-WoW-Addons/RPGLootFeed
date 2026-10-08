@@ -39,8 +39,8 @@ function LootRollFramesOverride:ShouldConceal(rollID)
 		return false
 	end
 	-- Only conceal when a row that shows this roll lets the player click its buttons.
-	for _, row in ipairs(lootRolls:FindRollRows(rollID)) do
-		if row:IsInteractionAllowed("rollButtons") then
+	for _, entry in ipairs(lootRolls:FindRollRows(rollID)) do
+		if entry.row:IsInteractionAllowed("rollButtons") then
 			return true
 		end
 	end
