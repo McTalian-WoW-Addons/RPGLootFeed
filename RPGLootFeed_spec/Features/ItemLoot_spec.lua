@@ -216,6 +216,9 @@ describe("ItemLoot Module", function()
 			UnitName = function()
 				return "Player"
 			end,
+			GetUnitName = function()
+				return "Player"
+			end,
 			UnitClass = function()
 				return "Warrior", "WARRIOR"
 			end,
@@ -338,6 +341,9 @@ describe("ItemLoot Module", function()
 				return 0
 			end,
 			UnitName = function()
+				return "Player"
+			end,
+			GetUnitName = function()
 				return "Player"
 			end,
 			UnitClass = function()

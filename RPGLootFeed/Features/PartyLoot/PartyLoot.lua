@@ -68,6 +68,11 @@ function PartyLoot:BuildPayload(info, amount, unit)
 
 	payload.secondaryText = "A former party member"
 	local name, server = self.partyLootApi.UnitName(unit)
+	if name and G_RLF:IsForever() then
+		-- Forever's second UnitName return is the last name, not a realm.
+		name = self.partyLootApi.GetUnitName(unit, false) or name
+		server = nil
+	end
 	if name then
 		local pConfig = G_RLF.DbAccessor:AnyFeatureConfig("partyLoot") or {}
 		if server and pConfig.hideServerNames == false then
@@ -244,7 +249,9 @@ function PartyLoot:CHAT_MSG_LOOT(eventName, ...)
 	-- Sender names may carry a realm suffix that UnitName("player") lacks, and not
 	-- every flavor provides a GUID, so match the bare name first, then the GUID.
 	local sender = (playerName2 or ""):gsub("%-.+", "")
+	-- Forever senders are "First Last"; UnitName("player") returns only the first name.
 	local me = sender == self.partyLootApi.UnitName("player")
+		or (playerName2 or "") == self.partyLootApi.GetUnitName("player", false)
 	if not me and guid and guid ~= "" then
 		me = guid == self.partyLootApi.GetPlayerGuid()
 	end
