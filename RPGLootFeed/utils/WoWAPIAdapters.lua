@@ -234,6 +234,9 @@ G_RLF.WoWAPI.ItemLoot = {
 	UnitName = function(unit)
 		return UnitName(unit)
 	end,
+	GetUnitName = function(unit, showServer)
+		return GetUnitName and GetUnitName(unit, showServer)
+	end,
 	UnitClass = function(unit)
 		return UnitClass(unit)
 	end,

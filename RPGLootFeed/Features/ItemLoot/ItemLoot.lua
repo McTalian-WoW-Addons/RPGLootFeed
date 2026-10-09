@@ -666,7 +666,9 @@ function ItemLoot:CHAT_MSG_LOOT(eventName, ...)
 	-- Sender names may carry a realm suffix that UnitName("player") lacks, and not
 	-- every flavor provides a GUID, so match the bare name first, then the GUID.
 	local sender = (playerName2 or ""):gsub("%-.+", "")
+	-- Forever senders are "First Last"; UnitName("player") returns only the first name.
 	local me = sender == self.itemLootApi.UnitName("player")
+		or (playerName2 or "") == self.itemLootApi.GetUnitName("player", false)
 	if not me and guid and guid ~= "" then
 		me = guid == self.itemLootApi.GetPlayerGuid()
 	end

@@ -25,6 +25,9 @@ describe("PartyLoot Module", function()
 			ItemQualEnum = { Epic = 4 },
 			FeatureModule = { PartyLoot = "PartyLoot" },
 			Expansion = { BFA = 8 },
+			IsForever = function()
+				return false
+			end,
 			-- Log closure wrappers call these via FeatureBase mock logging delegate.
 			LogDebug = spy.new(function() end),
 			LogInfo = spy.new(function() end),
@@ -461,6 +464,19 @@ describe("PartyLoot Module", function()
 			assert.spy(sendMessageSpy).was_not.called()
 		end)
 
+		it("treats our own First Last sender as me, not a party member (Forever)", function()
+			PartyLoot.partyLootApi.UnitName = function()
+				return "TestPlayer", "Ironhoof"
+			end
+			PartyLoot.partyLootApi.GetUnitName = function()
+				return "TestPlayer Ironhoof"
+			end
+			PartyLoot.nameUnitMap = { ["TestPlayer Ironhoof"] = "player" }
+			PartyLoot:CHAT_MSG_LOOT("CHAT_MSG_LOOT", chatMsg, "", nil, nil, "TestPlayer Ironhoof")
+			assert.spy(sendMessageSpy).was_not.called()
+			assert.spy(ns.LogDebug).was_not.called()
+		end)
+
 		it("ignores messages from players not in the nameUnitMap", function()
 			PartyLoot:CHAT_MSG_LOOT("CHAT_MSG_LOOT", chatMsg, "Stranger")
 			assert.spy(ns.LogDebug).was.called(1)
@@ -654,6 +670,21 @@ describe("PartyLoot Module", function()
 			end
 			local payload = PartyLoot:BuildPayload(makeInfo(), 1, "party1")
 			assert.equals("    PartyMember", payload.secondaryText)
+		end)
+
+		it("secondaryText uses the full First Last name on Forever, never a name-surname pair", function()
+			ns.IsForever = function()
+				return true
+			end
+			ns.db.global.partyLoot.hideServerNames = false
+			PartyLoot.partyLootApi.UnitName = function()
+				return "Wulca", "Wrathflame"
+			end
+			PartyLoot.partyLootApi.GetUnitName = function()
+				return "Wulca Wrathflame"
+			end
+			local payload = PartyLoot:BuildPayload(makeInfo(), 1, "party1")
+			assert.equals("    Wulca Wrathflame", payload.secondaryText)
 		end)
 
 		it("secondaryText includes server when hideServerNames is false", function()
