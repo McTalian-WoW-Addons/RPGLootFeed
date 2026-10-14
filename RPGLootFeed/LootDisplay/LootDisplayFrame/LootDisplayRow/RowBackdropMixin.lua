@@ -260,10 +260,11 @@ function RLF_RowBackdropMixin:StyleRowBackdrop()
 	if classColors then
 		local classColor
 		local a = 1
+		local _, classFile = UnitClass(self.unit or "player")
 		if GetExpansionLevel() >= G_RLF.Expansion.BFA then
-			classColor = C_ClassColor.GetClassColor(select(2, UnitClass(self.unit or "player")))
+			classColor = C_ClassColor.GetClassColor(classFile)
 		else
-			classColor = RAID_CLASS_COLORS[select(2, UnitClass(self.unit or "player"))]
+			classColor = RAID_CLASS_COLORS[classFile]
 		end
 		if classColor == nil then
 			G_RLF:LogWarn("Could not find a class color for unit: %s", self.unit or "player")

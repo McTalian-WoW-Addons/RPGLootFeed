@@ -215,6 +215,13 @@ describe("RLF_RowBackdropMixin", function()
 				assert.stub(classColorMocks.GetClassColor).was.called()
 			end)
 
+			it("passes only the class filename to GetClassColor (12.1.5 added a tintColor arg #2)", function()
+				local classColorMocks = require("RPGLootFeed_spec._mocks.WoWGlobals.namespaces.C_ClassColor")
+				classColorMocks.GetClassColor:clear()
+				RLF_RowBackdropMixin.StyleRowBackdrop(row)
+				assert.stub(classColorMocks.GetClassColor).was.called_with("WARRIOR")
+			end)
+
 			it("calls SetBackdropBorderColor with the class-derived color", function()
 				RLF_RowBackdropMixin.StyleRowBackdrop(row)
 				assert.stub(row.SetBackdropBorderColor).was.called(1)
