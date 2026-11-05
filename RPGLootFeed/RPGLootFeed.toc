@@ -1,4 +1,4 @@
-## Interface: 11509, 16001, 20506, 50504, 120105
+## Interface: 11509, 16001, 20506, 50504, 120105, 120107
 ## Title: |cFFFF8000RPGLootFeed|r
 ## Author: McTalian
 ## Version: @project-version@
