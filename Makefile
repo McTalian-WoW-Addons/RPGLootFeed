@@ -1,4 +1,4 @@
-.PHONY: all_checks hardcode_string_check toc_check toc_update boot_sim missing_translation_check wbt_setup i18n_check i18n_fmt test test-ci test-file test-pattern test-only local check_untracked_files options-dump options-html help
+.PHONY: deploy-deck deck-logs all_checks hardcode_string_check toc_check toc_update boot_sim missing_translation_check wbt_setup i18n_check i18n_fmt test test-ci test-file test-pattern test-only local check_untracked_files options-dump options-html help
 
 all_checks: hardcode_string_check missing_translation_check i18n_check
 
@@ -14,6 +14,8 @@ help:
 	@echo "                        Example: make test-pattern PATTERN=\"quantity mismatch\""
 	@echo "  test-ci             - Run tests for CI (TAP output)"
 	@echo "  all_checks          - Run all code quality checks"
+	@echo "  deploy-deck         - Build (dev) and rsync to the Steam Deck (needs DECK_HOST, see .env)"
+	@echo "  deck-logs           - Pull RPGLootFeed SavedVariables back from the Deck"
 	@echo "  hardcode_string_check - Check for hardcoded strings"
 	@echo "  missing_translation_check - Check for missing translations"
 	@echo "  i18n_fmt             - Organize/format translations"
@@ -201,3 +203,19 @@ dev: toc_check missing_locale_key_check check_untracked_files
 
 build: toc_check missing_locale_key_check check_untracked_files
 	@wow-build-tools build -d -t RPGLootFeed -r ./.release
+
+# Steam Deck deploy (DECK_WOW_DIR is relative to the remote home; the "World of Warcraft" symlink lives there). Set DECK_HOST in a gitignored .env, e.g.:
+#   DECK_HOST=deck@McTsd.local
+-include .env
+DECK_WOW_DIR ?= World of Warcraft
+DECK_FLAVOR ?= _retail_
+
+deploy-deck: dev
+	@test -n "$(DECK_HOST)" || (echo "Set DECK_HOST in .env (e.g. DECK_HOST=deck@McTsd.local)"; exit 1)
+	@rsync -azs --delete -e ssh ./.release/RPGLootFeed/ "$(DECK_HOST):$(DECK_WOW_DIR)/$(DECK_FLAVOR)/Interface/AddOns/RPGLootFeed/"
+	@echo "Synced. Run /reload in-game (full restart if files or the .toc changed)."
+
+deck-logs:
+	@test -n "$(DECK_HOST)" || (echo "Set DECK_HOST in .env"; exit 1)
+	@mkdir -p .deck-logs
+	@rsync -azs -e ssh --include='RPGLootFeed.lua*' --include='*/' --exclude='*' "$(DECK_HOST):$(DECK_WOW_DIR)/$(DECK_FLAVOR)/WTF/Account/" .deck-logs/

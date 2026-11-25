@@ -437,6 +437,91 @@ G_RLF.WoWAPI.LootRolls = {
 	end,
 }
 
+-- ── OpenContainers API Adapter ────────────────────────────────────────────────
+-- Wraps the bag, item and player-state calls used by the OpenContainers
+-- support module.
+---@class RLF_WoWAPI_OpenContainers
+G_RLF.WoWAPI.OpenContainers = {
+	GetContainerNumSlots = function(bag)
+		return C_Container.GetContainerNumSlots(bag)
+	end,
+	GetContainerNumFreeSlots = function(bag)
+		return C_Container.GetContainerNumFreeSlots(bag)
+	end,
+	GetContainerItemID = function(bag, slot)
+		return C_Container.GetContainerItemID(bag, slot)
+	end,
+	UseContainerItem = function(bag, slot)
+		return C_Container.UseContainerItem(bag, slot)
+	end,
+	--- Returns requiredLevel, bindType (nil, nil if the item is not cached yet).
+	GetItemRequirements = function(itemId)
+		local _, _, _, _, requiredLevel, _, _, _, _, _, _, _, _, bindType = C_Item.GetItemInfo(itemId)
+		return requiredLevel, bindType
+	end,
+	GetItemName = function(itemId)
+		return C_Item.GetItemNameByID(itemId)
+	end,
+	--- Ask the server for an item's data; the name arrives via GET_ITEM_INFO_RECEIVED.
+	RequestItemData = function(itemId)
+		return C_Item.RequestLoadItemDataByID(itemId)
+	end,
+	GetLocale = function()
+		return GetLocale()
+	end,
+	After = function(seconds, fn)
+		return C_Timer.After(seconds, fn)
+	end,
+	GetTime = function()
+		return GetTime()
+	end,
+	UnitLevel = function()
+		return UnitLevel("player")
+	end,
+	UnitAffectingCombat = function()
+		return UnitAffectingCombat("player")
+	end,
+	--- Casting reads can be secret on newer clients; a secret answer counts as "casting".
+	IsPlayerCasting = function()
+		if
+			C_Secrets
+			and C_Secrets.ShouldUnitSpellCastingBeSecret
+			and C_Secrets.ShouldUnitSpellCastingBeSecret("player")
+		then
+			return true
+		end
+		return (UnitCastingInfo("player") or UnitChannelInfo("player")) ~= nil
+	end,
+	IsStealthed = function()
+		return IsStealthed() and true or false
+	end,
+	--- True while the player is at a vendor, mailbox, bank, auction house, trade window, etc.
+	IsInteractionActive = function()
+		local frames = {
+			MerchantFrame,
+			MailFrame,
+			TradeFrame,
+			BankFrame,
+			GuildBankFrame,
+			AuctionFrame,
+			AuctionHouseFrame,
+			GossipFrame,
+			QuestFrame,
+			LootFrame,
+		}
+		for _, frame in pairs(frames) do
+			if frame and frame:IsShown() then
+				return true
+			end
+		end
+		return false
+	end,
+	--- Highest bag index to scan (backpack through the last equipped bag).
+	GetLastBagIndex = function()
+		return NUM_BAG_SLOTS or 4
+	end,
+}
+
 -- ── Self-register in DI container ─────────────────────────────────────────────
 if G_RLF.DI then
 	for _, key in ipairs({
@@ -450,6 +535,7 @@ if G_RLF.DI then
 		"ItemLoot",
 		"PartyLoot",
 		"LootRolls",
+		"OpenContainers",
 	}) do
 		G_RLF.DI:Register("WoWAPI." .. key, G_RLF.WoWAPI[key])
 	end

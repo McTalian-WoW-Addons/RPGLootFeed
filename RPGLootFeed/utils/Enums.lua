@@ -121,6 +121,7 @@ G_RLF.SupportModule = {
 	Logger = "Logger",
 	LootDisplay = "LootDisplay",
 	Notifications = "Notifications",
+	OpenContainers = "OpenContainers",
 	TestMode = "TestMode",
 }
 
