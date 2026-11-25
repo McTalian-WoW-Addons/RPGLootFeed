@@ -325,8 +325,6 @@ L["ShowMoneyIconDesc"] = "如果勾选，在拾取信息流中的金钱数额旁
 --#endregion
 
 --#region 1.0.0 - 1.22.0
-L["Ignore Item IDs"] = "忽略物品 ID"
-L["IgnoreItemIDsDesc"] = "输入要在队伍拾取通报中忽略的物品 ID，多个 ID 之间使用英文逗号分隔。"
 L["Abbreviate Total"] = "缩写总计"
 L["AbbreviateTotalDesc"] = "缩写拾取通报中的金币总额 (金币超过1000时)"
 L["About"] = "关于"
@@ -507,6 +505,8 @@ L["Hover Animation"] = "悬停动画"
 L["HoverAlphaDesc"] = "鼠标悬停时行高亮的透明度。"
 L["HoverAnimationDesc"] = "自定义鼠标悬停在拾取通报某行上时的动画。"
 L["IconSizeDesc"] = "拾取通报中每个物品“行”内图标的大小"
+L["Ignore Item IDs"] = "忽略物品 ID"
+L["IgnoreItemIDsDesc"] = "输入要在队伍拾取通报中忽略的物品 ID，多个 ID 之间使用英文逗号分隔。"
 L["Issues"] = "请在此报告问题 @ github: McTalian-WoW-Addons/RPGLootFeed"
 L["IssuesAndRequests"] = "您也可以在 GitHub 问题页面报告任何问题或功能请求。"
 L["Item Count Text"] = "物品数量文字"
