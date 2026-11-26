@@ -770,6 +770,167 @@ describe("RLF_LootRollRowMixin", function()
 		end)
 	end)
 
+	describe("roll tooltip condensing (issue #646)", function()
+		-- state: 0/1 Need, 2 Transmog, 3 Greed, 4 waiting, 5 Pass, 6 Disenchant
+		local function player(name, state, roll, isSelf)
+			return { playerName = name, playerClass = "UNKNOWN", state = state, roll = roll, isSelf = isSelf }
+		end
+
+		--- Tooltip lines as plain text with the roll icons stripped.
+		local function textLines(dropInfo)
+			local lines = {}
+			row:_BuildRollTooltipLines(dropInfo, lines)
+			local out = {}
+			for _, line in ipairs(lines) do
+				out[#out + 1] = (line[1]:gsub("|T.-|t", ""):gsub("|A.-|a", ""))
+			end
+			return out
+		end
+
+		local function setCondense(value)
+			ns.db.global.frames[row.frameType].features.lootRolls = { condenseRollTooltip = value }
+		end
+
+		-- The raid from the ticket: 5 Need, 1 Greed, 8 Transmog, 6 Pass.
+		local function bigRaid(extra)
+			local rolls = {}
+			for i = 1, 5 do
+				rolls[#rolls + 1] = player("Needy" .. i, 0, 90 - i)
+			end
+			rolls[#rolls + 1] = player("Greedy1", 3, 40)
+			for i = 1, 8 do
+				rolls[#rolls + 1] = player("Tmog" .. i, 2, 30 - i)
+			end
+			for i = 1, 6 do
+				rolls[#rolls + 1] = player("Passer" .. i, 5)
+			end
+			for _, p in ipairs(extra or {}) do
+				rolls[#rolls + 1] = p
+			end
+			return { rollInfos = rolls, winner = { playerName = "Needy1" } }
+		end
+
+		local function contains(lines, text)
+			for _, line in ipairs(lines) do
+				if line:find(text, 1, true) then
+					return true
+				end
+			end
+			return false
+		end
+
+		it("lists every roll when condensing is turned off", function()
+			setCondense(false)
+			local lines = textLines(bigRaid())
+			assert.is_true(contains(lines, "Passer6"))
+			assert.is_true(contains(lines, "Tmog8"))
+			assert.is_true(contains(lines, "Greedy1"))
+			assert.is_true(contains(lines, "Needy5"))
+		end)
+
+		it("is condensed by default, with no setting saved", function()
+			ns.db.global.frames[row.frameType].features.lootRolls = {}
+			local lines = textLines(bigRaid())
+			assert.is_false(contains(lines, "Passer6"))
+			assert.is_true(contains(lines, "Needy5"))
+		end)
+
+		describe("when condensed", function()
+			before_each(function()
+				setCondense(true)
+			end)
+
+			it("lists every Need roll in full", function()
+				local lines = textLines(bigRaid())
+				for i = 1, 5 do
+					assert.is_true(contains(lines, "Needy" .. i), "missing Needy" .. i)
+				end
+			end)
+
+			it("shows only a count for Greed, Transmog and Pass", function()
+				local lines = textLines(bigRaid())
+				assert.is_true(contains(lines, _G.GREED .. " (1)"))
+				assert.is_true(contains(lines, _G.TRANSMOGRIFICATION .. " (8)"))
+				assert.is_true(contains(lines, _G.PASS .. " (6)"))
+				assert.is_false(contains(lines, "Greedy1"))
+				assert.is_false(contains(lines, "Tmog1"))
+				assert.is_false(contains(lines, "Passer1"))
+			end)
+
+			it("keeps the Need header count the size of the whole group", function()
+				local lines = textLines(bigRaid())
+				assert.is_true(contains(lines, _G.NEED .. " (5)"))
+			end)
+
+			it("shows the player's own choice under a lower tier's count", function()
+				local lines = textLines(bigRaid({ player("Me", 3, 12, true) }))
+				assert.is_true(contains(lines, _G.GREED .. " (2)"))
+				assert.is_true(contains(lines, "Me (12) <YOU>"))
+				assert.is_false(contains(lines, "Greedy1"))
+			end)
+
+			it("shows the player's own pass under the Pass count", function()
+				local lines = textLines(bigRaid({ player("Me", 5, nil, true) }))
+				assert.is_true(contains(lines, _G.PASS .. " (7)"))
+				assert.is_true(contains(lines, "Me <YOU>"))
+				assert.is_false(contains(lines, "Passer1"))
+			end)
+
+			it("shows only a count for players still waiting", function()
+				local dropInfo = bigRaid({ player("Slow1", 4), player("Slow2", 4) })
+				local lines = textLines(dropInfo)
+				assert.is_true(contains(lines, (_G.LOOT_HISTORY_WAITING_ON or "Waiting on") .. " (2)"))
+				assert.is_false(contains(lines, "Slow1"))
+			end)
+
+			it("with no Need, holds Greed to a count until the roll resolves", function()
+				local dropInfo = {
+					rollInfos = { player("G1", 3), player("G2", 3), player("Slow", 4) },
+				}
+				local lines = textLines(dropInfo)
+				assert.is_true(contains(lines, _G.GREED .. " (2)"))
+				assert.is_false(contains(lines, "G1"))
+			end)
+
+			it("with no Need, lists the Greed, Transmog and Disenchant tier in full once it resolves", function()
+				local dropInfo = {
+					winner = { playerName = "G1" },
+					rollInfos = {
+						player("G1", 3, 80),
+						player("G2", 3, 70),
+						player("T1", 2, 60),
+						player("D1", 6, 50),
+						player("P1", 5),
+					},
+				}
+				local lines = textLines(dropInfo)
+				for _, name in ipairs({ "G1", "G2", "T1", "D1" }) do
+					assert.is_true(contains(lines, name), "missing " .. name)
+				end
+				assert.is_false(contains(lines, "P1"))
+			end)
+
+			it("also counts as resolved when nobody is waiting any more", function()
+				local dropInfo = {
+					rollInfos = { player("G1", 3, 80), player("G2", 3, 70) },
+				}
+				local lines = textLines(dropInfo)
+				assert.is_true(contains(lines, "G1"))
+				assert.is_true(contains(lines, "G2"))
+			end)
+
+			it("never lists a pass-only roll in full", function()
+				local dropInfo = {
+					rollInfos = { player("P1", 5), player("P2", 5), player("Me", 5, nil, true) },
+				}
+				local lines = textLines(dropInfo)
+				assert.is_true(contains(lines, _G.PASS .. " (3)"))
+				assert.is_false(contains(lines, "P1"))
+				assert.is_true(contains(lines, "Me <YOU>"))
+			end)
+		end)
+	end)
+
 	describe("OnPlayerRolled (roll made outside RLF's buttons, e.g. Blizzard's frame or a gamepad)", function()
 		local btn1, btn2
 

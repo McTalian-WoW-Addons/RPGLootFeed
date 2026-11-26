@@ -640,6 +640,7 @@ G_RLF.defaults = {
 						mutedColor = { 0.6903, 0.6903, 0.6903, 1 },
 						showTimerBar = true,
 						showRollTooltip = true,
+						condenseRollTooltip = true,
 					},
 				},
 			},

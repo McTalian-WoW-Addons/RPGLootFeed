@@ -24,6 +24,8 @@ end
 -- L["CombinedPriceIconsDesc"] = "When showing both the vendor and the auction house price, put the vendor and auction house icons in front of each price. Off by default to keep the row uncluttered; the order alone tells them apart."
 -- L["Compact Winners"] = "Compact Winners"
 -- L["CompactWinnersDesc"] = "Show the winner of a roll as the player's name, an icon for the roll type and the number, for example Bob (dice icon) 55, instead of Bob won (Need, 55). Off by default."
+-- L["Condense Roll Tooltip"] = "Condense Roll Tooltip"
+-- L["CondenseRollTooltipDesc"] = "In the roll details tooltip, list every Need roll in full and show only a count for Greed, Transmog, Disenchant and Pass, plus your own choice. If nobody needed, the Greed group is listed in full once the roll resolves. Turn this off to list every roll."
 -- L["Edit Item Lists"] = "Edit Item Lists"
 -- L["EditItemListsDesc"] = "Open the editor for the Allow List and Block List."
 -- L["Enable Open Containers"] = "Enable Open Containers"

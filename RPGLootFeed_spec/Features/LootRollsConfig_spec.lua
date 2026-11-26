@@ -27,6 +27,7 @@ describe("LootRollsConfig module", function()
 			mutedColor = { 0.6903, 0.6903, 0.6903, 1 },
 			showTimerBar = true,
 			showRollTooltip = true,
+			condenseRollTooltip = true,
 		}
 	end
 
@@ -150,6 +151,18 @@ describe("LootRollsConfig module", function()
 	end)
 
 	describe("display", function()
+		it("condenses the roll tooltip by default, and an unset setting reads as on", function()
+			assert.is_true(group.args.display.args.condenseRollTooltip.get())
+			cfg().condenseRollTooltip = nil
+			assert.is_true(group.args.display.args.condenseRollTooltip.get())
+		end)
+
+		it("writes the condense setting and refreshes", function()
+			group.args.display.args.condenseRollTooltip.set(nil, false)
+			assert.is_false(cfg().condenseRollTooltip)
+			assert.equal(1, refreshed)
+		end)
+
 		for _, key in ipairs({ "showTimerBar", "showRollTooltip" }) do
 			it("writes " .. key .. " and refreshes", function()
 				assert.is_true(group.args.display.args[key].get())

@@ -242,6 +242,12 @@ function G_RLF.LootRolls:BuildConfigArgs(frameId, order)
 						G_RLF.L["ShowRollDetailsTooltipDesc"],
 						2
 					),
+					condenseRollTooltip = toggle(
+						"condenseRollTooltip",
+						G_RLF.L["Condense Roll Tooltip"],
+						G_RLF.L["CondenseRollTooltipDesc"],
+						3
+					),
 				},
 			},
 		},

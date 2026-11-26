@@ -521,6 +521,30 @@ function RLF_LootRollRowMixin:_BuildRollTooltipLines(dropInfo, lines)
 	table.sort(groups.disenchant, sortByRoll)
 	table.sort(groups.transmog, sortByRoll)
 
+	-- Which sections list every player. The full list is the old behavior; condensed
+	-- (the default, issue #646) lists only the tier that matters, so a big raid's
+	-- tooltip stays short:
+	--   Need > Greed / Transmog / Disenchant > Pass
+	-- The top tier that has anyone in it is listed in full, lower tiers show just their
+	-- count, and the player's own choice is always shown under its group. Until the
+	-- roll resolves the game only knows Need rolls, so with no Need yet the Greed tier
+	-- is held to a count until it does. Waiting and Pass are never listed in full.
+	local fullSections = {}
+	if self:_Opt("condenseRollTooltip", true) then
+		local resolved = dropInfo.winner ~= nil or #groups.waiting == 0
+		if #groups.need > 0 then
+			fullSections.need = true
+		elseif resolved then
+			fullSections.greed = true
+			fullSections.disenchant = true
+			fullSections.transmog = true
+		end
+	else
+		for _, section in ipairs(order) do
+			fullSections[section] = true
+		end
+	end
+
 	for _, section in ipairs(order) do
 		local players = groups[section]
 		if #players > 0 then
@@ -528,19 +552,21 @@ function RLF_LootRollRowMixin:_BuildRollTooltipLines(dropInfo, lines)
 			local hc = sectionColors[section]
 			table.insert(lines, { format("%s (%d)", hdr, #players), hc[1], hc[2], hc[3] })
 			for _, p in ipairs(players) do
-				local iconTex = ROLL_TOOLTIP_ICONS[p.state] or ""
-				local winnerMark = p.isWinner and " |cff00ff00<-- Winner|r" or ""
-				local selfMark = p.isSelf and " <YOU>" or ""
-				if p.roll then
-					local specStr = p.spec and format(", %s", p.spec) or ""
-					table.insert(lines, {
-						format("  %s%s (%d%s)%s%s", iconTex, p.name, p.roll, specStr, winnerMark, selfMark),
-						p.r,
-						p.g,
-						p.b,
-					})
-				else
-					table.insert(lines, { format("  %s%s%s", iconTex, p.name, selfMark), p.r, p.g, p.b })
+				if fullSections[section] or p.isSelf then
+					local iconTex = ROLL_TOOLTIP_ICONS[p.state] or ""
+					local winnerMark = p.isWinner and " |cff00ff00<-- Winner|r" or ""
+					local selfMark = p.isSelf and " <YOU>" or ""
+					if p.roll then
+						local specStr = p.spec and format(", %s", p.spec) or ""
+						table.insert(lines, {
+							format("  %s%s (%d%s)%s%s", iconTex, p.name, p.roll, specStr, winnerMark, selfMark),
+							p.r,
+							p.g,
+							p.b,
+						})
+					else
+						table.insert(lines, { format("  %s%s%s", iconTex, p.name, selfMark), p.r, p.g, p.b })
+					end
 				end
 			end
 		end
