@@ -21,6 +21,7 @@ describe("LootRollsConfig module", function()
 			showWaitingCount = true,
 			showLeader = true,
 			showRollNumbers = true,
+			compactWinners = false,
 			useClassColors = true,
 			winColor = { 0, 1, 0, 1 },
 			mutedColor = { 0.6903, 0.6903, 0.6903, 1 },
@@ -107,6 +108,19 @@ describe("LootRollsConfig module", function()
 		it("treats an unset toggle as on, so older saved settings keep today's behavior", function()
 			cfg().showLeader = nil
 			assert.is_true(group.args.results.args.showLeader.get())
+		end)
+
+		it("compact winners is off by default, unlike the other toggles", function()
+			assert.is_false(group.args.results.args.compactWinners.get())
+			cfg().compactWinners = nil
+			assert.is_false(group.args.results.args.compactWinners.get())
+		end)
+
+		it("writes compact winners and refreshes", function()
+			group.args.results.args.compactWinners.set(nil, true)
+			assert.is_true(cfg().compactWinners)
+			assert.is_true(group.args.results.args.compactWinners.get())
+			assert.equal(1, refreshed)
 		end)
 
 		for _, key in ipairs({ "showWaitingCount", "showLeader", "showRollNumbers", "useClassColors" }) do

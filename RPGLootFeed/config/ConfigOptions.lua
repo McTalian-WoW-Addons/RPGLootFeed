@@ -628,6 +628,7 @@ G_RLF.defaults = {
 						showWaitingCount = true,
 						showLeader = true,
 						showRollNumbers = true,
+						compactWinners = false,
 						useClassColors = true,
 						winColor = { 0, 1, 0, 1 },
 						mutedColor = { 0.6903, 0.6903, 0.6903, 1 },

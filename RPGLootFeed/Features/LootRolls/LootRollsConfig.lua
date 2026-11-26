@@ -175,6 +175,17 @@ function G_RLF.LootRolls:BuildConfigArgs(frameId, order)
 						G_RLF.L["ShowRollNumbersDesc"],
 						4
 					),
+					compactWinners = toggle(
+						"compactWinners",
+						G_RLF.L["Compact Winners"],
+						G_RLF.L["CompactWinnersDesc"],
+						4.5,
+						{
+							get = function()
+								return fc().compactWinners == true
+							end,
+						}
+					),
 					useClassColors = toggle(
 						"useClassColors",
 						G_RLF.L["Class Colored Names"],

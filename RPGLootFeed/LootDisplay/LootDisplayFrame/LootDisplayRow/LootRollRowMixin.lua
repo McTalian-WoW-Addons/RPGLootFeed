@@ -294,6 +294,51 @@ local function _ShowRollText(self, text)
 	self:LayoutPrimaryLine()
 end
 
+--- Roll-type icons by loot history state (0/1 Need, 2 Transmog, 3 Greed, 5 Pass,
+--- 6 Disenchant). The button textures exist on every flavor; the Transmog atlas on
+--- Retail and WoW Forever, the only places Transmog rolls exist.
+---@class RLF_RollIconSpec
+local ROLL_ICON_SPECS = {
+	[0] = { texture = "Interface\\Buttons\\UI-GroupLoot-Dice-Up" },
+	[1] = { texture = "Interface\\Buttons\\UI-GroupLoot-Dice-Up" },
+	[2] = { atlas = "lootroll-toast-icon-transmog-up" },
+	[3] = { texture = "Interface\\Buttons\\UI-GroupLoot-Coin-Up" },
+	[5] = { texture = "Interface\\Buttons\\UI-GroupLoot-Pass-Up" },
+	[6] = { texture = "Interface\\Buttons\\UI-GroupLoot-DE-Up" },
+}
+
+--- Inline icon markup for a roll's loot history state, or "" when it has none.
+---@param state number
+---@param size number
+---@return string
+local function _RollIconMarkup(state, size)
+	local spec = ROLL_ICON_SPECS[state]
+	if not spec then
+		return ""
+	end
+	if spec.atlas then
+		return ("|A:%s:%d:%d|a"):format(spec.atlas, size, size)
+	end
+	return ("|T%s:%d:%d|t"):format(spec.texture, size, size)
+end
+
+---@class RLF_RollTooltipIcons
+local ROLL_TOOLTIP_ICONS = {}
+for state in pairs(ROLL_ICON_SPECS) do
+	ROLL_TOOLTIP_ICONS[state] = _RollIconMarkup(state, 16)
+end
+
+--- LOOT_ITEM_ROLL_WON reports a roll type (1 Need, 2 Greed, 3 Disenchant, 4 Transmog);
+--- icons are keyed by loot history state.
+local ROLL_TYPE_TO_STATE = { [1] = 1, [2] = 3, [3] = 6, [4] = 2 }
+
+--- Size of the inline roll icon on a compact result: a little taller than the row's font.
+---@return number
+local function _CompactIconSize(self)
+	local stylingDb = G_RLF.DbAccessor:Styling(self.frameType)
+	return (stylingDb.fontSize or 10) + 4
+end
+
 --- Is the secondary text line enabled for this row's frame?
 ---@return boolean
 local function _SecondaryEnabled(self)
@@ -366,7 +411,12 @@ function RLF_LootRollRowMixin:OnRollWon(rollType, roll, isUpgraded)
 	local typeName = rollTypeNames[rollType] or ""
 	local upgradeText = isUpgraded and G_RLF.L["RollUpgraded"] or ""
 	local wonText
-	if self:_Opt("showRollNumbers", true) then
+	if self:_Opt("compactWinners", false) then
+		local icon = _RollIconMarkup(ROLL_TYPE_TO_STATE[rollType], _CompactIconSize(self))
+		icon = icon ~= "" and (" " .. icon) or ""
+		local number = self:_Opt("showRollNumbers", true) and (" " .. roll) or ""
+		wonText = ("%s%s%s%s"):format(YOU, icon, number, upgradeText)
+	elseif self:_Opt("showRollNumbers", true) then
 		wonText = G_RLF.L["RollTypeWon"]:format(typeName, roll, upgradeText)
 	else
 		wonText = G_RLF.L["RollTypeWonNoRoll"]:format(typeName, upgradeText)
@@ -381,16 +431,6 @@ function RLF_LootRollRowMixin:OnRollWon(rollType, roll, isUpgraded)
 		_ShowRollText(self, text)
 	end
 end
-
----@class RLF_RollTooltipIcons
-local ROLL_TOOLTIP_ICONS = {
-	[0] = "|TInterface\\Buttons\\UI-GroupLoot-Dice-Up:16:16|t",
-	[1] = "|TInterface\\Buttons\\UI-GroupLoot-Dice-Up:16:16|t",
-	[2] = "|A:lootroll-toast-icon-transmog-up:16:16|a",
-	[3] = "|TInterface\\Buttons\\UI-GroupLoot-Coin-Up:16:16|t",
-	[5] = "|TInterface\\Buttons\\UI-GroupLoot-Pass-Up:16:16|t",
-	[6] = "|TInterface\\Buttons\\UI-GroupLoot-DE-Up:16:16|t",
-}
 
 ---@param dropInfo table
 ---@param lines table
@@ -634,7 +674,17 @@ function RLF_LootRollRowMixin:SetRollResults(dropInfo)
 			rollTypeStr = ROLL_DISENCHANT
 		end
 
-		if dropInfo.winner.isSelf then
+		if self:_Opt("compactWinners", false) then
+			-- "Name [icon] 55" -- the icon says which roll won, so no "won" and no type name.
+			local icon = _RollIconMarkup(dropInfo.winner.state, _CompactIconSize(self))
+			icon = icon ~= "" and (" " .. icon) or ""
+			local number = showNumbers and (" " .. dropInfo.winner.roll) or ""
+			if dropInfo.winner.isSelf then
+				rollText = ("%s%s%s%s|r"):format(winColor, YOU, icon, number)
+			else
+				rollText = ("%s%s%s"):format(playerName(dropInfo.winner), icon, number)
+			end
+		elseif dropInfo.winner.isSelf then
 			local youWon = showNumbers and G_RLF.L["RollYouWon"]:format(rollTypeStr, dropInfo.winner.roll)
 				or G_RLF.L["RollYouWonNoRoll"]:format(rollTypeStr)
 			rollText = ("%s%s|r"):format(winColor, youWon)

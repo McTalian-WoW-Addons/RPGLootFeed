@@ -40,6 +40,7 @@ describe("RLF_LootRollRowMixin", function()
 		_G.LOOT_HISTORY_WAITING_ON = "Waiting on"
 		_G.LOOT_HISTORY_ALL_PASSED = "All passed"
 		_G.LOOT_ROLLS = "Loot Rolls"
+		_G.YOU = "You"
 
 		-- Additive-only: other spec files in this process share _G.Enum.
 		_G.Enum = _G.Enum or {}
@@ -637,6 +638,108 @@ describe("RLF_LootRollRowMixin", function()
 				})
 
 				assert.stub(row.SecondaryText.SetText).was.called_with(row.SecondaryText, "Carl leads (33)")
+			end)
+		end)
+
+		describe("compact winners (issue #645)", function()
+			local DICE = "|TInterface\\Buttons\\UI-GroupLoot-Dice-Up:14:14|t"
+			local COIN = "|TInterface\\Buttons\\UI-GroupLoot-Coin-Up:14:14|t"
+			local DE = "|TInterface\\Buttons\\UI-GroupLoot-DE-Up:14:14|t"
+			local TMOG = "|A:lootroll-toast-icon-transmog-up:14:14|a"
+
+			local function otherWinner(state, extra)
+				local info = { playerName = "Bob", playerClass = "UNKNOWN", isSelf = false, roll = 55, state = state }
+				for k, v in pairs(extra or {}) do
+					info[k] = v
+				end
+				return { winner = info, rollInfos = { { playerName = "Bob", playerClass = "UNKNOWN", state = state } } }
+			end
+
+			it("is off by default: the long text stays", function()
+				row:SetRollResults(otherWinner(3))
+				assert.stub(row.ItemCountText.SetText).was.called_with(row.ItemCountText, "Bob won (Greed, 55)")
+			end)
+
+			it("shows the name, the roll type icon and the number instead of 'won (Type, N)'", function()
+				setOptions({ compactWinners = true })
+				row:SetRollResults(otherWinner(3))
+				assert.stub(row.ItemCountText.SetText).was.called_with(row.ItemCountText, "Bob " .. COIN .. " 55")
+			end)
+
+			it("picks the icon for each roll type", function()
+				setOptions({ compactWinners = true })
+				local cases = { [0] = DICE, [1] = DICE, [2] = TMOG, [3] = COIN, [6] = DE }
+				for state, icon in pairs(cases) do
+					row.ItemCountText.SetText:clear()
+					row._rollResultsSignature = nil
+					row:SetRollResults(otherWinner(state))
+					assert.stub(row.ItemCountText.SetText).was.called_with(row.ItemCountText, "Bob " .. icon .. " 55")
+				end
+			end)
+
+			it("sizes the icon from the row's font size", function()
+				setOptions({ compactWinners = true })
+				ns.DbAccessor.Styling = function()
+					return { enabledSecondaryRowText = false, fontSize = 16 }
+				end
+				row:SetRollResults(otherWinner(1))
+				assert
+					.stub(row.ItemCountText.SetText).was
+					.called_with(row.ItemCountText, "Bob |TInterface\\Buttons\\UI-GroupLoot-Dice-Up:20:20|t 55")
+			end)
+
+			it("drops the number when roll numbers are off", function()
+				setOptions({ compactWinners = true, showRollNumbers = false })
+				row:SetRollResults(otherWinner(3))
+				assert.stub(row.ItemCountText.SetText).was.called_with(row.ItemCountText, "Bob " .. COIN)
+			end)
+
+			it("shows your own win as You, the icon and the number in the win color", function()
+				setOptions({ compactWinners = true })
+				row:SetRollResults({
+					winner = { playerClass = "UNKNOWN", isSelf = true, roll = 88, state = 0 },
+					rollInfos = { { playerName = "Self", playerClass = "UNKNOWN", state = 0 } },
+				})
+				assert
+					.stub(row.ItemCountText.SetText).was
+					.called_with(row.ItemCountText, "|cff00ff00You " .. DICE .. " 88|r")
+			end)
+
+			it("still class-colors the winner's name", function()
+				setOptions({ compactWinners = true })
+				ns.WoWAPI.LootRolls.GetClassColor = function()
+					return {
+						WrapTextInColorCode = function(_, text)
+							return "|cffMOCKED" .. text .. "|r"
+						end,
+					}
+				end
+				row:SetRollResults(otherWinner(3, { playerClass = "WARRIOR" }))
+				assert
+					.stub(row.ItemCountText.SetText).was
+					.called_with(row.ItemCountText, "|cffMOCKEDBob|r " .. COIN .. " 55")
+			end)
+
+			it("leaves out the icon, and its gap, for a state that has none", function()
+				setOptions({ compactWinners = true })
+				row:SetRollResults(otherWinner(4))
+				assert.stub(row.ItemCountText.SetText).was.called_with(row.ItemCountText, "Bob 55")
+			end)
+
+			it("applies to LOOT_ITEM_ROLL_WON as well", function()
+				setOptions({ compactWinners = true })
+				row:OnRollWon(2, 55, false) -- 2 == Greed
+				assert
+					.stub(row.ItemCountText.SetText).was
+					.called_with(row.ItemCountText, "|cff00ff00You " .. COIN .. " 55|r")
+			end)
+
+			it("keeps the upgraded note on LOOT_ITEM_ROLL_WON", function()
+				setOptions({ compactWinners = true })
+				row:OnRollWon(1, 77, true) -- 1 == Need
+				assert
+					.stub(row.ItemCountText.SetText).was
+					.called_with(row.ItemCountText, "|cff00ff00You " .. DICE .. " 77 (Upgraded!)|r")
 			end)
 		end)
 
