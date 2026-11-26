@@ -21,6 +21,7 @@ end
 -- L["EditItemListsDesc"] = "Open the editor for the Allow List and Block List."
 -- L["Enable Open Containers"] = "Enable Open Containers"
 -- L["EnableOpenContainersDesc"] = "Automatically open clams, sacks, crates and other containers that need no key while they are in your bags. Off by default. Never runs in combat, while casting, stealthed, at a vendor, mailbox, bank, auction house or trade window, or when your bags are nearly full."
+-- L["Feed Options"] = "Feed Options"
 -- L["InvalidItemId"] = "That is not a valid item ID or item link."
 -- L["Item Lists"] = "Item Lists"
 -- L["ItemListsHelp"] = "Tick items, then use >> and << to move them between lists. Block wins if an item is on both."

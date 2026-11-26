@@ -50,6 +50,44 @@ function RLF_LootRollRowMixin:_GetLootRollsConfig()
 	return frameConfig and frameConfig.features and frameConfig.features.lootRolls
 end
 
+--- A Loot Rolls option for this row's frame, or `default` when it is unset.
+---@param key string
+---@param default any
+---@return any
+function RLF_LootRollRowMixin:_Opt(key, default)
+	local cfg = self:_GetLootRollsConfig()
+	local value = cfg and cfg[key]
+	if value == nil then
+		return default
+	end
+	return value
+end
+
+--- Does this row show the Need/Greed/Pass action buttons? Off means a results-only
+--- row (issue #641); Blizzard's own roll window is then left alone.
+---@return boolean
+function RLF_LootRollRowMixin:ShowsRollButtons()
+	return self:_Opt("showRollButtons", true) ~= false
+end
+
+local DEFAULT_WIN_COLOR = { 0, 1, 0, 1 }
+--- 176/255, which formats as |cffb0b0b0.
+local DEFAULT_MUTED_COLOR = { 0.6903, 0.6903, 0.6903, 1 }
+
+--- The chat color escape for a Loot Rolls color option, e.g. "|cff00ff00".
+---@param key string
+---@param default number[]
+---@return string
+local function _ColorCode(self, key, default)
+	local c = self:_Opt(key, default)
+	return ("|c%02x%02x%02x%02x"):format(
+		math.floor((c[4] or 1) * 255),
+		math.floor(c[1] * 255),
+		math.floor(c[2] * 255),
+		math.floor(c[3] * 255)
+	)
+end
+
 ---@return number
 function RLF_LootRollRowMixin:_GetButtonSize()
 	local cfg = self:_GetLootRollsConfig()
@@ -192,11 +230,13 @@ function RLF_LootRollRowMixin:_LayoutRollButtons()
 	self:_RaiseRollButtons()
 
 	local btnSize = self:_GetButtonSize()
+	local gap = self:_Opt("buttonGap", BUTTON_GAP)
+	local padding = self:_Opt("buttonPadding", PADDING_RIGHT)
 	local count = #self._rollButtons
 	for i = count, 1, -1 do
 		local btn = self._rollButtons[i]
 		btn:ClearAllPoints()
-		btn:SetPoint("RIGHT", self, "RIGHT", -(count - i) * (btnSize + BUTTON_GAP) - PADDING_RIGHT, 0)
+		btn:SetPoint("RIGHT", self, "RIGHT", -(count - i) * (btnSize + gap) - padding, 0)
 		btn:Show()
 	end
 end
@@ -302,8 +342,13 @@ end
 ---@param isWinning boolean
 function RLF_LootRollRowMixin:OnMainSpecNeedRoll(roll, isWinning)
 	if self._rolled then
-		local color = isWinning and "ff00ff00" or "ffb0b0b0"
-		_ShowRollText(self, ("|c%s%s (%d)|r"):format(color, NEED, roll))
+		local color = isWinning and _ColorCode(self, "winColor", DEFAULT_WIN_COLOR)
+			or _ColorCode(self, "mutedColor", DEFAULT_MUTED_COLOR)
+		if self:_Opt("showRollNumbers", true) then
+			_ShowRollText(self, ("%s%s (%d)|r"):format(color, NEED, roll))
+		else
+			_ShowRollText(self, ("%s%s|r"):format(color, NEED))
+		end
 	end
 end
 
@@ -320,7 +365,13 @@ function RLF_LootRollRowMixin:OnRollWon(rollType, roll, isUpgraded)
 	}
 	local typeName = rollTypeNames[rollType] or ""
 	local upgradeText = isUpgraded and G_RLF.L["RollUpgraded"] or ""
-	local text = ("|cff00ff00%s|r"):format(G_RLF.L["RollTypeWon"]:format(typeName, roll, upgradeText))
+	local wonText
+	if self:_Opt("showRollNumbers", true) then
+		wonText = G_RLF.L["RollTypeWon"]:format(typeName, roll, upgradeText)
+	else
+		wonText = G_RLF.L["RollTypeWonNoRoll"]:format(typeName, upgradeText)
+	end
+	local text = ("%s%s|r"):format(_ColorCode(self, "winColor", DEFAULT_WIN_COLOR), wonText)
 	if _SecondaryEnabled(self) then
 		-- Results belong on the secondary line when there is one; the primary line's
 		-- right side keeps the player's own choice.
@@ -503,6 +554,9 @@ function RLF_LootRollRowMixin:_AppendRollTooltipToItem()
 end
 
 function RLF_LootRollRowMixin:_SetupRollTooltip()
+	if not self:_Opt("showRollTooltip", true) then
+		return
+	end
 	self.SecondaryText:SetScript("OnEnter", function()
 		if not self:IsInteractionAllowed("tooltips") then
 			return
@@ -556,10 +610,19 @@ function RLF_LootRollRowMixin:SetRollResults(dropInfo)
 		self.moduleName
 	)
 
-	-- ItemCountText: winner, all passed, or current leader on the primary line
+	-- Winner, all passed, or the current leader (see the Loot Rolls options for what shows).
+	local showNumbers = self:_Opt("showRollNumbers", true)
+	local useClassColors = self:_Opt("useClassColors", true)
+	local winColor = _ColorCode(self, "winColor", DEFAULT_WIN_COLOR)
+	local mutedColor = _ColorCode(self, "mutedColor", DEFAULT_MUTED_COLOR)
+
+	local function playerName(info)
+		local classColor = useClassColors and _GetClassColor(info.playerClass)
+		return classColor and classColor:WrapTextInColorCode(info.playerName) or info.playerName
+	end
+
 	local rollText
 	if dropInfo.winner then
-		local classColor = _GetClassColor(dropInfo.winner.playerClass)
 		local rollTypeStr = ""
 		if dropInfo.winner.state == 0 or dropInfo.winner.state == 1 then
 			rollTypeStr = NEED
@@ -572,19 +635,23 @@ function RLF_LootRollRowMixin:SetRollResults(dropInfo)
 		end
 
 		if dropInfo.winner.isSelf then
-			rollText = ("|cff00ff00%s|r"):format(G_RLF.L["RollYouWon"]:format(rollTypeStr, dropInfo.winner.roll))
+			local youWon = showNumbers and G_RLF.L["RollYouWon"]:format(rollTypeStr, dropInfo.winner.roll)
+				or G_RLF.L["RollYouWonNoRoll"]:format(rollTypeStr)
+			rollText = ("%s%s|r"):format(winColor, youWon)
+		elseif showNumbers then
+			rollText = G_RLF.L["RollPlayerWon"]:format(playerName(dropInfo.winner), rollTypeStr, dropInfo.winner.roll)
 		else
-			local name = classColor and classColor:WrapTextInColorCode(dropInfo.winner.playerName)
-				or dropInfo.winner.playerName
-			rollText = G_RLF.L["RollPlayerWon"]:format(name, rollTypeStr, dropInfo.winner.roll)
+			rollText = G_RLF.L["RollPlayerWonNoRoll"]:format(playerName(dropInfo.winner), rollTypeStr)
 		end
 	elseif allPassed then
-		rollText = ("|cffb0b0b0%s|r"):format(LOOT_HISTORY_ALL_PASSED)
-	elseif self._rolled and dropInfo.currentLeader then
-		local classColor = _GetClassColor(dropInfo.currentLeader.playerClass)
-		local name = classColor and classColor:WrapTextInColorCode(dropInfo.currentLeader.playerName)
-			or dropInfo.currentLeader.playerName
-		rollText = G_RLF.L["RollPlayerLeads"]:format(name, dropInfo.currentLeader.roll)
+		rollText = ("%s%s|r"):format(mutedColor, LOOT_HISTORY_ALL_PASSED)
+	elseif self._rolled and dropInfo.currentLeader and self:_Opt("showLeader", true) then
+		if showNumbers then
+			rollText =
+				G_RLF.L["RollPlayerLeads"]:format(playerName(dropInfo.currentLeader), dropInfo.currentLeader.roll)
+		else
+			rollText = G_RLF.L["RollPlayerLeadsNoRoll"]:format(playerName(dropInfo.currentLeader))
+		end
 	end
 
 	local resolved = dropInfo.winner or allPassed or (waitingCount == 0 and self._rolled)
@@ -607,7 +674,7 @@ function RLF_LootRollRowMixin:SetRollResults(dropInfo)
 
 	local secondaryParts = {}
 	if secondaryEnabled then
-		if waitingCount > 0 then
+		if waitingCount > 0 and self:_Opt("showWaitingCount", true) then
 			table.insert(secondaryParts, G_RLF.L["RollWaitingOn"]:format(waitingCount))
 		end
 		if rollText then
@@ -644,7 +711,7 @@ function RLF_LootRollRowMixin:OnRollCast(label, id)
 	end
 
 	if id == LOOT_ROLL_TYPE_PASS then
-		_ShowRollText(self, ("|cffb0b0b0%s|r"):format(PASS))
+		_ShowRollText(self, ("%s%s|r"):format(_ColorCode(self, "mutedColor", DEFAULT_MUTED_COLOR), PASS))
 	else
 		_ShowRollText(self, label)
 	end
@@ -703,39 +770,42 @@ function RLF_LootRollRowMixin:PostBootstrapFromElement(element)
 
 	local hasRealRoll = self.rollID ~= nil
 
-	local needBtn = self:_CreateRollButton(
-		NEED,
-		LOOT_ROLL_TYPE_NEED,
-		hasRealRoll and canNeed or false,
-		hasRealRoll and reasonNeed or nil
-	)
-	table.insert(self._rollButtons, needBtn)
-
-	if canTransmog then
-		local transmogBtn = self:_CreateRollButton(TRANSMOGRIFICATION, 4, hasRealRoll and true or false, nil)
-		table.insert(self._rollButtons, transmogBtn)
-	else
-		local greedBtn = self:_CreateRollButton(
-			GREED,
-			LOOT_ROLL_TYPE_GREED,
-			hasRealRoll and canGreed or false,
-			hasRealRoll and reasonGreed or nil
+	-- Results-only rows (showRollButtons off) skip the action buttons entirely.
+	if self:ShowsRollButtons() then
+		local needBtn = self:_CreateRollButton(
+			NEED,
+			LOOT_ROLL_TYPE_NEED,
+			hasRealRoll and canNeed or false,
+			hasRealRoll and reasonNeed or nil
 		)
-		table.insert(self._rollButtons, greedBtn)
-	end
+		table.insert(self._rollButtons, needBtn)
 
-	if not G_RLF:IsRetail() and canDisenchant then
-		local deBtn = self:_CreateRollButton(
-			ROLL_DISENCHANT,
-			LOOT_ROLL_TYPE_DISENCHANT,
-			hasRealRoll and canDisenchant or false,
-			hasRealRoll and reasonDisenchant or nil
-		)
-		table.insert(self._rollButtons, deBtn)
-	end
+		if canTransmog then
+			local transmogBtn = self:_CreateRollButton(TRANSMOGRIFICATION, 4, hasRealRoll and true or false, nil)
+			table.insert(self._rollButtons, transmogBtn)
+		else
+			local greedBtn = self:_CreateRollButton(
+				GREED,
+				LOOT_ROLL_TYPE_GREED,
+				hasRealRoll and canGreed or false,
+				hasRealRoll and reasonGreed or nil
+			)
+			table.insert(self._rollButtons, greedBtn)
+		end
 
-	local passBtn = self:_CreateRollButton(PASS, LOOT_ROLL_TYPE_PASS, hasRealRoll, nil)
-	table.insert(self._rollButtons, passBtn)
+		if not G_RLF:IsRetail() and canDisenchant then
+			local deBtn = self:_CreateRollButton(
+				ROLL_DISENCHANT,
+				LOOT_ROLL_TYPE_DISENCHANT,
+				hasRealRoll and canDisenchant or false,
+				hasRealRoll and reasonDisenchant or nil
+			)
+			table.insert(self._rollButtons, deBtn)
+		end
+
+		local passBtn = self:_CreateRollButton(PASS, LOOT_ROLL_TYPE_PASS, hasRealRoll, nil)
+		table.insert(self._rollButtons, passBtn)
+	end
 
 	self:_TrackRowFrameLevel()
 	self:_LayoutRollButtons()
@@ -748,7 +818,9 @@ function RLF_LootRollRowMixin:PostBootstrapFromElement(element)
 	self.showForSeconds = infinity
 
 	-- Timer bar counts down the roll's remaining time until resolution.
-	self:_SetupRollTimerBar(element.rollDuration)
+	if self:_Opt("showTimerBar", true) then
+		self:_SetupRollTimerBar(element.rollDuration)
+	end
 
 	-- Hook the ClickableButton tooltip to append roll info after the item tooltip
 	if self.ClickableButton then
@@ -758,7 +830,7 @@ function RLF_LootRollRowMixin:PostBootstrapFromElement(element)
 			if origOnEnter then
 				origOnEnter()
 			end
-			if self._rollDropInfo then
+			if self._rollDropInfo and self:_Opt("showRollTooltip", true) then
 				self:_AppendRollTooltipToItem()
 			end
 		end)

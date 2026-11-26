@@ -110,6 +110,45 @@ describe("LootRollFrames override", function()
 		assert.is_true(button._mouse)
 	end)
 
+	it("keeps Blizzard's frame for a results-only row with no roll buttons (issue #641)", function()
+		rowsByRollID[7] = {
+			{
+				row = {
+					IsInteractionAllowed = function()
+						return true
+					end,
+					ShowsRollButtons = function()
+						return false
+					end,
+				},
+			},
+		}
+
+		Override:Refresh()
+
+		assert.are.equal(1, rollFrame._alpha)
+		assert.is_true(rollFrame._mouse)
+	end)
+
+	it("still conceals for a row that shows its roll buttons", function()
+		rowsByRollID[7] = {
+			{
+				row = {
+					IsInteractionAllowed = function()
+						return true
+					end,
+					ShowsRollButtons = function()
+						return true
+					end,
+				},
+			},
+		}
+
+		Override:Refresh()
+
+		assert.are.equal(0, rollFrame._alpha)
+	end)
+
 	it("keeps Blizzard's frame while the option is off (default)", function()
 		rowsByRollID[7] = { { row = {
 			IsInteractionAllowed = function()

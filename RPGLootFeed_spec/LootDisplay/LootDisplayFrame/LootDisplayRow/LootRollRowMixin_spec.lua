@@ -452,6 +452,221 @@ describe("RLF_LootRollRowMixin", function()
 		end)
 	end)
 
+	describe("Loot Rolls options", function()
+		local function setOptions(opts)
+			ns.db.global.frames[row.frameType].features.lootRolls = opts
+		end
+
+		local function bootstrap()
+			stub(row, "_CreateRollButton", function()
+				return newDummyButton()
+			end)
+			stub(row, "_SetupRollTimerBar")
+			row:PostBootstrapFromElement({
+				type = ns.FeatureModule.LootRolls,
+				rollID = 555,
+				canNeed = true,
+				canGreed = true,
+				canTransmog = false,
+				rollDuration = 60000,
+			})
+		end
+
+		local function winner(isSelf)
+			return {
+				winner = { playerName = "Bob", playerClass = "UNKNOWN", isSelf = isSelf, roll = 55, state = 3 },
+				rollInfos = { { playerName = "Bob", playerClass = "UNKNOWN", state = 3 } },
+			}
+		end
+
+		describe("roll buttons (issue #641)", function()
+			it("defaults to showing the buttons", function()
+				assert.is_true(row:ShowsRollButtons())
+				bootstrap()
+				assert.are.equal(3, #row._rollButtons)
+			end)
+
+			it("creates no buttons when turned off", function()
+				setOptions({ showRollButtons = false })
+				assert.is_false(row:ShowsRollButtons())
+
+				bootstrap()
+
+				assert.stub(row._CreateRollButton).was_not.called()
+				assert.are.equal(0, #row._rollButtons)
+			end)
+
+			it("is still a live roll row, so results and cleanup keep working", function()
+				setOptions({ showRollButtons = false })
+				bootstrap()
+
+				assert.are.equal(555, row.rollID)
+				assert.is_true(row._isLootRollRow)
+				row:SetRollResults(winner(false))
+				assert.is_true(row._resolved)
+			end)
+		end)
+
+		describe("button spacing and padding", function()
+			local function layoutWith(opts)
+				setOptions(opts)
+				local buttons = { newDummyButton(), newDummyButton() }
+				row._rollButtons = buttons
+				row:_LayoutRollButtons()
+				return buttons
+			end
+
+			it("keeps the old 4px gap and 8px padding by default", function()
+				local buttons = layoutWith({ buttonSize = 20 })
+				-- Rightmost button: padding only. Next one: padding plus one button and one gap.
+				assert.stub(buttons[2].SetPoint).was.called_with(match._, "RIGHT", match._, "RIGHT", -8, 0)
+				assert.stub(buttons[1].SetPoint).was.called_with(match._, "RIGHT", match._, "RIGHT", -(20 + 4) - 8, 0)
+			end)
+
+			it("uses the configured gap and padding", function()
+				local buttons = layoutWith({ buttonSize = 20, buttonGap = 10, buttonPadding = 2 })
+				assert.stub(buttons[2].SetPoint).was.called_with(match._, "RIGHT", match._, "RIGHT", -2, 0)
+				assert.stub(buttons[1].SetPoint).was.called_with(match._, "RIGHT", match._, "RIGHT", -(20 + 10) - 2, 0)
+			end)
+		end)
+
+		describe("results text", function()
+			it("hides roll numbers in a win when turned off", function()
+				setOptions({ showRollNumbers = false })
+				row:SetRollResults(winner(false))
+				assert.stub(row.ItemCountText.SetText).was.called_with(row.ItemCountText, "Bob won (Greed)")
+			end)
+
+			it("hides roll numbers in your own win when turned off", function()
+				setOptions({ showRollNumbers = false })
+				row:SetRollResults({
+					winner = { playerClass = "UNKNOWN", isSelf = true, roll = 88, state = 0 },
+					rollInfos = { { playerName = "Self", playerClass = "UNKNOWN", state = 0 } },
+				})
+				assert.stub(row.ItemCountText.SetText).was.called_with(row.ItemCountText, "|cff00ff00You won! (Need)|r")
+			end)
+
+			it("hides the number on the current leader when turned off", function()
+				setOptions({ showRollNumbers = false })
+				row._rolled = true
+				row:SetRollResults({
+					currentLeader = { playerName = "Carl", playerClass = "UNKNOWN", roll = 33 },
+					rollInfos = { { playerName = "Carl", playerClass = "UNKNOWN", state = 4 } },
+				})
+				assert.stub(row.ItemCountText.SetText).was.called_with(row.ItemCountText, "Carl leads")
+			end)
+
+			it("hides the number on LOOT_ITEM_ROLL_WON and on your Need result when turned off", function()
+				setOptions({ showRollNumbers = false })
+				row:OnRollWon(2, 55, false)
+				assert.stub(row.ItemCountText.SetText).was.called_with(row.ItemCountText, "|cff00ff00Greed Won!|r")
+				row._rolled = true
+				row:OnMainSpecNeedRoll(42, true)
+				assert.stub(row.ItemCountText.SetText).was.called_with(row.ItemCountText, "|cff00ff00Need|r")
+			end)
+
+			it("does not show the current leader when turned off", function()
+				setOptions({ showLeader = false })
+				row._rolled = true
+				row:SetRollResults({
+					currentLeader = { playerName = "Carl", playerClass = "UNKNOWN", roll = 33 },
+					rollInfos = { { playerName = "Carl", playerClass = "UNKNOWN", state = 4 } },
+				})
+				assert.stub(row.ItemCountText.SetText).was_not.called()
+			end)
+
+			it("still shows the winner when the leader is turned off", function()
+				setOptions({ showLeader = false })
+				row:SetRollResults(winner(false))
+				assert.stub(row.ItemCountText.SetText).was.called_with(row.ItemCountText, "Bob won (Greed, 55)")
+			end)
+
+			it("leaves names uncolored when class colors are turned off", function()
+				setOptions({ useClassColors = false })
+				ns.WoWAPI.LootRolls.GetClassColor = function()
+					return {
+						WrapTextInColorCode = function(_, text)
+							return "|cffMOCKED" .. text .. "|r"
+						end,
+					}
+				end
+				local results = winner(false)
+				results.winner.playerClass = "WARRIOR"
+				row:SetRollResults(results)
+				assert.stub(row.ItemCountText.SetText).was.called_with(row.ItemCountText, "Bob won (Greed, 55)")
+			end)
+
+			it("uses the configured win color", function()
+				setOptions({ winColor = { 1, 0, 0, 1 } })
+				row:SetRollResults({
+					winner = { playerClass = "UNKNOWN", isSelf = true, roll = 88, state = 0 },
+					rollInfos = { { playerName = "Self", playerClass = "UNKNOWN", state = 0 } },
+				})
+				assert
+					.stub(row.ItemCountText.SetText).was
+					.called_with(row.ItemCountText, "|cffff0000You won! (Need, 88)|r")
+			end)
+
+			it("uses the configured muted color for passes and All passed", function()
+				setOptions({ mutedColor = { 0, 0, 1, 1 } })
+				row:SetRollResults({ rollInfos = { { playerName = "Carl", playerClass = "UNKNOWN", state = 5 } } })
+				assert.stub(row.ItemCountText.SetText).was.called_with(row.ItemCountText, "|cff0000ffAll passed|r")
+				row:OnRollCast(_G.PASS, _G.LOOT_ROLL_TYPE_PASS)
+				assert.stub(row.ItemCountText.SetText).was.called_with(row.ItemCountText, "|cff0000ffPass|r")
+			end)
+
+			it("drops the waiting count from the secondary line when turned off", function()
+				ns.DbAccessor.Styling = function()
+					return { enabledSecondaryRowText = true, textAlignment = 1, rowTextSpacing = 0 }
+				end
+				stub(row.SecondaryText, "SetText")
+				stub(row.SecondaryText, "Show")
+				stub(row.SecondaryText, "Hide")
+				row.SecondaryLineLayout.Show = function() end
+				row.SecondaryLineLayout.Hide = function() end
+				row.LayoutSecondaryLine = function() end
+				setOptions({ showWaitingCount = false })
+				row._rolled = true
+
+				row:SetRollResults({
+					currentLeader = { playerName = "Carl", playerClass = "UNKNOWN", roll = 33 },
+					rollInfos = {
+						{ playerName = "Carl", playerClass = "UNKNOWN", state = 4 },
+						{ playerName = "Dee", playerClass = "UNKNOWN", state = 4 },
+					},
+				})
+
+				assert.stub(row.SecondaryText.SetText).was.called_with(row.SecondaryText, "Carl leads (33)")
+			end)
+		end)
+
+		describe("countdown bar", function()
+			it("is set up by default", function()
+				bootstrap()
+				assert.stub(row._SetupRollTimerBar).was.called(1)
+			end)
+
+			it("is skipped when turned off", function()
+				setOptions({ showTimerBar = false })
+				bootstrap()
+				assert.stub(row._SetupRollTimerBar).was_not.called()
+			end)
+		end)
+
+		describe("roll details tooltip", function()
+			it("hooks the secondary text by default", function()
+				row:_SetupRollTooltip()
+				assert.stub(row.SecondaryText.SetScript).was.called(2)
+			end)
+
+			it("hooks nothing when turned off", function()
+				setOptions({ showRollTooltip = false })
+				row:_SetupRollTooltip()
+				assert.stub(row.SecondaryText.SetScript).was_not.called()
+			end)
+		end)
+	end)
+
 	describe("OnPlayerRolled (roll made outside RLF's buttons, e.g. Blizzard's frame or a gamepad)", function()
 		local btn1, btn2
 

@@ -40,7 +40,10 @@ function LootRollFramesOverride:ShouldConceal(rollID)
 	end
 	-- Only conceal when a row that shows this roll lets the player click its buttons.
 	for _, entry in ipairs(lootRolls:FindRollRows(rollID)) do
-		if entry.row:IsInteractionAllowed("rollButtons") then
+		local row = entry.row
+		-- A results-only row has no buttons to click, so Blizzard's window stays.
+		local hasButtons = row.ShowsRollButtons == nil or row:ShowsRollButtons()
+		if hasButtons and row:IsInteractionAllowed("rollButtons") then
 			return true
 		end
 	end
