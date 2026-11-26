@@ -228,6 +228,62 @@ G_RLF.WoWAPI.Transmog = {
 -- PlaySoundFile, and the AuctionIntegrations price hook.
 ---@class RLF_WoWAPI_ItemLoot
 G_RLF.WoWAPI.ItemLoot = {
+	--- Does the item's tooltip carry the "This Item Begins a Quest" line? Reads
+	--- C_TooltipInfo where the client has it (Retail, Forever), otherwise a hidden
+	--- tooltip frame. Returns nil while the tooltip has no lines yet (item data still
+	--- loading) so callers do not cache a false negative.
+	---@param itemLink string
+	---@return boolean?
+	ItemStartsQuest = function(itemLink)
+		local needle = _G["ITEM_STARTS_QUEST"]
+		if not needle or not itemLink then
+			return false
+		end
+		-- An item the client has not loaded yet gives a partial tooltip (often just the
+		-- name), which would read as "does not start a quest". Ask for it and report
+		-- "unknown" so the caller does not cache or assert on a false negative.
+		local itemId = tonumber(tostring(itemLink):match("item:(%d+)"))
+		if itemId and C_Item and C_Item.IsItemDataCachedByID and not C_Item.IsItemDataCachedByID(itemId) then
+			if C_Item.RequestLoadItemDataByID then
+				C_Item.RequestLoadItemDataByID(itemId)
+			end
+			return nil
+		end
+		local function matches(text)
+			return text ~= nil and not (issecretvalue and issecretvalue(text)) and text == needle
+		end
+		if C_TooltipInfo and C_TooltipInfo.GetHyperlink then
+			local data = C_TooltipInfo.GetHyperlink(itemLink)
+			if not data or not data.lines or #data.lines == 0 then
+				return nil
+			end
+			for _, line in ipairs(data.lines) do
+				if matches(line.leftText) then
+					return true
+				end
+			end
+			return false
+		end
+		local tooltipName = "RLFItemScanTooltip"
+		local tooltip = _G[tooltipName]
+		if not tooltip then
+			tooltip = CreateFrame("GameTooltip", tooltipName, nil, "GameTooltipTemplate")
+		end
+		tooltip:SetOwner(UIParent, "ANCHOR_NONE")
+		tooltip:ClearLines()
+		tooltip:SetHyperlink(itemLink)
+		local numLines = tooltip:NumLines()
+		if numLines == 0 then
+			return nil
+		end
+		for i = 1, numLines do
+			local region = _G[tooltipName .. "TextLeft" .. i]
+			if region and matches(region:GetText()) then
+				return true
+			end
+		end
+		return false
+	end,
 	GetExpansionLevel = function()
 		return GetExpansionLevel()
 	end,
