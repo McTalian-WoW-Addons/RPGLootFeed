@@ -511,6 +511,24 @@ function G_RLF.ItemLoot:BuildConfigArgs(frameId, order)
 								end,
 								order = 5.1,
 							},
+							combinedPriceIcons = {
+								type = "toggle",
+								name = G_RLF.L["Show Source Icons On Combined Prices"],
+								desc = G_RLF.L["CombinedPriceIconsDesc"],
+								width = "double",
+								disabled = function()
+									local mode = fc().pricesForSellableItems
+									return not fc().enabled
+										or (mode ~= PricesEnum.VendorAH and mode ~= PricesEnum.AHVendor)
+								end,
+								get = function()
+									return fc().combinedPriceIcons
+								end,
+								set = function(_, value)
+									fc().combinedPriceIcons = value
+								end,
+								order = 5.2,
+							},
 						},
 					},
 					itemQualityFilter = {

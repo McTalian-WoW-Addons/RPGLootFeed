@@ -4,6 +4,7 @@ local busted = require("busted")
 local describe = busted.describe
 local it = busted.it
 local setup = busted.setup
+local before_each = busted.before_each
 
 -- Feature defaults (ns.defaults.global.frames["**"].features.itemLoot) are
 -- already covered end-to-end by RPGLootFeed_spec/config/ConfigOptions_spec.lua.
@@ -83,5 +84,70 @@ describe("ItemLootConfig module", function()
 			assert.is_table(qualityArgs[key .. "Enabled"], "missing " .. key .. "Enabled")
 			assert.is_table(qualityArgs[key .. "Duration"], "missing " .. key .. "Duration")
 		end
+	end)
+
+	describe("combined price icons option (issue #615)", function()
+		local group, option, itemLootCfg
+
+		local function find(tbl, key)
+			if type(tbl) ~= "table" then
+				return nil
+			end
+			if tbl[key] ~= nil and type(tbl[key]) == "table" and tbl[key].type then
+				return tbl[key]
+			end
+			for _, child in pairs(tbl) do
+				local found = find(child, key)
+				if found then
+					return found
+				end
+			end
+		end
+
+		before_each(function()
+			itemLootCfg = {}
+			for k, v in pairs(ns.defaults.global.frames["**"].features.itemLoot) do
+				itemLootCfg[k] = v
+			end
+			itemLootCfg.enabled = true
+			ns.db = {
+				global = { frames = { [1] = { features = { itemLoot = itemLootCfg } } }, interactions = {} },
+			}
+			group = ns.ItemLoot:BuildConfigArgs(1, 5)
+			option = find(group.args, "combinedPriceIcons")
+		end)
+
+		it("defaults to off", function()
+			assert.is_false(ns.defaults.global.frames["**"].features.itemLoot.combinedPriceIcons)
+		end)
+
+		it("exists as a toggle on the Item Loot page", function()
+			assert.is_table(option)
+			assert.equal("toggle", option.type)
+		end)
+
+		it("reads and writes the setting", function()
+			assert.is_false(option.get())
+			option.set(nil, true)
+			assert.is_true(itemLootCfg.combinedPriceIcons)
+		end)
+
+		it("is only available for the two combined price modes", function()
+			local modes = ns.PricesEnum
+			itemLootCfg.pricesForSellableItems = modes.Vendor
+			assert.is_true(option.disabled())
+			itemLootCfg.pricesForSellableItems = modes.AH
+			assert.is_true(option.disabled())
+			itemLootCfg.pricesForSellableItems = modes.VendorAH
+			assert.is_false(option.disabled())
+			itemLootCfg.pricesForSellableItems = modes.AHVendor
+			assert.is_false(option.disabled())
+		end)
+
+		it("is unavailable while Item Loot is disabled", function()
+			itemLootCfg.pricesForSellableItems = ns.PricesEnum.VendorAH
+			itemLootCfg.enabled = false
+			assert.is_true(option.disabled())
+		end)
 	end)
 end)

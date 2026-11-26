@@ -95,6 +95,7 @@ local function createItemLootContextProvider()
 		local pricesForSellableItems = itemCfg.pricesForSellableItems
 		local plainTextPrices = itemCfg.plainTextPrices
 		local plainTextPricesColored = itemCfg.plainTextPricesColored
+		local combinedPriceIcons = itemCfg.combinedPriceIcons
 		if info.sellPrice and info.sellPrice > 0 then
 			vendorPrice = info.sellPrice
 		end
@@ -178,26 +179,33 @@ local function createItemLootContextProvider()
 			end
 		end
 
+		-- The combined modes only carry the source icons when the player opts in
+		-- (combinedPriceIcons); otherwise the order alone tells the prices apart.
+		local function sourcePrice(icon, price)
+			local prefix = combinedPriceIcons and iconMarkup(icon) or ""
+			return prefix .. plainPrice(price * effectiveQuantity)
+		end
+
 		local str = ""
 		if pricesForSellableItems == G_RLF.PricesEnum.VendorAH then
 			if showVendorPrice then
-				str = str .. plainPrice(vendorPrice * effectiveQuantity)
+				str = str .. sourcePrice(vendorIcon, vendorPrice)
 			end
 			if showVendorPrice and showAuctionPrice then
 				str = str .. "    "
 			end
 			if showAuctionPrice then
-				str = str .. plainPrice(auctionPrice * effectiveQuantity)
+				str = str .. sourcePrice(auctionIcon, auctionPrice)
 			end
 		elseif pricesForSellableItems == G_RLF.PricesEnum.AHVendor then
 			if showAuctionPrice then
-				str = str .. plainPrice(auctionPrice * effectiveQuantity)
+				str = str .. sourcePrice(auctionIcon, auctionPrice)
 			end
 			if showAuctionPrice and showVendorPrice then
 				str = str .. "    "
 			end
 			if showVendorPrice then
-				str = str .. plainPrice(vendorPrice * effectiveQuantity)
+				str = str .. sourcePrice(vendorIcon, vendorPrice)
 			end
 		end
 		context.secondaryText = str

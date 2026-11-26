@@ -1292,6 +1292,61 @@ describe("ItemLoot Module", function()
 				end)
 			end)
 
+			describe("combinedPriceIcons (issue #615)", function()
+				local info
+
+				before_each(function()
+					info = makeItemInfo({ sellPrice = 10000 })
+					ItemLoot.itemLootApi.GetAHPrice = function()
+						return 20000
+					end
+				end)
+
+				it("is off by default: combined prices carry no icons", function()
+					ns.db.global.item.pricesForSellableItems = "VendorAH"
+					local payload = ItemLoot:BuildPayload(info, 1, nil)
+					assert.equals("1g 0s 0c    2g 0s 0c", payload.secondaryTextFn(1))
+				end)
+
+				it("puts the vendor icon, then the AH icon, in Vendor-then-AH mode", function()
+					ns.db.global.item.pricesForSellableItems = "VendorAH"
+					ns.db.global.item.combinedPriceIcons = true
+					local payload = ItemLoot:BuildPayload(info, 1, nil)
+					assert.equals(
+						"[Interface/Icons/inv_misc_coin_01] 1g 0s 0c    [Interface/Icons/inv_misc_coin_02] 2g 0s 0c",
+						payload.secondaryTextFn(1)
+					)
+				end)
+
+				it("puts the AH icon, then the vendor icon, in AH-then-Vendor mode", function()
+					ns.db.global.item.pricesForSellableItems = "AHVendor"
+					ns.db.global.item.combinedPriceIcons = true
+					local payload = ItemLoot:BuildPayload(info, 1, nil)
+					assert.equals(
+						"[Interface/Icons/inv_misc_coin_02] 2g 0s 0c    [Interface/Icons/inv_misc_coin_01] 1g 0s 0c",
+						payload.secondaryTextFn(1)
+					)
+				end)
+
+				it("only icons the price that exists when one source is missing", function()
+					ns.db.global.item.pricesForSellableItems = "VendorAH"
+					ns.db.global.item.combinedPriceIcons = true
+					ItemLoot.itemLootApi.GetAHPrice = function()
+						return nil
+					end
+					local payload = ItemLoot:BuildPayload(info, 1, nil)
+					assert.equals("[Interface/Icons/inv_misc_coin_01] 1g 0s 0c", payload.secondaryTextFn(1))
+				end)
+
+				it("does not change single-source modes", function()
+					ns.db.global.item.pricesForSellableItems = "Vendor"
+					ns.db.global.item.plainTextPrices = true
+					ns.db.global.item.combinedPriceIcons = true
+					local payload = ItemLoot:BuildPayload(info, 1, nil)
+					assert.equals("[Interface/Icons/inv_misc_coin_01] 1g 0s 0c", payload.secondaryTextFn())
+				end)
+			end)
+
 			describe("plain-text price suffixes", function()
 				-- Distinct, non-English stand-ins. If plainPrice() ever falls back
 				-- to a hardcoded "g"/"s"/"c" literal instead of the adapter, this
