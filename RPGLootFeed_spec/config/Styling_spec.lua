@@ -96,6 +96,23 @@ describe("Styling module", function()
 		end)
 	end)
 
+	describe("icon quality border", function()
+		it("reads as on when the setting is absent", function()
+			assert.is_true(handler:GetEnableIconQualityBorder())
+		end)
+
+		it("reads the stored value", function()
+			stylingDb.enableIconQualityBorder = false
+			assert.is_false(handler:GetEnableIconQualityBorder())
+		end)
+
+		it("stores the value and refreshes the rows", function()
+			handler:SetEnableIconQualityBorder(nil, false)
+			assert.is_false(stylingDb.enableIconQualityBorder)
+			assert.stub(ns.LootDisplay.UpdateRowStyles).was.called(1)
+		end)
+	end)
+
 	describe("GetIconSkin", function()
 		it("reads the value straight from the frame's styling DB", function()
 			stylingDb.iconSkin = ns.IconSkin.SQUARE

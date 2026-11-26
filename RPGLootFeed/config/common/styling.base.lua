@@ -113,6 +113,8 @@ end
 ---@field SetRowBorderClassColors fun(info: any, value: boolean)
 ---@field GetIconSkin fun(): string
 ---@field SetIconSkin fun(info: any, value: string)
+---@field GetEnableIconQualityBorder fun(): boolean
+---@field SetEnableIconQualityBorder fun(info: any, value: boolean)
 ---@field GetEnabledSecondaryRowText fun(): boolean
 ---@field SetEnabledSecondaryRowText fun(info: any, value: boolean)
 ---@field GetEnableTopLeftIconText fun(): boolean
@@ -494,6 +496,18 @@ function StylingBase.CreateIconSkinSelect()
 end
 
 ---@private
+function StylingBase.CreateEnableIconQualityBorderToggle()
+	return G_RLF.ConfigCommon.CreateToggle({
+		name = G_RLF.L["Show Icon Quality Border"],
+		desc = G_RLF.L["ShowIconQualityBorderDesc"],
+		get = "GetEnableIconQualityBorder",
+		set = "SetEnableIconQualityBorder",
+		width = "double",
+		order = 4.6,
+	})
+end
+
+---@private
 function StylingBase.CreateEnableSecondaryRowTextToggle()
 	return G_RLF.ConfigCommon.CreateToggle({
 		name = G_RLF.L["Enable Secondary Row Text"],
@@ -833,6 +847,7 @@ function StylingBase.CreateStylingGroup(handler, order)
 	group.args.background = StylingBase.CreateBackgroundGroup()
 	group.args.rowBorders = StylingBase.CreateRowBordersGroup()
 	group.args.iconSkin = StylingBase.CreateIconSkinSelect()
+	group.args.enableIconQualityBorder = StylingBase.CreateEnableIconQualityBorderToggle()
 	group.args.topLeftIconTextOptions = StylingBase.CreateTopLeftIconTextOptionsGroup()
 	group.args.useFontObjects = StylingBase.CreateUseFontObjectsToggle()
 	group.args.font = StylingBase.CreateFontObjectSelect()
