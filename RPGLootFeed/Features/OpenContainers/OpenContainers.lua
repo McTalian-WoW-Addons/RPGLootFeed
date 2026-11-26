@@ -24,19 +24,39 @@ local OpenContainers = G_RLF.FeatureBase:new(G_RLF.SupportModule.OpenContainers,
 -- ── Tunables ────────────────────────────────────────────────
 local SCAN_DEBOUNCE = 0.5
 local OPEN_TICK_INTERVAL = 0.25
-local BLOCKED_TICK_INTERVAL = 1
 local OPEN_ANSWER_TIMEOUT = 1 -- seconds an open waits for its loot before it counts as refused
 local OPEN_REFUSAL_LIMIT = 3 -- unanswered opens in a row before an item is set aside until relog/level-up
-local BIND_ON_PICKUP = 1
 local NAME_REQUEST_BATCH = 25
 local NAME_REQUEST_INTERVAL = 0.2
 local NAME_REFRESH_DELAY = 0.5
+
+-- Events that can clear whatever blocked an open, so nothing has to poll: while the player
+-- is blocked (a window open, casting, stealthed, bags nearly full, in combat) the module is
+-- idle until one of these fires. Registered only where the client has them.
+local RESCAN_EVENTS = {
+	"BAG_UPDATE_DELAYED", -- bag space freed, or new containers arrived
+	"PLAYER_REGEN_ENABLED", -- combat ended
+	"PLAYER_ENTERING_WORLD",
+}
+local UNBLOCK_EVENTS = {
+	"UPDATE_STEALTH",
+	"PLAYER_INTERACTION_MANAGER_FRAME_HIDE", -- any NPC window closed (modern clients)
+	"MERCHANT_CLOSED",
+	"MAIL_CLOSED",
+	"BANKFRAME_CLOSED",
+	"TRADE_CLOSED",
+	"AUCTION_HOUSE_CLOSED",
+	"GOSSIP_CLOSED",
+	"QUEST_FINISHED",
+}
 
 -- ── State ───────────────────────────────────────────────────
 local queue = {}
 local scanPending = false
 local tickLive = false
-local pendingItem, pendingAt = nil, 0
+local pendingItem = nil
+local openSeq = 0
+local castListener
 local refusedCounts = {}
 local refusedItems = {}
 
@@ -49,17 +69,16 @@ end
 
 -- ── Flavor data ─────────────────────────────────────────────
 
---- The base item data for this client, or nil when no data ships for it yet.
---- Retail and Mists have no base data: until UseContainerItem is verified
---- from addon code there, the module stays off on those clients.
+--- The base item data set for this client, or nil where the feature is not available.
+--- WoW Forever only for now: it is the only client this has been run on. The Classic
+--- Era ("era") and TBC ("tbc") data tables stay in OpenContainersData, so turning one
+--- on later is a matter of mapping it here and testing it there. Retail and Mists have
+--- no data: until UseContainerItem is verified from addon code there, the module stays
+--- off on those clients.
 ---@return string?
 function OpenContainers:GetFlavorKey()
 	if G_RLF:IsForever() then
 		return "forever"
-	elseif G_RLF:IsClassic() then
-		return "era"
-	elseif G_RLF:IsTBCClassic() then
-		return "tbc"
 	end
 	return nil
 end
@@ -185,6 +204,48 @@ function OpenContainers:RemoveItem(itemId)
 	cfg.blockList[itemId] = nil
 end
 
+--- Move several items to a list at once.
+---@param itemIds number[]
+---@param toList "allowList"|"blockList"
+function OpenContainers:MoveItems(itemIds, toList)
+	for _, itemId in ipairs(itemIds) do
+		self:MoveItem(itemId, toList)
+	end
+end
+
+--- Remove several items from both lists at once.
+---@param itemIds number[]
+function OpenContainers:RemoveItems(itemIds)
+	for _, itemId in ipairs(itemIds) do
+		self:RemoveItem(itemId)
+	end
+end
+
+--- The items on a list as display rows, sorted by name (unnamed items last, by ID).
+---@param listKey "allowList"|"blockList"
+---@return { itemId: number, name: string?, label: string }[]
+function OpenContainers:GetSortedList(listKey)
+	local rows = {}
+	for itemId in pairs(config()[listKey]) do
+		local name = self:GetItemName(itemId)
+		rows[#rows + 1] = {
+			itemId = itemId,
+			name = name,
+			label = name and (name .. " (" .. itemId .. ")") or ("Item " .. itemId),
+		}
+	end
+	table.sort(rows, function(a, b)
+		if (a.name ~= nil) ~= (b.name ~= nil) then
+			return a.name ~= nil
+		end
+		if a.name and a.name:lower() ~= b.name:lower() then
+			return a.name:lower() < b.name:lower()
+		end
+		return a.itemId < b.itemId
+	end)
+	return rows
+end
+
 -- ── Item names ──────────────────────────────────────────────
 -- Names are cached in the saved config (per locale) so the options page can
 -- always show them. Anything missing is requested from the server in small
@@ -228,6 +289,9 @@ local function onNamesChanged()
 		if G_RLF.NotifyChange then
 			G_RLF:NotifyChange(addonName)
 		end
+		if G_RLF.OpenContainersWindow then
+			G_RLF.OpenContainersWindow:Refresh()
+		end
 	end)
 end
 
@@ -270,19 +334,13 @@ function OpenContainers:GET_ITEM_INFO_RECEIVED(_, itemId, success)
 	end
 end
 
---- Level and bind checks that need the item cache. An uncached item reads nil
---- and is tried anyway; the refusal counter catches it if the game says no.
+--- Level check that needs the item cache. An uncached item reads nil and is
+--- tried anyway; the refusal counter catches it if the game says no.
 ---@param itemId number
 ---@return boolean
-function OpenContainers:PassesItemRequirements(itemId)
-	local requiredLevel, bindType = self.api.GetItemRequirements(itemId)
-	if requiredLevel and requiredLevel > self.api.UnitLevel() then
-		return false
-	end
-	if config().skipBindOnPickup and bindType == BIND_ON_PICKUP then
-		return false
-	end
-	return true
+function OpenContainers:MeetsLevelRequirement(itemId)
+	local requiredLevel = self.api.GetItemRequiredLevel(itemId)
+	return not (requiredLevel and requiredLevel > self.api.UnitLevel())
 end
 
 -- ── Safety ──────────────────────────────────────────────────
@@ -303,7 +361,7 @@ end
 ---@return boolean
 function OpenContainers:IsSafeToOpen()
 	if
-		self.api.UnitAffectingCombat()
+		self.api.IsInCombat()
 		or self.api.IsPlayerCasting()
 		or self.api.IsStealthed()
 		or self.api.IsInteractionActive()
@@ -321,7 +379,7 @@ function OpenContainers:BuildQueue()
 		local slots = self.api.GetContainerNumSlots(bag) or 0
 		for slot = 1, slots do
 			local itemId = self.api.GetContainerItemID(bag, slot)
-			if itemId and self:IsEligible(itemId) and self:PassesItemRequirements(itemId) then
+			if itemId and self:IsEligible(itemId) and self:MeetsLevelRequirement(itemId) then
 				queue[#queue + 1] = { bag = bag, slot = slot, itemId = itemId }
 			end
 		end
@@ -352,28 +410,51 @@ function OpenContainers:ScheduleTick(interval)
 	end)
 end
 
---- Opens at most one container, then reschedules itself while work remains.
+--- Go on to the next queued container, or rescan when the queue is empty (opening a stack
+--- leaves the slot filled until the last one).
+function OpenContainers:ContinueQueue()
+	if #queue > 0 then
+		self:ScheduleTick(OPEN_TICK_INTERVAL)
+	else
+		self:ScheduleScan()
+	end
+end
+
+--- Give an open one chance to be answered with loot. If it is not, count a refusal and
+--- move on. One timer per open, ignored if the open was answered or superseded.
+---@param seq number
+function OpenContainers:StartAnswerTimeout(seq)
+	self.api.After(OPEN_ANSWER_TIMEOUT, function()
+		if seq ~= openSeq or not pendingItem then
+			return
+		end
+		countRefusal()
+		self:ContinueQueue()
+	end)
+end
+
+--- Opens at most one container. It never polls: when something blocks it, it goes idle and
+--- an event restarts it; after an open it waits for LOOT_CLOSED or the answer timeout.
 function OpenContainers:OpenTick()
 	if not config().enabled then
 		return
 	end
-	if self.api.UnitAffectingCombat() then
-		-- PLAYER_REGEN_ENABLED will rescan and restart the tick.
+	-- Protected actions (and, on newer clients, much of the state we would read) are off the
+	-- table in combat. PLAYER_REGEN_ENABLED rescans and restarts us.
+	if self.api.IsInCombat() then
 		return
 	end
 	if #queue == 0 then
 		return
 	end
+	-- Blocked by a window, a cast, stealth or low bag space: idle until an event clears it.
 	if not self:IsSafeToOpen() then
-		self:ScheduleTick(BLOCKED_TICK_INTERVAL)
 		return
 	end
-	-- The previous open's loot may still be arriving; wait for it or its timeout.
-	if pendingItem and self.api.GetTime() - pendingAt < OPEN_ANSWER_TIMEOUT then
-		self:ScheduleTick(OPEN_TICK_INTERVAL)
+	-- An open is waiting for its loot: LOOT_CLOSED or its timeout continues the queue.
+	if pendingItem then
 		return
 	end
-	countRefusal()
 
 	local entry = table.remove(queue, 1)
 	-- The slot may have changed since the scan.
@@ -382,15 +463,21 @@ function OpenContainers:OpenTick()
 		and self.api.GetContainerItemID(entry.bag, entry.slot) == entry.itemId
 		and self:IsEligible(entry.itemId)
 	then
-		pendingItem, pendingAt = entry.itemId, self.api.GetTime()
+		pendingItem = entry.itemId
+		openSeq = openSeq + 1
 		self:LogDebug("Opening item " .. tostring(entry.itemId))
 		self.api.UseContainerItem(entry.bag, entry.slot)
+		self:StartAnswerTimeout(openSeq)
+		return
 	end
+	self:ContinueQueue()
+end
+
+--- Something that was blocking an open may have cleared (stealth ended, a window closed, a
+--- cast finished). The queue is still valid, so just try it again: no rescan needed.
+function OpenContainers:OnUnblocked()
 	if #queue > 0 then
 		self:ScheduleTick(OPEN_TICK_INTERVAL)
-	else
-		-- Re-scan shortly: opening a stack leaves the slot filled until the last one.
-		self:ScheduleScan()
 	end
 end
 
@@ -409,7 +496,7 @@ function OpenContainers:RunScan()
 	if not G_RLF.db or not config().enabled then
 		return
 	end
-	if self.api.UnitAffectingCombat() then
+	if self.api.IsInCombat() then
 		return
 	end
 	self:BuildQueue()
@@ -450,35 +537,50 @@ end
 
 function OpenContainers:OnEnable()
 	self:LogDebug("OnEnable")
-	self:RegisterEvent("BAG_UPDATE_DELAYED", "ScheduleScan")
-	self:RegisterEvent("PLAYER_REGEN_ENABLED", "ScheduleScan")
-	self:RegisterEvent("PLAYER_ENTERING_WORLD", "ScheduleScan")
+	for _, event in ipairs(RESCAN_EVENTS) do
+		if self.api.IsValidEvent(event) then
+			self:RegisterEvent(event, "ScheduleScan")
+		end
+	end
+	for _, event in ipairs(UNBLOCK_EVENTS) do
+		if self.api.IsValidEvent(event) then
+			self:RegisterEvent(event, "OnUnblocked")
+		end
+	end
 	self:RegisterEvent("LOOT_CLOSED")
 	self:RegisterEvent("PLAYER_LEVEL_UP")
+	castListener = castListener or self.api.RegisterCastEndListener(function()
+		self:OnUnblocked()
+	end)
+	castListener.Start()
 	self:ScheduleScan()
 end
 
 function OpenContainers:OnDisable()
 	-- GET_ITEM_INFO_RECEIVED stays registered: the options page needs item names even while disabled.
-	for _, event in ipairs({
-		"BAG_UPDATE_DELAYED",
-		"PLAYER_REGEN_ENABLED",
-		"PLAYER_ENTERING_WORLD",
-		"LOOT_CLOSED",
-		"PLAYER_LEVEL_UP",
-	}) do
+	for _, event in ipairs(RESCAN_EVENTS) do
 		self:UnregisterEvent(event)
+	end
+	for _, event in ipairs(UNBLOCK_EVENTS) do
+		self:UnregisterEvent(event)
+	end
+	self:UnregisterEvent("LOOT_CLOSED")
+	self:UnregisterEvent("PLAYER_LEVEL_UP")
+	if castListener then
+		castListener.Stop()
 	end
 	queue = {}
 end
 
 function OpenContainers:LOOT_CLOSED()
-	-- The open was answered with loot: it is not being refused.
 	if pendingItem then
+		-- The open was answered with loot: it is not being refused.
 		refusedCounts[pendingItem] = nil
 		pendingItem = nil
+		self:ContinueQueue()
+	else
+		self:ScheduleScan()
 	end
-	self:ScheduleScan()
 end
 
 function OpenContainers:PLAYER_LEVEL_UP()
@@ -493,8 +595,10 @@ function OpenContainers:ResetState()
 	scanPending = false
 	tickLive = false
 	namesRefreshPending = false
-	pendingItem, pendingAt = nil, 0
+	pendingItem = nil
+	openSeq = openSeq + 1
 	refusedCounts, refusedItems = {}, {}
+	castListener = nil
 end
 
 --- Test seam: the current queue.

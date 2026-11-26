@@ -9,7 +9,6 @@ local OpenContainersConfig = {}
 ---@class RLF_ConfigOpenContainers
 ---@field enabled boolean
 ---@field minFreeSlots number
----@field skipBindOnPickup boolean
 ---@field allowList table<number, boolean>
 ---@field blockList table<number, boolean>
 ---@field seeded boolean
@@ -22,7 +21,6 @@ G_RLF.defaults.global = G_RLF.defaults.global or {}
 G_RLF.defaults.global.openContainers = {
 	enabled = false,
 	minFreeSlots = 4,
-	skipBindOnPickup = true,
 	allowList = {},
 	blockList = {},
 	-- Lists are seeded from the base data once, on first load (not via AceDB defaults,
@@ -39,75 +37,6 @@ end
 
 local function cfg()
 	return G_RLF.db.global.openContainers
-end
-
---- Build the "uncheck to remove" entries for a list.
----@param list table<number, boolean>
----@return table<number, string>
-local function listValues(list)
-	local values = {}
-	for itemId in pairs(list) do
-		local name = module():GetItemName(itemId)
-		values[itemId] = name and (name .. " (" .. itemId .. ")") or ("Item " .. itemId)
-	end
-	return values
-end
-
---- Build the list-editing controls (add box + removable entries) for a list.
----@param listKey string "allowList" | "blockList"
----@param order number
----@param name string
----@param desc string
-local function buildListGroup(listKey, order, name, desc)
-	return {
-		type = "group",
-		inline = true,
-		name = name,
-		desc = desc,
-		order = order,
-		args = {
-			add = {
-				type = "input",
-				name = G_RLF.L["Add Item"],
-				desc = G_RLF.L["AddItemDesc"],
-				width = "full",
-				get = function()
-					return ""
-				end,
-				set = function(_, value)
-					local itemId = module().ParseItemId(value)
-					if not itemId then
-						G_RLF:Print(G_RLF.L["InvalidItemId"])
-						return
-					end
-					module():MoveItem(itemId, listKey)
-					G_RLF:NotifyChange(addonName)
-				end,
-				order = 1,
-			},
-			entries = {
-				type = "multiselect",
-				name = "",
-				width = "full",
-				values = function()
-					return listValues(cfg()[listKey])
-				end,
-				get = function()
-					return true
-				end,
-				set = function(_, itemId, value)
-					if not value then
-						module():RemoveItem(itemId)
-						G_RLF:NotifyChange(addonName)
-					end
-				end,
-				hidden = function()
-					return next(cfg()[listKey]) == nil
-				end,
-				order = 2,
-			},
-		},
-	}
 end
 
 G_RLF.options.args.openContainers = {
@@ -158,24 +87,43 @@ G_RLF.options.args.openContainers = {
 			end,
 			order = 2,
 		},
-		skipBindOnPickup = {
-			type = "toggle",
-			name = G_RLF.L["Skip Bind on Pickup"],
-			desc = G_RLF.L["SkipBindOnPickupDesc"],
-			get = function()
-				return cfg().skipBindOnPickup
-			end,
-			set = function(_, value)
-				cfg().skipBindOnPickup = value
-			end,
+		lists = {
+			type = "group",
+			inline = true,
+			name = G_RLF.L["Item Lists"],
 			order = 3,
+			args = {
+				summary = {
+					type = "description",
+					name = function()
+						local allow, block = 0, 0
+						for _ in pairs(cfg().allowList) do
+							allow = allow + 1
+						end
+						for _ in pairs(cfg().blockList) do
+							block = block + 1
+						end
+						return string.format(G_RLF.L["OpenContainersListCounts"], allow, block)
+					end,
+					fontSize = "medium",
+					width = "full",
+					order = 1,
+				},
+				edit = {
+					type = "execute",
+					name = G_RLF.L["Edit Item Lists"],
+					desc = G_RLF.L["EditItemListsDesc"],
+					width = "double",
+					func = function()
+						G_RLF.OpenContainersWindow:Open()
+					end,
+					order = 2,
+				},
+			},
 		},
-		allowList = buildListGroup("allowList", 4, G_RLF.L["Allow List"], G_RLF.L["AllowListDesc"]),
-		blockList = buildListGroup("blockList", 5, G_RLF.L["Block List"], G_RLF.L["BlockListDesc"]),
 	},
 }
 
-OpenContainersConfig.listValues = listValues
 G_RLF.OpenContainersConfig = OpenContainersConfig
 
 return OpenContainersConfig

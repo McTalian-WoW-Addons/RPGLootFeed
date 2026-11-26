@@ -6,8 +6,9 @@ local it = busted.it
 
 describe("OpenContainers module", function()
 	local ns, OC, api, timers, used, bags, state, requested, names, notified
+	local registered, castEnd, castStarts, castStops
 
-	-- Known ids from the ported Classic Era data.
+	-- Known ids, all present in the WoW Forever data set.
 	local BIG_MOUTH_CLAM = 7973 -- openable = true
 	local BLUE_SACK = 17962 -- defaultBlocked (RAID)
 	local UNKNOWN = 999999
@@ -22,16 +23,17 @@ describe("OpenContainers module", function()
 
 	before_each(function()
 		requested, names, notified = {}, {}, 0
+		registered, castEnd, castStarts, castStops = {}, nil, 0, 0
 		timers, used, state =
 			{}, {}, {
 				combat = false,
 				casting = false,
 				stealthed = false,
 				interaction = false,
+				invalidEvents = {},
 				now = 0,
 				level = 60,
 				requiredLevel = 1,
-				bindType = 0,
 			}
 		-- bags[bag][slot] = itemId
 		bags = { [0] = { [1] = BIG_MOUTH_CLAM } }
@@ -51,8 +53,8 @@ describe("OpenContainers module", function()
 				used[#used + 1] = { bag, slot }
 				bags[bag][slot] = nil
 			end,
-			GetItemRequirements = function()
-				return state.requiredLevel, state.bindType
+			GetItemRequiredLevel = function()
+				return state.requiredLevel
 			end,
 			GetItemName = function(itemId)
 				return names[itemId]
@@ -72,8 +74,22 @@ describe("OpenContainers module", function()
 			UnitLevel = function()
 				return state.level
 			end,
-			UnitAffectingCombat = function()
+			IsInCombat = function()
 				return state.combat
+			end,
+			IsValidEvent = function(event)
+				return state.invalidEvents[event] ~= true
+			end,
+			RegisterCastEndListener = function(fn)
+				castEnd = fn
+				return {
+					Start = function()
+						castStarts = castStarts + 1
+					end,
+					Stop = function()
+						castStops = castStops + 1
+					end,
+				}
 			end,
 			IsPlayerCasting = function()
 				return state.casting
@@ -97,10 +113,10 @@ describe("OpenContainers module", function()
 				notified = notified + 1
 			end,
 			IsForever = function()
-				return false
+				return true
 			end,
 			IsClassic = function()
-				return true
+				return false
 			end,
 			IsTBCClassic = function()
 				return false
@@ -110,7 +126,6 @@ describe("OpenContainers module", function()
 					openContainers = {
 						enabled = true,
 						minFreeSlots = 4,
-						skipBindOnPickup = true,
 						allowList = { [7973] = true },
 						blockList = {},
 						seeded = true,
@@ -141,7 +156,12 @@ describe("OpenContainers module", function()
 					IsEnabled = function(self)
 						return self.enabled
 					end,
-					RegisterEvent = function() end,
+					RegisterEvent = function(_, event, handler)
+						registered[event] = handler or event
+					end,
+					UnregisterEvent = function(_, event)
+						registered[event] = nil
+					end,
 					UnregisterAllEvents = function() end,
 					LogDebug = function() end,
 					LogInfo = function() end,
@@ -173,12 +193,36 @@ describe("OpenContainers module", function()
 	end)
 
 	describe("flavor data", function()
-		it("has data for Classic Era but not for unsupported clients", function()
+		it("has data for WoW Forever", function()
 			assert.is_true(OC:IsSupported())
-			ns.IsClassic = function()
+			assert.are.equal("forever", OC:GetFlavorKey())
+		end)
+
+		it("is not available on other clients for now", function()
+			ns.IsForever = function()
 				return false
 			end
 			assert.is_false(OC:IsSupported())
+			assert.is_nil(OC:GetFlavorKey())
+		end)
+
+		it("is not available on Classic Era or TBC for now, even though their data is kept", function()
+			ns.IsForever = function()
+				return false
+			end
+			ns.IsClassic = function()
+				return true
+			end
+			assert.is_false(OC:IsSupported())
+			ns.IsClassic = function()
+				return false
+			end
+			ns.IsTBCClassic = function()
+				return true
+			end
+			assert.is_false(OC:IsSupported())
+			assert.is_table(ns.OpenContainersData.era)
+			assert.is_table(ns.OpenContainersData.tbc)
 		end)
 	end)
 
@@ -240,7 +284,7 @@ describe("OpenContainers module", function()
 		end)
 
 		it("does nothing on unsupported clients", function()
-			ns.IsClassic = function()
+			ns.IsForever = function()
 				return false
 			end
 			assert.is_false(OC:Seed())
@@ -251,7 +295,7 @@ describe("OpenContainers module", function()
 	describe("ApplyAdditions", function()
 		before_each(function()
 			ns.OpenContainersData.additions[11] = {
-				era = { allowList = { 111, 222 }, blockList = { 333 } },
+				forever = { allowList = { 111, 222 }, blockList = { 333 } },
 			}
 		end)
 
@@ -282,7 +326,7 @@ describe("OpenContainers module", function()
 
 		it("is a no-op for versions or flavors without additions", function()
 			assert.are.equal(0, OC:ApplyAdditions(12))
-			ns.IsClassic = function()
+			ns.IsForever = function()
 				return false
 			end
 			assert.are.equal(0, OC:ApplyAdditions(11))
@@ -358,6 +402,33 @@ describe("OpenContainers module", function()
 		end)
 	end)
 
+	describe("list editing helpers", function()
+		it("moves and removes several items at once", function()
+			local cfg = ns.db.global.openContainers
+			cfg.allowList = { [1] = true, [2] = true, [3] = true }
+			OC:MoveItems({ 1, 2 }, "blockList")
+			assert.are.same({ [3] = true }, cfg.allowList)
+			assert.are.same({ [1] = true, [2] = true }, cfg.blockList)
+			OC:RemoveItems({ 2, 3 })
+			assert.are.same({}, cfg.allowList)
+			assert.are.same({ [1] = true }, cfg.blockList)
+		end)
+
+		it("sorts lists by name, case-insensitively, with unnamed items last by ID", function()
+			local cfg = ns.db.global.openContainers
+			cfg.allowList = { [5] = true, [6] = true, [7] = true, [9] = true, [8] = true }
+			cfg.itemNames = { [5] = "banana Sack", [6] = "Apple Crate", [7] = "Cherry Box" }
+			local rows = OC:GetSortedList("allowList")
+			local ids = {}
+			for _, row in ipairs(rows) do
+				ids[#ids + 1] = row.itemId
+			end
+			assert.are.same({ 6, 5, 7, 8, 9 }, ids)
+			assert.are.equal("Apple Crate (6)", rows[1].label)
+			assert.are.equal("Item 8", rows[4].label)
+		end)
+	end)
+
 	describe("MoveItem and RemoveItem", function()
 		it("moves an item between lists", function()
 			OC:MoveItem(BIG_MOUTH_CLAM, "blockList")
@@ -375,24 +446,25 @@ describe("OpenContainers module", function()
 		end)
 	end)
 
-	describe("PassesItemRequirements", function()
+	describe("MeetsLevelRequirement", function()
 		it("rejects items above the player's level", function()
 			state.requiredLevel = 70
-			assert.is_false(OC:PassesItemRequirements(BIG_MOUTH_CLAM))
+			assert.is_false(OC:MeetsLevelRequirement(BIG_MOUTH_CLAM))
 		end)
 
-		it("skips Bind on Pickup unless disabled", function()
-			state.bindType = 1
-			assert.is_false(OC:PassesItemRequirements(BIG_MOUTH_CLAM))
-			ns.db.global.openContainers.skipBindOnPickup = false
-			assert.is_true(OC:PassesItemRequirements(BIG_MOUTH_CLAM))
+		it("accepts items at or below the player's level", function()
+			state.requiredLevel = 60
+			assert.is_true(OC:MeetsLevelRequirement(BIG_MOUTH_CLAM))
 		end)
 
 		it("tries uncached items", function()
-			api.GetItemRequirements = function()
-				return nil, nil
-			end
-			assert.is_true(OC:PassesItemRequirements(BIG_MOUTH_CLAM))
+			state.requiredLevel = nil
+			assert.is_true(OC:MeetsLevelRequirement(BIG_MOUTH_CLAM))
+		end)
+
+		it("does not skip Bind on Pickup items: the lists are the only rules", function()
+			assert.is_true(OC:IsEligible(BIG_MOUTH_CLAM))
+			assert.is_true(OC:MeetsLevelRequirement(BIG_MOUTH_CLAM))
 		end)
 	end)
 
@@ -439,35 +511,190 @@ describe("OpenContainers module", function()
 			assert.are.equal(0, #used)
 		end)
 
-		it("does not open in combat", function()
+		it("does not open in combat, and schedules nothing more", function()
 			OC:RunScan()
 			state.combat = true
 			flushTimers()
 			assert.are.equal(0, #used)
+			assert.are.equal(0, #timers)
 		end)
 
-		it("keeps retrying while temporarily unsafe", function()
+		it("does not scan in combat", function()
+			state.combat = true
 			OC:RunScan()
-			state.interaction = true
-			flushTimers()
-			assert.are.equal(0, #used)
-			state.interaction = false
-			flushTimers()
-			assert.are.equal(1, #used)
+			assert.are.equal(0, #OC:GetQueue())
+			assert.are.equal(0, #timers)
 		end)
 
 		it("sets an item aside after repeated unanswered opens", function()
 			api.UseContainerItem = function(bag, slot)
 				used[#used + 1] = { bag, slot } -- slot stays filled: the game refused
 			end
-			for _ = 1, 8 do
+			for _ = 1, 5 do
 				OC:RunScan()
-				state.now = state.now + 2
-				flushTimers()
-				flushTimers()
+				flushTimers() -- the tick opens it
+				flushTimers() -- the answer timeout counts a refusal
 			end
-			assert.is_true(#used <= 3)
+			assert.are.equal(3, #used)
 			assert.is_false(OC:IsEligible(BIG_MOUTH_CLAM))
+		end)
+	end)
+
+	describe("event driven, no polling", function()
+		it("goes idle while blocked instead of retrying on a timer", function()
+			OC:RunScan()
+			state.interaction = true
+			flushTimers()
+			assert.are.equal(0, #used)
+			assert.are.equal(0, #timers)
+		end)
+
+		it("goes idle while casting, stealthed, or short on bag space too", function()
+			for _, setup in ipairs({
+				function()
+					state.casting = true
+				end,
+				function()
+					state.stealthed = true
+				end,
+				function()
+					api.GetContainerNumFreeSlots = function(bag)
+						return bag == 0 and 3 or 0, 0
+					end
+				end,
+			}) do
+				timers, used = {}, {}
+				OC:ResetState()
+				OC:RunScan()
+				setup()
+				flushTimers()
+				assert.are.equal(0, #used)
+				assert.are.equal(0, #timers)
+			end
+		end)
+
+		it("resumes the queue when an unblocking event fires", function()
+			OC:RunScan()
+			state.interaction = true
+			flushTimers()
+			state.interaction = false
+			OC:OnUnblocked()
+			flushTimers()
+			assert.are.equal(1, #used)
+		end)
+
+		it("does nothing on an unblocking event when the queue is empty", function()
+			OC:OnUnblocked()
+			assert.are.equal(0, #timers)
+		end)
+
+		it("resumes when the player's cast ends", function()
+			OC:OnEnable()
+			flushTimers() -- the startup scan builds the queue and the tick is scheduled
+			state.casting = true
+			flushTimers()
+			assert.are.equal(0, #used)
+			state.casting = false
+			castEnd()
+			flushTimers()
+			assert.are.equal(1, #used)
+		end)
+
+		it("waits for the loot instead of rechecking on a timer after an open", function()
+			bags[0][2] = UNKNOWN
+			ns.db.global.openContainers.allowList[UNKNOWN] = true
+			OC:RunScan()
+			flushTimers() -- opens the first container
+			assert.are.same({ { 0, 1 } }, used)
+			-- Exactly one timer is pending, the answer timeout: no recheck loop.
+			assert.are.equal(1, #timers)
+		end)
+
+		it("continues on LOOT_CLOSED without waiting for the timeout", function()
+			bags[0][2] = UNKNOWN
+			ns.db.global.openContainers.allowList[UNKNOWN] = true
+			OC:RunScan()
+			flushTimers() -- opens the first
+			OC:LOOT_CLOSED()
+			flushTimers() -- the stale timeout is ignored; the next tick opens the second
+			assert.are.equal(2, #used)
+		end)
+
+		it("ignores a stale answer timeout once the open was answered", function()
+			OC:RunScan()
+			flushTimers() -- opens the clam
+			OC:LOOT_CLOSED()
+			-- Every pending timer fires, including the first open's timeout. It must not count a refusal.
+			flushTimers()
+			flushTimers()
+			assert.is_true(OC:IsEligible(BIG_MOUTH_CLAM))
+		end)
+
+		it("counts an unanswered open as a refusal after the timeout and moves on", function()
+			bags[0][2] = UNKNOWN
+			ns.db.global.openContainers.allowList[UNKNOWN] = true
+			api.UseContainerItem = function(bag, slot)
+				used[#used + 1] = { bag, slot }
+				bags[bag][slot] = nil
+			end
+			OC:RunScan()
+			flushTimers() -- opens the first; nobody answers
+			flushTimers() -- the timeout fires and the next tick is scheduled
+			flushTimers() -- opens the second
+			assert.are.equal(2, #used)
+		end)
+
+		it("rescans on LOOT_CLOSED when the player looted something unrelated", function()
+			OC:LOOT_CLOSED()
+			assert.are.equal(1, #timers)
+		end)
+	end)
+
+	describe("event registration", function()
+		it("registers the rescan, unblock, loot and level events", function()
+			OC:OnEnable()
+			for _, event in ipairs({ "BAG_UPDATE_DELAYED", "PLAYER_REGEN_ENABLED", "PLAYER_ENTERING_WORLD" }) do
+				assert.are.equal("ScheduleScan", registered[event], event)
+			end
+			for _, event in ipairs({
+				"UPDATE_STEALTH",
+				"PLAYER_INTERACTION_MANAGER_FRAME_HIDE",
+				"MERCHANT_CLOSED",
+				"MAIL_CLOSED",
+				"BANKFRAME_CLOSED",
+				"TRADE_CLOSED",
+				"AUCTION_HOUSE_CLOSED",
+				"GOSSIP_CLOSED",
+				"QUEST_FINISHED",
+			}) do
+				assert.are.equal("OnUnblocked", registered[event], event)
+			end
+			assert.is_not_nil(registered.LOOT_CLOSED)
+			assert.is_not_nil(registered.PLAYER_LEVEL_UP)
+			assert.are.equal(1, castStarts)
+		end)
+
+		it("skips events this client does not have", function()
+			state.invalidEvents.UPDATE_STEALTH = true
+			state.invalidEvents.PLAYER_INTERACTION_MANAGER_FRAME_HIDE = true
+			OC:OnEnable()
+			assert.is_nil(registered.UPDATE_STEALTH)
+			assert.is_nil(registered.PLAYER_INTERACTION_MANAGER_FRAME_HIDE)
+			assert.are.equal("OnUnblocked", registered.MERCHANT_CLOSED)
+		end)
+
+		it("unregisters everything and stops the cast listener when disabled", function()
+			OC:OnEnable()
+			OC:OnDisable()
+			assert.is_nil(next(registered))
+			assert.are.equal(1, castStops)
+		end)
+
+		it("reuses one cast listener across enable and disable", function()
+			OC:OnEnable()
+			OC:OnDisable()
+			OC:OnEnable()
+			assert.are.equal(2, castStarts)
 		end)
 	end)
 
@@ -481,7 +708,7 @@ describe("OpenContainers module", function()
 		end)
 
 		it("stays off on unsupported clients", function()
-			ns.IsClassic = function()
+			ns.IsForever = function()
 				return false
 			end
 			OC:Refresh()

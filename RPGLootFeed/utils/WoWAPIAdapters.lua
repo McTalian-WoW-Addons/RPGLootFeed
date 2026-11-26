@@ -437,6 +437,17 @@ G_RLF.WoWAPI.LootRolls = {
 	end,
 }
 
+--- Does this client know the named event? RegisterEvent on an unknown name can error,
+--- so callers check first. Assume yes where the check itself does not exist.
+---@param event string
+---@return boolean
+local function isValidEvent(event)
+	if C_EventUtils and C_EventUtils.IsEventValid then
+		return C_EventUtils.IsEventValid(event) and true or false
+	end
+	return true
+end
+
 -- ── OpenContainers API Adapter ────────────────────────────────────────────────
 -- Wraps the bag, item and player-state calls used by the OpenContainers
 -- support module.
@@ -454,10 +465,10 @@ G_RLF.WoWAPI.OpenContainers = {
 	UseContainerItem = function(bag, slot)
 		return C_Container.UseContainerItem(bag, slot)
 	end,
-	--- Returns requiredLevel, bindType (nil, nil if the item is not cached yet).
-	GetItemRequirements = function(itemId)
-		local _, _, _, _, requiredLevel, _, _, _, _, _, _, _, _, bindType = C_Item.GetItemInfo(itemId)
-		return requiredLevel, bindType
+	--- Returns the item's required level (nil if the item is not cached yet).
+	GetItemRequiredLevel = function(itemId)
+		local _, _, _, _, requiredLevel = C_Item.GetItemInfo(itemId)
+		return requiredLevel
 	end,
 	GetItemName = function(itemId)
 		return C_Item.GetItemNameByID(itemId)
@@ -478,8 +489,11 @@ G_RLF.WoWAPI.OpenContainers = {
 	UnitLevel = function()
 		return UnitLevel("player")
 	end,
-	UnitAffectingCombat = function()
-		return UnitAffectingCombat("player")
+	--- Combat state for deciding whether a protected action is allowed. InCombatLockdown
+	--- is the one Blizzard gates protected functions on; UnitAffectingCombat can differ
+	--- at the edges, so either one counts.
+	IsInCombat = function()
+		return (InCombatLockdown and InCombatLockdown()) or UnitAffectingCombat("player") or false
 	end,
 	--- Casting reads can be secret on newer clients; a secret answer counts as "casting".
 	IsPlayerCasting = function()
@@ -492,8 +506,46 @@ G_RLF.WoWAPI.OpenContainers = {
 		end
 		return (UnitCastingInfo("player") or UnitChannelInfo("player")) ~= nil
 	end,
+	--- A secret result (newer clients hide some state while restricted) counts as stealthed,
+	--- so we never branch on it.
 	IsStealthed = function()
-		return IsStealthed() and true or false
+		local stealthed = IsStealthed()
+		if issecretvalue and issecretvalue(stealthed) then
+			return true
+		end
+		return stealthed and true or false
+	end,
+	IsValidEvent = function(event)
+		return isValidEvent(event)
+	end,
+	--- Listen for the player's casts ending (finished, stopped, failed, interrupted or a
+	--- channel ending) without hearing every other unit's casts: unit events only for "player".
+	---@param onCastEnd fun()
+	---@return { Start: fun(), Stop: fun() }
+	RegisterCastEndListener = function(onCastEnd)
+		local events = {
+			"UNIT_SPELLCAST_STOP",
+			"UNIT_SPELLCAST_SUCCEEDED",
+			"UNIT_SPELLCAST_FAILED",
+			"UNIT_SPELLCAST_INTERRUPTED",
+			"UNIT_SPELLCAST_CHANNEL_STOP",
+		}
+		local frame = CreateFrame("Frame")
+		frame:SetScript("OnEvent", function()
+			onCastEnd()
+		end)
+		return {
+			Start = function()
+				for _, event in ipairs(events) do
+					if isValidEvent(event) then
+						frame:RegisterUnitEvent(event, "player")
+					end
+				end
+			end,
+			Stop = function()
+				frame:UnregisterAllEvents()
+			end,
+		}
 	end,
 	--- True while the player is at a vendor, mailbox, bank, auction house, trade window, etc.
 	IsInteractionActive = function()

@@ -13,21 +13,24 @@ local L = LibStub("AceLocale-3.0"):NewLocale(G_RLF.localeName, "enUS", true)
 
 --#region 1.40.0
 L["Add Item"] = "Add Item"
-L["AddItemDesc"] = "Enter an item ID or shift-click an item link into this box, then press Enter."
 L["Allow List"] = "Allow List"
-L["AllowListDesc"] = "Items that are opened automatically. Starts with a list of known containers that need no key. Uncheck an entry to remove it."
 L["Block List"] = "Block List"
-L["BlockListDesc"] = "Items that are never opened, even if they are also on the Allow List. Starts with containers usually worth more left sealed, such as raid gem sacks. Uncheck an entry to remove it."
+L["Edit Item Lists"] = "Edit Item Lists"
+L["EditItemListsDesc"] = "Open the editor for the Allow List and Block List."
 L["Enable Open Containers"] = "Enable Open Containers"
 L["EnableOpenContainersDesc"] = "Automatically open clams, sacks, crates and other containers that need no key while they are in your bags. Off by default. Never runs in combat, while casting, stealthed, at a vendor, mailbox, bank, auction house or trade window, or when your bags are nearly full."
 L["InvalidItemId"] = "That is not a valid item ID or item link."
+L["Item Lists"] = "Item Lists"
+L["ItemListsHelp"] = "Tick items, then use >> and << to move them between lists. Block wins if an item is on both."
 L["Minimum Free Bag Slots"] = "Minimum Free Bag Slots"
 L["MinimumFreeBagSlotsDesc"] = "Pause opening containers when you have fewer free bag slots than this."
 L["Open Containers"] = "Open Containers"
 L["OpenContainersDesc"] = "Automatically open containers in your bags. Based on Open Sesame by Gogo1951."
+L["OpenContainersListCounts"] = "%d items are allowed and %d items are blocked."
 L["OpenContainersUnsupported"] = "Open Containers is not yet available on this version of the game."
-L["Skip Bind on Pickup"] = "Skip Bind on Pickup"
-L["SkipBindOnPickupDesc"] = "Do not automatically open containers that are Bind on Pickup."
+L["Remove"] = "Remove"
+L["Restore Defaults"] = "Restore Defaults"
+L["RestoreDefaultsConfirm"] = "Replace both lists with the built-in defaults? Your changes to the lists will be lost."
 --#endregion
 
 --#region 1.39.0

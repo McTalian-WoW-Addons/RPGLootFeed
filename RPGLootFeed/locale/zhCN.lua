@@ -14,6 +14,34 @@ end
 --- You may translate these comments, but do not translate "region" or "endregion" as they are used by the localization tool to determine where to place the translations.
 --- To add translations, simply uncomment the line(s) and replace the English text after the equal sign (=) with the translated value.
 
+--#region 1.40.0
+-- L["Add Item"] = "Add Item"
+-- L["Allow List"] = "Allow List"
+-- L["Block List"] = "Block List"
+-- L["Edit Item Lists"] = "Edit Item Lists"
+-- L["EditItemListsDesc"] = "Open the editor for the Allow List and Block List."
+-- L["Enable Open Containers"] = "Enable Open Containers"
+-- L["EnableOpenContainersDesc"] = "Automatically open clams, sacks, crates and other containers that need no key while they are in your bags. Off by default. Never runs in combat, while casting, stealthed, at a vendor, mailbox, bank, auction house or trade window, or when your bags are nearly full."
+-- L["InvalidItemId"] = "That is not a valid item ID or item link."
+-- L["Item Lists"] = "Item Lists"
+-- L["ItemListsHelp"] = "Tick items, then use >> and << to move them between lists. Block wins if an item is on both."
+-- L["Minimum Free Bag Slots"] = "Minimum Free Bag Slots"
+-- L["MinimumFreeBagSlotsDesc"] = "Pause opening containers when you have fewer free bag slots than this."
+-- L["Open Containers"] = "Open Containers"
+-- L["OpenContainersDesc"] = "Automatically open containers in your bags. Based on Open Sesame by Gogo1951."
+-- L["OpenContainersListCounts"] = "%d items are allowed and %d items are blocked."
+-- L["OpenContainersUnsupported"] = "Open Containers is not yet available on this version of the game."
+-- L["Remove"] = "Remove"
+-- L["Restore Defaults"] = "Restore Defaults"
+-- L["RestoreDefaultsConfirm"] = "Replace both lists with the built-in defaults? Your changes to the lists will be lost."
+-- L["RollPlayerLeads"] = "%s leads (%d)"
+-- L["RollPlayerWon"] = "%s won (%s, %d)"
+-- L["RollTypeWon"] = "%s Won! (%d)%s"
+-- L["RollUpgraded"] = " (Upgraded!)"
+-- L["RollWaitingOn"] = "Waiting on %d player(s)"
+-- L["RollYouWon"] = "You won! (%s, %d)"
+--#endregion
+
 --#region 1.39.0
 L["FrameInteractionsDesc"] = "选择此框架中的行允许哪些鼠标交互。启用覆盖后，将使用此处的设置，而不是“常规”中的全局交互设置。"
 L["Item Clicks"] = "物品点击"

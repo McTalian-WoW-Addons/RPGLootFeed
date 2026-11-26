@@ -2,5 +2,6 @@
 <Ui xsi:schemaLocation="http://www.blizzard.com/wow/ui/ ..\..\FrameXML\UI.xsd">
     <Script file="OpenContainersData.lua"/>
     <Script file="OpenContainers.lua"/>
+    <Script file="OpenContainersWindow.lua"/>
     <Script file="OpenContainersConfig.lua"/>
 </Ui>
