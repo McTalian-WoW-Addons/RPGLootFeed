@@ -361,6 +361,65 @@ describe("PartyLoot Module", function()
 			assert.spy(buildPayloadSpy).was_not.called()
 		end)
 
+		describe("always show crafting materials (issue #431)", function()
+			local function material(overrides)
+				local info = {
+					itemId = 22222,
+					itemName = "Frozen Orb",
+					itemQuality = 1, -- below Epic (4)
+					itemTexture = 1,
+					itemLink = "|cFFFFFFFF|Hitem:22222|h[Frozen Orb]|h|r",
+					keystoneInfo = nil,
+					GetEquipmentTypeText = function()
+						return nil
+					end,
+				}
+				for k, v in pairs(overrides or {}) do
+					info[k] = v
+				end
+				return info
+			end
+
+			before_each(function()
+				PartyLoot.partyLootApi.IsInRaid = function()
+					return true
+				end
+				ns.db.global.partyLoot.onlyEpicAndAboveInRaid = true
+				ns.db.global.partyLoot.itemQualityFilter = { [1] = true }
+				PartyLoot:SetPartyLootFilters()
+			end)
+
+			it("is off by default: a low quality material is still filtered out", function()
+				ns.db.global.partyLoot.alwaysShowCraftingMaterials = false
+				PartyLoot:OnPartyReadyToShow(material({ isCraftingReagent = true }), 1, "party1")
+				assert.spy(sendMessageSpy).was_not.called()
+			end)
+
+			it("shows a crafting reagent despite the epic filter when turned on", function()
+				ns.db.global.partyLoot.alwaysShowCraftingMaterials = true
+				PartyLoot:OnPartyReadyToShow(material({ isCraftingReagent = true }), 1, "party1")
+				assert.spy(sendMessageSpy).was.called(1)
+			end)
+
+			it("shows a trade goods item that carries no reagent flag when turned on", function()
+				ns.db.global.partyLoot.alwaysShowCraftingMaterials = true
+				PartyLoot:OnPartyReadyToShow(material({ classID = 7 }), 1, "party1")
+				assert.spy(sendMessageSpy).was.called(1)
+			end)
+
+			it("still filters out a low quality item that is not a crafting material", function()
+				ns.db.global.partyLoot.alwaysShowCraftingMaterials = true
+				PartyLoot:OnPartyReadyToShow(material({ classID = 2, isCraftingReagent = false }), 1, "party1")
+				assert.spy(sendMessageSpy).was_not.called()
+			end)
+
+			it("does not change what an epic or better item does", function()
+				ns.db.global.partyLoot.alwaysShowCraftingMaterials = true
+				PartyLoot:OnPartyReadyToShow(material({ itemQuality = 4, classID = 2 }), 1, "party1")
+				assert.spy(sendMessageSpy).was.called(1)
+			end)
+		end)
+
 		it("allows all quality when neither epic filter is active", function()
 			PartyLoot.partyLootApi.IsInRaid = function()
 				return false

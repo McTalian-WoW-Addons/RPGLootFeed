@@ -17,6 +17,8 @@ end
 --#region 1.40.0
 -- L["Add Item"] = "Add Item"
 -- L["Allow List"] = "Allow List"
+-- L["Always Show Crafting Materials"] = "Always Show Crafting Materials"
+-- L["AlwaysShowCraftingMaterialsDesc"] = "Keep showing crafting materials (such as Frozen Orb or Chaos Orb) even when Only Epic and Above in Raid or Instance would hide them. The per-frame quality filter and ignore list still apply."
 -- L["Block List"] = "Block List"
 -- L["Class Colored Names"] = "Class Colored Names"
 -- L["ClassColoredNamesDesc"] = "Color player names in roll results by their class."

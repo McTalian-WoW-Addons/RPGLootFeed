@@ -185,11 +185,26 @@ function PartyLoot:SetPartyLootFilters()
 	onlyEpicPartyLoot = false
 end
 
+--- Is this a crafting material the player asked to keep seeing even while the
+--- "Only Epic and Above" filter is on (issue #431)? Counts the game's crafting
+--- reagent flag and the trade goods item class, since older materials such as Frozen
+--- Orb and Chaos Orb may not carry the flag on every flavor.
+---@param info table
+---@return boolean
+function PartyLoot:ShowsCraftingMaterial(info)
+	local plConfig = G_RLF.DbAccessor:AnyFeatureConfig("partyLoot") or {}
+	if not plConfig.alwaysShowCraftingMaterials then
+		return false
+	end
+	local tradegoods = (Enum and Enum.ItemClass and Enum.ItemClass.Tradegoods) or 7
+	return info.isCraftingReagent == true or info.classID == tradegoods
+end
+
 function PartyLoot:OnPartyReadyToShow(info, amount, unit)
 	if not unit then
 		return
 	end
-	if onlyEpicPartyLoot and info.itemQuality < self.itemQualEnum.Epic then
+	if onlyEpicPartyLoot and info.itemQuality < self.itemQualEnum.Epic and not self:ShowsCraftingMaterial(info) then
 		return
 	end
 	-- Quality filter and deny list have moved to LootDisplayFrame:PassesPerFrameFilters
