@@ -16,6 +16,9 @@ RLF_LootRollRowMixin = {}
 
 local BUTTON_GAP = 4
 local PADDING_RIGHT = 8
+-- Above the row's text layout frames and ClickableButton (which sit 1-2 levels over the
+-- row), below the 10-level gap between neighbouring rows.
+local ROLL_BUTTON_LEVEL_OFFSET = 5
 local DEFAULT_RESULTS_DISPLAY_SECONDS = 60
 
 --- Atlas name suffix table matching Blizzard's loot roll button textures.
@@ -151,10 +154,42 @@ function RLF_LootRollRowMixin:_CreateRollButton(label, id, enabled, reason)
 	return btn
 end
 
+--- Keep the roll buttons above the row's own children.  The row's text layout
+--- frames and ClickableButton are children of the row too, so left at the default
+--- level the buttons share their level and the text can draw over (and swallow
+--- clicks meant for) them.  Rows are re-leveled constantly (see
+--- LootDisplayRowMixin:UpdatePosition), so this is re-applied on every level change.
+function RLF_LootRollRowMixin:_RaiseRollButtons()
+	if not self._rollButtons then
+		return
+	end
+	local level = self:GetFrameLevel() + ROLL_BUTTON_LEVEL_OFFSET
+	for _, btn in ipairs(self._rollButtons) do
+		btn:SetFrameLevel(level)
+	end
+end
+
+--- Re-raise the roll buttons whenever this row's frame level changes.  Installed
+--- once per row object; pooled rows keep the wrapper, and _RaiseRollButtons is a
+--- no-op once the buttons are gone.
+function RLF_LootRollRowMixin:_TrackRowFrameLevel()
+	if self._trackingFrameLevel then
+		return
+	end
+	self._trackingFrameLevel = true
+	local setFrameLevel = self.SetFrameLevel
+	self.SetFrameLevel = function(row, level)
+		setFrameLevel(row, level)
+		row:_RaiseRollButtons()
+	end
+end
+
 function RLF_LootRollRowMixin:_LayoutRollButtons()
 	if not self._rollButtons or #self._rollButtons == 0 then
 		return
 	end
+
+	self:_RaiseRollButtons()
 
 	local btnSize = self:_GetButtonSize()
 	local count = #self._rollButtons
@@ -645,6 +680,7 @@ function RLF_LootRollRowMixin:PostBootstrapFromElement(element)
 	local passBtn = self:_CreateRollButton(PASS, LOOT_ROLL_TYPE_PASS, hasRealRoll, nil)
 	table.insert(self._rollButtons, passBtn)
 
+	self:_TrackRowFrameLevel()
 	self:_LayoutRollButtons()
 
 	-- Never auto-fade; dismissed by CANCEL_LOOT_ROLL/LOOT_ROLLS_COMPLETE

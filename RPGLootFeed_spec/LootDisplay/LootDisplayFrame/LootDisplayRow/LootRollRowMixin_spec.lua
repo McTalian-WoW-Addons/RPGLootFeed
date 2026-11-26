@@ -14,7 +14,7 @@ local MIXIN_FILE = "RPGLootFeed/LootDisplay/LootDisplayFrame/LootDisplayRow/Loot
 --- CleanupLootRoll touch, as busted stubs so tests can assert on them.
 local function newDummyButton()
 	local btn = {}
-	for _, name in ipairs({ "ClearAllPoints", "SetPoint", "Show", "Hide", "SetScript" }) do
+	for _, name in ipairs({ "ClearAllPoints", "SetPoint", "Show", "Hide", "SetScript", "SetFrameLevel" }) do
 		btn[name] = function() end
 		stub(btn, name)
 	end
@@ -87,6 +87,14 @@ describe("RLF_LootRollRowMixin", function()
 			row[k] = v
 		end
 		row.frameType = ns.Frames.MAIN
+		-- Real frame-level storage so SetFrameLevel/GetFrameLevel behave like WoW's.
+		row._level = 500
+		row.GetFrameLevel = function(self)
+			return self._level
+		end
+		row.SetFrameLevel = function(self, level)
+			self._level = level
+		end
 
 		-- Cross-mixin methods LootRollRowMixin calls but doesn't own (they
 		-- live on RowTextMixin / RowAnimationMixin) — stub as no-ops so this
@@ -150,6 +158,64 @@ describe("RLF_LootRollRowMixin", function()
 			iconSize = 24,
 			padding = 4,
 		})
+	end)
+
+	describe("roll button frame level (issue #662)", function()
+		local function bootstrapWithButtons()
+			local buttons = {}
+			stub(row, "_CreateRollButton", function()
+				local btn = newDummyButton()
+				buttons[#buttons + 1] = btn
+				return btn
+			end)
+			row:PostBootstrapFromElement({
+				type = ns.FeatureModule.LootRolls,
+				rollID = 555,
+				canNeed = true,
+				canGreed = true,
+				canTransmog = false,
+				rollDuration = 60000,
+			})
+			return buttons
+		end
+
+		it("raises the buttons above the row's own children", function()
+			local buttons = bootstrapWithButtons()
+
+			assert.are.equal(3, #buttons)
+			for _, btn in ipairs(buttons) do
+				assert.stub(btn.SetFrameLevel).was.called_with(match._, 505)
+			end
+		end)
+
+		it("keeps the buttons above the row whenever the row is re-leveled", function()
+			local buttons = bootstrapWithButtons()
+
+			row:SetFrameLevel(480)
+
+			assert.are.equal(480, row:GetFrameLevel())
+			for _, btn in ipairs(buttons) do
+				assert.stub(btn.SetFrameLevel).was.called_with(match._, 485)
+			end
+		end)
+
+		it("does not stack wrappers when the row is bootstrapped again", function()
+			bootstrapWithButtons()
+			local wrapped = row.SetFrameLevel
+			bootstrapWithButtons()
+
+			assert.are.equal(wrapped, row.SetFrameLevel)
+		end)
+
+		it("re-leveling a row with no roll buttons is harmless", function()
+			bootstrapWithButtons()
+			row._rollButtons = nil
+
+			assert.has_no.errors(function()
+				row:SetFrameLevel(300)
+			end)
+			assert.are.equal(300, row:GetFrameLevel())
+		end)
 	end)
 
 	describe("PostBootstrapFromElement", function()
