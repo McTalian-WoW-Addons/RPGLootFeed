@@ -32,23 +32,18 @@ function G_RLF.dump(o, depth)
 	end
 end
 
+--- Calls slower than this are reported by ProfileFunction. 17 ms is one frame at
+--- 60 fps: anything under it cannot cost a frame on its own, so only calls that
+--- could actually cause a hitch are worth printing.
+G_RLF.PROFILE_THRESHOLD_MS = 17
+
 function G_RLF:ProfileFunction(func, funcName)
 	return function(...)
 		local startTime = debugprofilestop()
 		local result = { func(...) }
-		local endTime = debugprofilestop()
-		local duration = endTime - startTime
-		local durationThreshold = 0.8 -- in milliseconds
-		if G_RLF:IsCataClassic() then
-			--- Cata seems to be slower to process than Retail
-			durationThreshold = 10 -- in milliseconds
-		end
-		if G_RLF:IsMoPClassic() then
-			--- MoP seems to be slightly slower to process than Retail
-			durationThreshold = 5 -- in milliseconds
-		end
-		if duration > durationThreshold then
-			G_RLF:Print(string.format("%s took %.2f ms", funcName, endTime - startTime))
+		local duration = debugprofilestop() - startTime
+		if duration > G_RLF.PROFILE_THRESHOLD_MS then
+			G_RLF:Print(string.format("%s took %.2f ms", funcName, duration))
 		end
 
 		return unpack(result)

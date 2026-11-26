@@ -41,6 +41,8 @@ end
 -- L["RollUpgraded"] = " (Upgraded!)"
 -- L["RollWaitingOn"] = "Waiting on %d player(s)"
 -- L["RollYouWon"] = "You won! (%s, %d)"
+-- L["Show Icon Quality Border"] = "Show Icon Quality Border"
+-- L["ShowIconQualityBorderDesc"] = "Show the item quality colored border around loot row icons. Turn this off for plain icons. If an icon skin addon (such as Masque or ElvUI) draws the border, this hides that border too."
 --#endregion
 
 --#region 1.39.0
