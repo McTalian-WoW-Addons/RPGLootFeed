@@ -347,6 +347,55 @@ describe("RLF_LootRollRowMixin", function()
 		end)
 	end)
 
+	describe("OnPlayerRolled (roll made outside RLF's buttons, e.g. Blizzard's frame or a gamepad)", function()
+		local btn1, btn2
+
+		before_each(function()
+			btn1, btn2 = newDummyButton(), newDummyButton()
+			row._rollButtons = { btn1, btn2 }
+			row._rolled = false
+		end)
+
+		it("takes the action buttons down and shows the choice, like clicking a button", function()
+			row:OnPlayerRolled(_G.LOOT_ROLL_TYPE_GREED)
+
+			assert.is_true(row._rolled)
+			assert.stub(btn1.Hide).was.called(1)
+			assert.stub(btn2.Hide).was.called(1)
+			assert.stub(row.ItemCountText.SetText).was.called_with(row.ItemCountText, _G.GREED)
+		end)
+
+		it("shows greyed-out Pass text for a pass", function()
+			row:OnPlayerRolled(_G.LOOT_ROLL_TYPE_PASS)
+
+			assert.stub(row.ItemCountText.SetText).was.called_with(row.ItemCountText, "|cffb0b0b0Pass|r")
+		end)
+
+		it("labels a transmog roll", function()
+			row:OnPlayerRolled(4)
+
+			assert.stub(row.ItemCountText.SetText).was.called_with(row.ItemCountText, _G.TRANSMOGRIFICATION)
+		end)
+
+		it("does nothing if the row already knows the player rolled", function()
+			row._rolled = true
+
+			row:OnPlayerRolled(_G.LOOT_ROLL_TYPE_NEED)
+
+			assert.stub(btn1.Hide).was_not.called()
+			assert.stub(row.ItemCountText.SetText).was_not.called()
+		end)
+
+		it("does nothing on a row that has already resolved to results", function()
+			row._resolved = true
+
+			row:OnPlayerRolled(_G.LOOT_ROLL_TYPE_NEED)
+
+			assert.stub(btn1.Hide).was_not.called()
+			assert.is_false(row._rolled)
+		end)
+	end)
+
 	describe("OnMainSpecNeedRoll", function()
 		it("does nothing before the player has rolled", function()
 			row._rolled = false

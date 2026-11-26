@@ -33,6 +33,7 @@ describe("LootRolls Module", function()
 			OnRollResolved = function() end,
 			OnMainSpecNeedRoll = function() end,
 			OnRollWon = function() end,
+			OnPlayerRolled = function() end,
 			SetRollResults = function() end,
 		}
 		for name in pairs(row) do
@@ -341,6 +342,128 @@ describe("LootRolls Module", function()
 
 			assert.stub(row.OnCancelRoll).was.called(1)
 			assert.stub(frame.ReleaseRow).was.called_with(frame, row)
+		end)
+	end)
+
+	describe("IsRollOpen", function()
+		it("is true while the roll is among the active roll IDs", function()
+			LootRolls._adapter.GetActiveLootRollIDs = function()
+				return { 11, 555 }
+			end
+			assert.is_true(LootRolls:IsRollOpen(555))
+		end)
+
+		it("is false once the roll is no longer active", function()
+			LootRolls._adapter.GetActiveLootRollIDs = function()
+				return { 11 }
+			end
+			assert.is_false(LootRolls:IsRollOpen(555))
+		end)
+
+		it("is nil when the client cannot say", function()
+			LootRolls._adapter.GetActiveLootRollIDs = function()
+				return nil
+			end
+			assert.is_nil(LootRolls:IsRollOpen(555))
+		end)
+	end)
+
+	describe("OnPlayerRolled", function()
+		local override
+
+		before_each(function()
+			override = { MarkRolled = function() end }
+			stub(override, "MarkRolled")
+			ns.BlizzModule = { LootRollFrames = "LootRollFrames" }
+			ns.RLF = {
+				GetModule = function(_, name)
+					if name == "LootRollFrames" then
+						return override
+					end
+				end,
+			}
+		end)
+
+		it("puts each live row for the roll into its rolled state", function()
+			local row = makeRow()
+			local otherRow = makeRow()
+			ns.LootDisplay.GetAllFrames = framesFrom({
+				makeFrame({ ["LootRoll_555"] = row }),
+				makeFrame({ ["LootRoll_999"] = otherRow }),
+			})
+
+			LootRolls:OnPlayerRolled(555, 2)
+
+			assert.stub(row.OnPlayerRolled).was.called_with(row, 2)
+			assert.stub(otherRow.OnPlayerRolled).was_not.called()
+		end)
+
+		it("tells the Blizzard frame override so it never reveals that roll's frame", function()
+			LootRolls:OnPlayerRolled(555, 2)
+
+			assert.stub(override.MarkRolled).was.called_with(override, 555)
+		end)
+
+		it("works when the override module is not loaded", function()
+			ns.RLF.GetModule = function() end
+
+			assert.has_no.errors(function()
+				LootRolls:OnPlayerRolled(555, 2)
+			end)
+		end)
+	end)
+
+	describe("_HookRollOnLoot", function()
+		local hooked, originalHook, originalRoll
+
+		before_each(function()
+			hooked = {}
+			originalHook, originalRoll = _G.hooksecurefunc, _G.RollOnLoot
+			_G.RollOnLoot = function() end
+			_G.hooksecurefunc = function(name, fn)
+				hooked[#hooked + 1] = { name = name, fn = fn }
+			end
+		end)
+
+		after_each(function()
+			_G.hooksecurefunc, _G.RollOnLoot = originalHook, originalRoll
+		end)
+
+		it("hooks RollOnLoot once", function()
+			LootRolls:_HookRollOnLoot()
+			LootRolls:_HookRollOnLoot()
+
+			assert.are.equal(1, #hooked)
+			assert.are.equal("RollOnLoot", hooked[1].name)
+		end)
+
+		it("reports the player's roll while the module is enabled", function()
+			stub(LootRolls, "OnPlayerRolled")
+			LootRolls:_HookRollOnLoot()
+
+			hooked[1].fn(555, 1)
+
+			assert.stub(LootRolls.OnPlayerRolled).was.called_with(LootRolls, 555, 1)
+		end)
+
+		it("ignores rolls while the module is disabled", function()
+			stub(LootRolls, "OnPlayerRolled")
+			LootRolls.IsEnabled = function()
+				return false
+			end
+			LootRolls:_HookRollOnLoot()
+
+			hooked[1].fn(555, 1)
+
+			assert.stub(LootRolls.OnPlayerRolled).was_not.called()
+		end)
+
+		it("does nothing on a client without hooksecurefunc", function()
+			_G.hooksecurefunc = nil
+
+			assert.has_no.errors(function()
+				LootRolls:_HookRollOnLoot()
+			end)
 		end)
 	end)
 

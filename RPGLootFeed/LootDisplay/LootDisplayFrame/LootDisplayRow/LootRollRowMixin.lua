@@ -611,6 +611,24 @@ function RLF_LootRollRowMixin:OnRollCast(label, id)
 	end
 end
 
+--- The player rolled on this roll outside RLF's own buttons (Blizzard's roll
+--- frame, a macro, a gamepad). Same effect as clicking one of our buttons, so the
+--- action buttons do not stay up after the choice is made.
+---@param rollType number
+function RLF_LootRollRowMixin:OnPlayerRolled(rollType)
+	if self._rolled or self._resolved then
+		return
+	end
+	local labels = {
+		[LOOT_ROLL_TYPE_PASS] = PASS,
+		[LOOT_ROLL_TYPE_NEED] = NEED,
+		[LOOT_ROLL_TYPE_GREED] = GREED,
+		[LOOT_ROLL_TYPE_DISENCHANT] = ROLL_DISENCHANT,
+		[4] = TRANSMOGRIFICATION,
+	}
+	self:OnRollCast(labels[rollType] or "", rollType)
+end
+
 ---@param element RLF_BaseLootElement
 function RLF_LootRollRowMixin:PostBootstrapFromElement(element)
 	if element.type ~= G_RLF.FeatureModule.LootRolls then

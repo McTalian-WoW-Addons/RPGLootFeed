@@ -52,6 +52,51 @@ function LootRolls:FindRollRows(rollID)
 	return results
 end
 
+--- Is this roll still open for rolling? nil when the client cannot say.
+---@param rollID number
+---@return boolean?
+function LootRolls:IsRollOpen(rollID)
+	local activeIDs = self._adapter.GetActiveLootRollIDs and self._adapter.GetActiveLootRollIDs()
+	if type(activeIDs) ~= "table" then
+		return nil
+	end
+	for _, id in ipairs(activeIDs) do
+		if id == rollID then
+			return true
+		end
+	end
+	return false
+end
+
+--- The player rolled on rollID, through RLF's buttons, Blizzard's roll frame, a
+--- macro or a gamepad. Put any live row for it into its "rolled" state, and tell
+--- the Blizzard frame override so it never reveals that roll's frame again.
+---@param rollID number
+---@param rollType number
+function LootRolls:OnPlayerRolled(rollID, rollType)
+	for _, entry in ipairs(self:FindRollRows(rollID)) do
+		entry.row:OnPlayerRolled(rollType)
+	end
+	local override = G_RLF.RLF:GetModule(G_RLF.BlizzModule.LootRollFrames, true)
+	if override then
+		override:MarkRolled(rollID)
+	end
+end
+
+--- Hook RollOnLoot once so rolls made outside RLF's own buttons are noticed.
+--- hooksecurefunc is a post-hook and cannot taint Blizzard's roll code.
+function LootRolls:_HookRollOnLoot()
+	if self._rollOnLootHooked or not hooksecurefunc or not RollOnLoot then
+		return
+	end
+	self._rollOnLootHooked = true
+	hooksecurefunc("RollOnLoot", function(rollID, rollType)
+		if self:IsEnabled() then
+			self:OnPlayerRolled(rollID, rollType)
+		end
+	end)
+end
+
 --- Release loot roll rows for given rollID from all frames.
 ---@param rollID number
 function LootRolls:ReleaseRollRows(rollID)
@@ -669,6 +714,7 @@ function LootRolls:OnEnable()
 	self:RegisterEvent("MAIN_SPEC_NEED_ROLL")
 	self:RegisterEvent("LOOT_ROLLS_COMPLETE")
 	self:RegisterEvent("LOOT_ITEM_ROLL_WON")
+	self:_HookRollOnLoot()
 
 	if not G_RLF:HasModernLootHistoryAPI() then
 		-- Classic Era, TBC Anniversary, MoP Classic: same older, index-based

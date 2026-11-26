@@ -81,6 +81,38 @@ function LootRollFramesOverride:Reveal(frame)
 	frame:SetAlpha(1)
 end
 
+--- Remember that the player already rolled on this roll, so its Blizzard frame is
+--- finished business whatever Blizzard does with it. Called when the player rolls
+--- through RLF's buttons or anywhere else (see LootRolls:OnPlayerRolled).
+---@param rollID number
+function LootRollFramesOverride:MarkRolled(rollID)
+	for i = 1, NUM_GROUP_LOOT_FRAMES or 4 do
+		local frame = _G["GroupLootFrame" .. i]
+		if frame and frame.rollID == rollID then
+			frame._rlfRolledID = rollID
+		end
+	end
+end
+
+--- Is this shown frame a leftover whose roll is over? Blizzard removes a roll
+--- frame on CANCEL_LOOT_ROLL, but a frame it has not removed yet (or never will,
+--- e.g. after the player rolled through RLF's buttons) must not be revealed: its
+--- buttons do nothing, so revealing it only puts a dead window on screen.
+---@param frame Frame
+---@return boolean
+function LootRollFramesOverride:IsStale(frame)
+	local rollID = frame.rollID
+	if not rollID or not frame:IsShown() then
+		return false
+	end
+	if frame._rlfRolledID == rollID then
+		return true
+	end
+	local lootRolls = G_RLF.LootRolls
+	-- IsRollOpen is nil when unknown; only a definite "no" makes the frame stale.
+	return lootRolls ~= nil and lootRolls.IsRollOpen ~= nil and lootRolls:IsRollOpen(rollID) == false
+end
+
 --- Re-evaluate every Blizzard roll frame. Called after Blizzard opens one,
 --- after RLF creates or releases a roll row, and when the option changes, so
 --- it is correct whichever side of START_LOOT_ROLL runs first.
@@ -90,6 +122,9 @@ function LootRollFramesOverride:Refresh()
 		if frame then
 			if frame:IsShown() and self:ShouldConceal(frame.rollID) then
 				self:Conceal(frame)
+			elseif frame._rlfConcealed and self:IsStale(frame) then
+				-- Leave it concealed (invisible and click-through); Blizzard still
+				-- removes it through its own code path.
 			else
 				self:Reveal(frame)
 			end
