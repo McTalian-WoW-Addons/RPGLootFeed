@@ -106,6 +106,23 @@ G_RLF.FeatureModule = {
 	LootRolls = "LootRolls",
 }
 
+--- Item classes that can have their own display duration, in the order they are
+--- listed in the options (Enum.ItemClass values: Consumable, Container, Weapon,
+--- Gem, Armor, Reagent, Tradegoods, ItemEnhancement, Recipe, Questitem, Key,
+--- Miscellaneous, Glyph, Battlepet, Profession). Classes a client does not have
+--- are simply not shown in the options.
+G_RLF.ItemDurationClasses = { 0, 1, 2, 3, 4, 5, 7, 8, 9, 12, 13, 15, 16, 17, 19 }
+
+--- A fresh per-frame table of item type durations, 0 (no override) for every class.
+---@return table<number, { duration: number }>
+function G_RLF.DefaultItemTypeSettings()
+	local settings = {}
+	for _, classID in ipairs(G_RLF.ItemDurationClasses) do
+		settings[classID] = { duration = 0 }
+	end
+	return settings
+end
+
 ---@enum G_RLF.BlizzModule
 G_RLF.BlizzModule = {
 	BossBanner = "BossBanner",

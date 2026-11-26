@@ -402,15 +402,25 @@ function LootDisplayRowMixin:BootstrapFromElement(element)
 	self.amountTextFn = element.amountTextFn
 	local text
 	-- Resolve the effective display duration for this element on this specific frame.
-	-- element.showForSeconds (if set) takes highest priority; otherwise check the
-	-- frame's per-quality duration override for itemLoot rows.
+	-- element.showForSeconds (if set) takes highest priority; then the frame's
+	-- per-item-type override (the more specific, deliberate one); then its
+	-- per-quality override. Both only apply to itemLoot-style rows, and a duration
+	-- of 0 means "no override" and falls through.
 	local effectiveShowForSeconds = element.showForSeconds
-	if not effectiveShowForSeconds and element.filterItemQuality ~= nil then
+	if not effectiveShowForSeconds and (element.filterItemClassId ~= nil or element.filterItemQuality ~= nil) then
 		local frameConfig = G_RLF.db.global.frames[self.frameType]
 		local featureCfg = frameConfig and frameConfig.features and frameConfig.features.itemLoot
-		local qualSettings = featureCfg and (featureCfg.itemQualitySettings or {})[element.filterItemQuality]
-		if qualSettings and qualSettings.duration > 0 then
-			effectiveShowForSeconds = qualSettings.duration
+		if featureCfg and element.filterItemClassId ~= nil then
+			local typeSettings = (featureCfg.itemTypeSettings or {})[element.filterItemClassId]
+			if typeSettings and typeSettings.duration and typeSettings.duration > 0 then
+				effectiveShowForSeconds = typeSettings.duration
+			end
+		end
+		if not effectiveShowForSeconds and element.filterItemQuality ~= nil then
+			local qualSettings = featureCfg and (featureCfg.itemQualitySettings or {})[element.filterItemQuality]
+			if qualSettings and qualSettings.duration > 0 then
+				effectiveShowForSeconds = qualSettings.duration
+			end
 		end
 	end
 	if element.isSampleRow or (effectiveShowForSeconds ~= nil and effectiveShowForSeconds ~= self.showForSeconds) then

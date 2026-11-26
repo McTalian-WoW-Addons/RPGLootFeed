@@ -169,6 +169,8 @@ G_RLF.defaults = {
 							[7] = { enabled = true, duration = 0 },
 							[8] = { enabled = true, duration = 0 },
 						},
+						--- Per item class display duration; 0 means use the quality duration.
+						itemTypeSettings = G_RLF.DefaultItemTypeSettings(),
 						itemHighlights = {
 							boe = false,
 							bop = false,
@@ -453,6 +455,8 @@ G_RLF.defaults = {
 							[7] = { enabled = true, duration = 0 },
 							[8] = { enabled = true, duration = 0 },
 						},
+						--- Per item class display duration; 0 means use the quality duration.
+						itemTypeSettings = G_RLF.DefaultItemTypeSettings(),
 						itemHighlights = {
 							boe = false,
 							bop = false,

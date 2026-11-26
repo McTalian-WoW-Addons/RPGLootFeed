@@ -831,6 +831,71 @@ function G_RLF.ItemLoot:BuildConfigArgs(frameId, order)
 							},
 						},
 					},
+					itemTypeDurations = {
+						type = "group",
+						name = G_RLF.L["Item Type Durations"],
+						desc = G_RLF.L["ItemTypeDurationsDesc"],
+						inline = true,
+						order = 2.5,
+						args = (function()
+							local args = {
+								description = {
+									type = "description",
+									name = G_RLF.L["ItemTypeDurationsDesc"],
+									order = 0.1,
+								},
+								resetItemTypeDurations = {
+									type = "execute",
+									name = G_RLF.L["Reset Item Type Durations"],
+									func = function()
+										for _, v in pairs(fc().itemTypeSettings) do
+											v.duration = 0
+										end
+									end,
+									order = 0.5,
+									width = "full",
+								},
+							}
+							for i, classID in ipairs(G_RLF.ItemDurationClasses) do
+								-- Looked up each time the options render: the client may not be
+								-- able to name a class yet when the options are first built.
+								local function className()
+									return G_RLF.WoWAPI.ItemLoot.GetItemClassName(classID)
+								end
+								args["class" .. classID] = {
+									type = "range",
+									width = 1.5,
+									name = function()
+										return string.format(
+											G_RLF.L["Duration (seconds)"],
+											className() or tostring(classID)
+										)
+									end,
+									desc = function()
+										return string.format(
+											G_RLF.L["ItemTypeDurationDesc"],
+											className() or tostring(classID)
+										)
+									end,
+									min = 0,
+									max = 30,
+									step = 1,
+									-- A client without this item class has no name for it.
+									hidden = function()
+										return className() == nil
+									end,
+									get = function()
+										return fc().itemTypeSettings[classID].duration
+									end,
+									set = function(_, value)
+										fc().itemTypeSettings[classID].duration = value
+									end,
+									order = i,
+								}
+							end
+							return args
+						end)(),
+					},
 					itemHighlights = {
 						type = "group",
 						name = G_RLF.L["Item Highlights"],

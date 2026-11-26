@@ -26,6 +26,20 @@ describe("ItemLootConfig module", function()
 		-- the shape matches production in case future edits touch it eagerly.
 		ns.AuctionIntegrations = { numActiveIntegrations = 0, activeIntegrations = {} }
 
+		-- BuildConfigArgs asks the ItemLoot adapter for localized item class names
+		-- while it builds the Item Type Durations group. Armor (4) stands in for a
+		-- class this client has; Glyph (16) for one it does not.
+		ns.WoWAPI = {
+			ItemLoot = {
+				GetItemClassName = function(classID)
+					if classID == 16 then
+						return nil
+					end
+					return "Class" .. classID
+				end,
+			},
+		}
+
 		-- In production, ItemLoot.lua runs before ItemLootConfig.lua (see
 		-- Features/ItemLoot/ItemLoot.xml) and G_RLF.FeatureBase:new() sets
 		-- G_RLF.ItemLoot to the module table as a side effect. ItemLootConfig.lua
@@ -148,6 +162,76 @@ describe("ItemLootConfig module", function()
 			itemLootCfg.pricesForSellableItems = ns.PricesEnum.VendorAH
 			itemLootCfg.enabled = false
 			assert.is_true(option.disabled())
+		end)
+	end)
+
+	describe("item type durations option (issue #415)", function()
+		local group, typeArgs, itemLootCfg
+
+		before_each(function()
+			itemLootCfg = {}
+			for k, v in pairs(ns.defaults.global.frames["**"].features.itemLoot) do
+				itemLootCfg[k] = v
+			end
+			itemLootCfg.itemTypeSettings = ns.DefaultItemTypeSettings()
+			ns.db = {
+				global = { frames = { [1] = { features = { itemLoot = itemLootCfg } } }, interactions = {} },
+			}
+			group = ns.ItemLoot:BuildConfigArgs(1, 5)
+			typeArgs = group.args.itemLootOptions.args.itemTypeDurations.args
+		end)
+
+		it("has a duration range for every item class", function()
+			for _, classID in ipairs(ns.ItemDurationClasses) do
+				assert.is_table(typeArgs["class" .. classID], "missing class " .. classID)
+				assert.equal("range", typeArgs["class" .. classID].type)
+			end
+		end)
+
+		it("defaults every item class to 0 (no override)", function()
+			for _, classID in ipairs(ns.ItemDurationClasses) do
+				assert.equal(0, ns.defaults.global.frames["**"].features.itemLoot.itemTypeSettings[classID].duration)
+			end
+		end)
+
+		it("reads and writes a class's duration", function()
+			assert.equal(0, typeArgs.class4.get())
+			typeArgs.class4.set(nil, 12)
+			assert.equal(12, itemLootCfg.itemTypeSettings[4].duration)
+			assert.equal(12, typeArgs.class4.get())
+		end)
+
+		it("hides classes the client has no name for", function()
+			assert.is_false(typeArgs.class4.hidden())
+			assert.is_true(typeArgs.class16.hidden())
+		end)
+
+		it("names a class when the options render, even if the client could not name it at build time", function()
+			local original = ns.WoWAPI.ItemLoot.GetItemClassName
+			local available = false
+			ns.WoWAPI.ItemLoot.GetItemClassName = function(classID)
+				return available and ("Late" .. classID) or nil
+			end
+			local lateGroup = ns.ItemLoot:BuildConfigArgs(1, 5)
+			local late = lateGroup.args.itemLootOptions.args.itemTypeDurations.args.class4
+
+			assert.is_true(late.hidden())
+
+			available = true
+
+			assert.is_false(late.hidden())
+			assert.is_truthy(late.name():find("Late4", 1, true))
+			assert.is_truthy(late.desc():find("Late4", 1, true))
+
+			ns.WoWAPI.ItemLoot.GetItemClassName = original
+		end)
+
+		it("resets every item type duration", function()
+			typeArgs.class4.set(nil, 12)
+			typeArgs.class0.set(nil, 5)
+			typeArgs.resetItemTypeDurations.func()
+			assert.equal(0, itemLootCfg.itemTypeSettings[4].duration)
+			assert.equal(0, itemLootCfg.itemTypeSettings[0].duration)
 		end)
 	end)
 end)

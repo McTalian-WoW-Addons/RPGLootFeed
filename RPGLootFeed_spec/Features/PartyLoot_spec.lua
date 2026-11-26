@@ -701,6 +701,11 @@ describe("PartyLoot Module", function()
 			assert.is_nil(payload.eventChannel)
 		end)
 
+		it("carries the item class for per-item-type duration overrides (issue #415)", function()
+			local payload = PartyLoot:BuildPayload(makeInfo({ classID = 2 }), 1, "party1")
+			assert.equals(2, payload.filterItemClassId)
+		end)
+
 		it("sets key and icon from itemInfo", function()
 			local info = makeInfo()
 			local payload = PartyLoot:BuildPayload(info, 1, "party1")

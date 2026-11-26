@@ -38,6 +38,7 @@ function PartyLoot:BuildPayload(info, amount, unit)
 	-- Filter metadata evaluated per-frame by LootDisplayFrame:PassesPerFrameFilters
 	payload.filterItemId = info.itemId
 	payload.filterItemQuality = info.itemQuality
+	payload.filterItemClassId = info.classID
 
 	payload.icon = info.itemTexture
 	local partyConfig = G_RLF.DbAccessor:AnyFeatureConfig("partyLoot") or {}

@@ -231,6 +231,19 @@ G_RLF.WoWAPI.ItemLoot = {
 	GetExpansionLevel = function()
 		return GetExpansionLevel()
 	end,
+	--- Localized name of an item class (nil on clients that do not have it). The global
+	--- GetItemClassInfo is deprecated on current clients, so C_Item is tried first.
+	GetItemClassName = function(classID)
+		local getInfo = (C_Item and C_Item.GetItemClassInfo) or GetItemClassInfo
+		if not getInfo then
+			return nil
+		end
+		local name = getInfo(classID)
+		if name == nil or name == "" then
+			return nil
+		end
+		return name
+	end,
 	UnitName = function(unit)
 		return UnitName(unit)
 	end,

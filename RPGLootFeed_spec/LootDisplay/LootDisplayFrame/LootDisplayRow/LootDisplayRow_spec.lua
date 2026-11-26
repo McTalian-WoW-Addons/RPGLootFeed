@@ -769,6 +769,92 @@ describe("LootDisplayRowMixin", function()
 				assert.equal(5, row.showForSeconds)
 			end)
 
+			describe("per-item-type duration override (issue #415)", function()
+				local function bootstrap(itemLootCfg, element)
+					local captures
+					row, captures = buildRow()
+					row.showForSeconds = 5
+					ns.db.global.frames[1].features.itemLoot = itemLootCfg
+					row.frameType = ns.Frames.MAIN
+					local full = {
+						key = "ITEM_TYPED",
+						textFn = function()
+							return "Typed Item"
+						end,
+						quantity = 1,
+						quality = 4,
+						r = 1,
+						g = 1,
+						b = 1,
+						a = 1,
+						highlight = false,
+					}
+					for k, v in pairs(element) do
+						full[k] = v
+					end
+					row:BootstrapFromElement(full)
+				end
+
+				it("applies the duration for the item's class when it is above 0", function()
+					bootstrap(
+						{ enabled = true, itemTypeSettings = { [0] = { duration = 20 } } },
+						{ filterItemClassId = 0 }
+					)
+					assert.is_true(row.hasElementFadeOverride)
+					assert.equal(20, row.showForSeconds)
+				end)
+
+				it("beats the quality duration when both are set", function()
+					bootstrap({
+						enabled = true,
+						itemTypeSettings = { [4] = { duration = 20 } },
+						itemQualitySettings = { [4] = { enabled = true, duration = 9 } },
+					}, { filterItemClassId = 4, filterItemQuality = 4 })
+					assert.equal(20, row.showForSeconds)
+				end)
+
+				it("falls back to the quality duration when the class duration is 0", function()
+					bootstrap({
+						enabled = true,
+						itemTypeSettings = { [4] = { duration = 0 } },
+						itemQualitySettings = { [4] = { enabled = true, duration = 9 } },
+					}, { filterItemClassId = 4, filterItemQuality = 4 })
+					assert.equal(9, row.showForSeconds)
+				end)
+
+				it("falls back to the quality duration for a class with no setting", function()
+					bootstrap({
+						enabled = true,
+						itemTypeSettings = { [0] = { duration = 20 } },
+						itemQualitySettings = { [4] = { enabled = true, duration = 9 } },
+					}, { filterItemClassId = 2, filterItemQuality = 4 })
+					assert.equal(9, row.showForSeconds)
+				end)
+
+				it("leaves the frame's normal duration alone with no override anywhere", function()
+					bootstrap(
+						{ enabled = true, itemTypeSettings = { [4] = { duration = 0 } } },
+						{ filterItemClassId = 4 }
+					)
+					assert.is_falsy(row.hasElementFadeOverride)
+					assert.equal(5, row.showForSeconds)
+				end)
+
+				it("works for an older saved config with no itemTypeSettings table", function()
+					bootstrap({ enabled = true }, { filterItemClassId = 4 })
+					assert.is_falsy(row.hasElementFadeOverride)
+					assert.equal(5, row.showForSeconds)
+				end)
+
+				it("is beaten by element.showForSeconds", function()
+					bootstrap(
+						{ enabled = true, itemTypeSettings = { [4] = { duration = 20 } } },
+						{ filterItemClassId = 4, showForSeconds = 99 }
+					)
+					assert.equal(99, row.showForSeconds)
+				end)
+			end)
+
 			it("element.showForSeconds takes priority over frame quality duration", function()
 				local captures
 				row, captures = buildRow()

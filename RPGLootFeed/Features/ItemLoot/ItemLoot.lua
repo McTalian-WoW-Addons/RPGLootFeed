@@ -436,6 +436,7 @@ function ItemLoot:BuildPayload(info, quantity, fromLink)
 		a = a,
 		filterItemId = info.itemId,
 		filterItemQuality = info.itemQuality,
+		filterItemClassId = info.classID,
 		moduleRef = ItemLoot,
 	}
 

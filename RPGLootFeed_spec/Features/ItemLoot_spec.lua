@@ -987,6 +987,13 @@ describe("ItemLoot Module", function()
 				assert.equals(2, payload.filterItemQuality)
 			end)
 
+			it("includes filterItemClassId in payload for per-item-type duration overrides (issue #415)", function()
+				local info = makeItemInfo({ itemQuality = 2, classID = 4 })
+				local payload = ItemLoot:BuildPayload(info, 1, nil)
+
+				assert.equals(4, payload.filterItemClassId)
+			end)
+
 			it("includes filterItemId in payload", function()
 				local info = makeItemInfo({ itemId = 18803, itemQuality = 2 })
 				local payload = ItemLoot:BuildPayload(info, 1, nil)
