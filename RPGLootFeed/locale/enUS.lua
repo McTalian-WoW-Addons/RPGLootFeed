@@ -39,6 +39,7 @@ L["RollWaitingOn"] = "Waiting on %d player(s)"
 L["RollYouWon"] = "You won! (%s, %d)"
 L["Show Icon Quality Border"] = "Show Icon Quality Border"
 L["ShowIconQualityBorderDesc"] = "Show the item quality colored border around loot row icons. Turn this off for plain icons. If an icon skin addon (such as Masque or ElvUI) draws the border, this hides that border too."
+L["Feed Options"] = "Feed Options"
 --#endregion
 
 --#region 1.39.0
@@ -220,7 +221,6 @@ L["ChatFiltersDesc"] = "Remove loot-related message types from chat frames."
 L["Currency"] = "Currency"
 L["DeleteFrameConfirm"] = "Delete this frame? All of its settings will be lost."
 L["Experience"] = "Experience"
-L["Feed Display"] = "Feed Display"
 L["Flow"] = "Flow"
 L["Frame Name"] = "Frame Name"
 L["FrameNameDesc"] = "The display name for this frame in the config panel."

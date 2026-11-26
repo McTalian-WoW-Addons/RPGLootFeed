@@ -223,7 +223,6 @@ L["ChatFiltersDesc"] = "从聊天窗口中移除与拾取相关的消息类型�
 L["Currency"] = "货币"
 L["DeleteFrameConfirm"] = "确定删除此框架吗？其中的所有设置都将丢失。"
 L["Experience"] = "经验值"
-L["Feed Display"] = "通报显示"
 L["Flow"] = "流向"
 L["Frame Name"] = "框架名称"
 L["FrameNameDesc"] = "此框架在配置面板中显示的名称。"

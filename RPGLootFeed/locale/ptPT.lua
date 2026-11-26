@@ -224,7 +224,6 @@ end
 -- L["Currency"] = "Currency"
 -- L["DeleteFrameConfirm"] = "Delete this frame? All of its settings will be lost."
 -- L["Experience"] = "Experience"
--- L["Feed Display"] = "Feed Display"
 -- L["Flow"] = "Flow"
 -- L["Frame Name"] = "Frame Name"
 -- L["FrameNameDesc"] = "The display name for this frame in the config panel."
