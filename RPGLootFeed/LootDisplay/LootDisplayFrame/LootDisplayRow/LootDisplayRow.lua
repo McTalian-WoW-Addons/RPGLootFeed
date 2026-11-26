@@ -285,10 +285,9 @@ function LootDisplayRowMixin:SetClickThrough(enabled)
 	self.isClickThrough = enabled
 	self:UpdateMouseState()
 	if enabled then
+		-- Only the link-click area is hidden.  The icon stays visible: UpdateMouseState
+		-- above already took its mouse capture away, so it no longer blocks clicks.
 		self.ClickableButton:Hide()
-		if self.Icon then
-			self.Icon:Hide()
-		end
 		-- Unpin before the hasMouseOver cleanup.  OnLeave will not fire
 		-- when EnableMouse is toggled, so we must unpin explicitly.
 		if self.isPinned then

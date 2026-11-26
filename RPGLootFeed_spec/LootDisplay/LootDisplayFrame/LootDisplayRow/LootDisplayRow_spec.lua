@@ -886,6 +886,18 @@ describe("LootDisplayRowMixin", function()
 			assert.stub(row.Icon.EnableMouse).was.called_with(row.Icon, false)
 		end)
 
+		it("keeps the icon visible in click-through mode (it only loses mouse capture)", function()
+			row = buildClickThroughRow()
+			row.icon = "Interface\\Icons\\INV_Misc_QuestionMark"
+			stub(row.Icon, "Hide")
+			stub(row.Icon, "Show")
+
+			row:SetClickThrough(true)
+
+			assert.stub(row.Icon.Hide).was_not.called()
+			assert.stub(row.Icon.EnableMouse).was.called_with(row.Icon, false)
+		end)
+
 		it("re-enables mouse on row, ClickableButton, and Icon when enabled=false", function()
 			row = buildClickThroughRow()
 			row.isClickThrough = true
