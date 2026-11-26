@@ -252,6 +252,9 @@ describe("ItemLoot Module", function()
 			CreateAtlasMarkup = function(icon)
 				return "[" .. icon .. "]"
 			end,
+			HasAtlas = function()
+				return false
+			end,
 			GetAHPrice = function()
 				return nil
 			end,
@@ -378,6 +381,9 @@ describe("ItemLoot Module", function()
 			end,
 			CreateAtlasMarkup = function(icon)
 				return "[" .. icon .. "]"
+			end,
+			HasAtlas = function()
+				return false
 			end,
 			GetAHPrice = function()
 				return nil
@@ -1133,6 +1139,101 @@ describe("ItemLoot Module", function()
 				local result = payload.itemCountFn()
 
 				assert.is_nil(result)
+			end)
+
+			describe("bag and bank breakdown (showBagBankCounts)", function()
+				local BAG = "|TInterface/AddOns/RPGLootFeed/Icons/BagCount:14:14|t"
+				local BANK = "|TInterface/AddOns/RPGLootFeed/Icons/BankCount:14:14|t"
+
+				--- GetItemCount(link, includeBank, includeUses, includeReagentBank, includeAccountBank)
+				local function counts(bags, bank, warband)
+					ItemLoot.itemLootApi.GetItemCount = function(
+						_,
+						includeBank,
+						_,
+						includeReagentBank,
+						includeAccountBank
+					)
+						local n = bags
+						if includeBank then
+							n = n + bank
+						end
+						if includeAccountBank then
+							n = n + warband
+						end
+						return n
+					end
+				end
+
+				before_each(function()
+					ns.db.global.item.itemCountTextEnabled = true
+					ns.db.global.misc.showBagBankCounts = true
+					ItemLoot.itemLootApi.GetItemInfo = function()
+						return "Finkle's Lava Dredger"
+					end
+				end)
+
+				local function count()
+					local payload = ItemLoot:BuildPayload(makeItemInfo(), 1, nil)
+					return payload.itemCountFn()
+				end
+
+				it("is off by default: the plain total", function()
+					ns.db.global.misc.showBagBankCounts = false
+					counts(12, 30, 0)
+					assert.equals(42, count())
+				end)
+
+				it("shows bags and bank with icons instead of the total", function()
+					counts(12, 30, 0)
+					assert.equals(BAG .. " 12  " .. BANK .. " 30", count())
+				end)
+
+				it("leaves out the bank when it holds none", function()
+					counts(12, 0, 0)
+					assert.equals(BAG .. " 12", count())
+				end)
+
+				it("still shows the bags when they hold none", function()
+					counts(0, 30, 0)
+					assert.equals(BAG .. " 0  " .. BANK .. " 30", count())
+				end)
+
+				it("adds the warband bank with its atlas icon where the client has it", function()
+					ItemLoot.itemLootApi.HasAtlas = function(atlas)
+						return atlas == "warbands-icon"
+					end
+					counts(12, 30, 5)
+					assert.equals(BAG .. " 12  " .. BANK .. " 30  [warbands-icon] 5", count())
+				end)
+
+				it("folds the warband bank into the bank number when the atlas is missing", function()
+					counts(12, 30, 5)
+					assert.equals(BAG .. " 12  " .. BANK .. " 35", count())
+				end)
+
+				it("keeps the plain rule of showing nothing for a single item", function()
+					counts(1, 0, 0)
+					assert.equals(1, count())
+				end)
+
+				it("sizes the icons from the main frame's font size (font size + 4)", function()
+					ns.DbAccessor.Styling = function()
+						return { fontSize = 16 }
+					end
+					counts(3, 4, 0)
+					assert.equals(
+						"|TInterface/AddOns/RPGLootFeed/Icons/BagCount:20:20|t 3  |TInterface/AddOns/RPGLootFeed/Icons/BankCount:20:20|t 4",
+						count()
+					)
+				end)
+
+				it("keeps the item count color and wrap character", function()
+					counts(12, 30, 0)
+					local _, options = count()
+					assert.is_table(options)
+					assert.is_not_nil(options.color)
+				end)
 			end)
 
 			it("returns nil when GetItemInfo returns nil name", function()

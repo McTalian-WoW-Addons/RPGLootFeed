@@ -84,6 +84,11 @@ describe("Features module", function()
 		)
 	end)
 
+	it("defaults the global bag and bank counts breakdown to off", function()
+		assert.is_false(ns.defaults.global.misc.showBagBankCounts)
+		assert.is_false(ns.defaults.global.misc.showOneQuantity)
+	end)
+
 	it("does not create the old lootFeeds options group", function()
 		assert.is_nil(ns.options.args.lootFeeds)
 	end)

@@ -4,6 +4,13 @@ local addonName, ns = ...
 ---@class G_RLF
 local G_RLF = ns
 
+-- Bag/bank count icons: our own textures (Twemoji, CC-BY 4.0, credited on the About page).
+-- Distinct colors (red pack, grey-blue bank) so they stay readable at row text size, where
+-- the game's brown bag and crate icons blur together. 64px TGA, shipped on every flavor.
+local BAG_ICON = "Interface/AddOns/RPGLootFeed/Icons/BagCount"
+local BANK_ICON = "Interface/AddOns/RPGLootFeed/Icons/BankCount"
+local WARBAND_ICON_ATLAS = "warbands-icon"
+
 -- logging and DI injected via FeatureBase
 
 ---@class RLF_ItemLoot: RLF_Module, AceEvent-3.0, AceBucket-3.0
@@ -531,6 +538,11 @@ function ItemLoot:BuildPayload(info, quantity, fromLink)
 			return nil
 		end
 		local itemCount = ItemLoot.itemLootApi.GetItemCount(itemLink, true, false, true, true)
+		if itemCount > 1 and G_RLF.db.global.misc.showBagBankCounts then
+			-- Same visibility rule as the plain total (only shown above 1), but split by
+			-- where the items are. A nil breakdown (nothing to split) keeps the total.
+			itemCount = ItemLoot:FormatBagBankCounts(itemLink, itemCount) or itemCount
+		end
 		return itemCount,
 			{
 				color = G_RLF:RGBAToHexFormat(unpack(itemDb.itemCountTextColor)),
@@ -539,6 +551,39 @@ function ItemLoot:BuildPayload(info, quantity, fromLink)
 	end
 
 	return payload
+end
+
+--- Where the player's copies of an item are, as inline icons and numbers:
+--- "[bag] 12  [bank] 30  [warband] 5". Bags always show; bank and warband bank only
+--- when they hold some. The bag and bank icons are our own textures; the warband bank
+--- uses the game's atlas where the client has it, otherwise the warband count is folded
+--- into the bank number so the parts still add up to the total.
+---@param itemLink string
+---@param total number The total across everywhere (bags, bank, reagent bank, warband bank)
+---@return string?
+function ItemLoot:FormatBagBankCounts(itemLink, total)
+	local api = self.itemLootApi
+	local bags = api.GetItemCount(itemLink, false, false, false, false)
+	local withBank = api.GetItemCount(itemLink, true, false, true, false)
+	local bank = math.max(withBank - bags, 0)
+	local warband = math.max(total - withBank, 0)
+
+	local fontSize = (G_RLF.DbAccessor:Styling(G_RLF.Frames.MAIN) or {}).fontSize or 10
+	local size = fontSize + 4
+	local hasWarbandIcon = api.HasAtlas(WARBAND_ICON_ATLAS)
+	if warband > 0 and not hasWarbandIcon then
+		bank = bank + warband
+		warband = 0
+	end
+
+	local parts = { ("|T%s:%d:%d|t %d"):format(BAG_ICON, size, size, bags) }
+	if bank > 0 then
+		table.insert(parts, ("|T%s:%d:%d|t %d"):format(BANK_ICON, size, size, bank))
+	end
+	if warband > 0 then
+		table.insert(parts, api.CreateAtlasMarkup(WARBAND_ICON_ATLAS, size, size) .. " " .. warband)
+	end
+	return table.concat(parts, "  ")
 end
 
 function ItemLoot:OnInitialize()

@@ -56,6 +56,47 @@ describe("General module", function()
 		assert.is_not_nil(feedOptions.args.hideAllIcons)
 	end)
 
+	it("has a Show Bag and Bank Counts toggle on Feed Options", function()
+		local toggle = ns.options.args.feedOptions.args.showBagBankCounts
+		assert.is_not_nil(toggle)
+		assert.are.equal("toggle", toggle.type)
+
+		ns.db.global.misc.showBagBankCounts = false
+		ns.LootDisplay = { RefreshSampleRowsIfShown = function() end }
+		assert.is_false(toggle.get())
+		toggle.set(nil, true)
+		assert.is_true(ns.db.global.misc.showBagBankCounts)
+		assert.is_true(toggle.get())
+	end)
+
+	it("shows an icon legend under the bag and bank toggle only while it is on", function()
+		local legend = ns.options.args.feedOptions.args.bagBankCountsLegend
+		assert.is_not_nil(legend)
+		ns.db.global.misc.showBagBankCounts = false
+		assert.is_true(legend.hidden())
+		ns.db.global.misc.showBagBankCounts = true
+		assert.is_false(legend.hidden())
+
+		ns.WoWAPI = ns.WoWAPI or {}
+		ns.WoWAPI.ItemLoot = {
+			HasAtlas = function()
+				return false
+			end,
+		}
+		local text = legend.name()
+		assert.is_truthy(text:find("Icons/BagCount", 1, true))
+		assert.is_truthy(text:find("Icons/BankCount", 1, true))
+		assert.is_nil(text:find("Warband", 1, true))
+
+		ns.WoWAPI.ItemLoot.HasAtlas = function()
+			return true
+		end
+		ns.WoWAPI.ItemLoot.CreateAtlasMarkup = function(atlas)
+			return "<" .. atlas .. ">"
+		end
+		assert.is_truthy(legend.name():find("<warbands-icon> Warband", 1, true))
+	end)
+
 	it("has a top-level Loot History page", function()
 		local lootHistory = ns.options.args.lootHistory
 		assert.is_not_nil(lootHistory)

@@ -23,6 +23,8 @@ About.argOrder = {
 	["author"] = -4,
 	["githubLink"] = -3,
 	["tipsLink"] = -2,
+	["attributionsHeader"] = -1.7,
+	["attributions"] = -1.6,
 	["credits"] = -1,
 }
 
@@ -111,6 +113,16 @@ G_RLF.options.args.about = {
 				return "https://buymeacoffee.com/mctalian"
 			end,
 			order = About.argOrder.tipsLink,
+		},
+		attributionsHeader = {
+			type = "header",
+			name = G_RLF.L["Attributions"],
+			order = About.argOrder.attributionsHeader,
+		},
+		attributions = {
+			type = "description",
+			name = G_RLF.L["AttributionsDesc"],
+			order = About.argOrder.attributions,
 		},
 		credits = {
 			type = "description",

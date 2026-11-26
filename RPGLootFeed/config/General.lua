@@ -118,6 +118,44 @@ G_RLF.options.args.feedOptions = {
 			end,
 			order = 2,
 		},
+		showBagBankCounts = {
+			type = "toggle",
+			name = G_RLF.L["Show Bag and Bank Counts"],
+			desc = G_RLF.L["ShowBagBankCountsDesc"],
+			width = "double",
+			get = function(info, value)
+				return G_RLF.db.global.misc.showBagBankCounts
+			end,
+			set = function(info, value)
+				G_RLF.db.global.misc.showBagBankCounts = value
+				G_RLF.LootDisplay:RefreshSampleRowsIfShown()
+			end,
+			order = 3,
+		},
+		bagBankCountsLegend = {
+			type = "description",
+			name = function()
+				local api = G_RLF.WoWAPI.ItemLoot
+				local size = 20
+				local legend = G_RLF.L["BagBankCountsLegend"]:format(
+					"|TInterface/AddOns/RPGLootFeed/Icons/BagCount:" .. size .. ":" .. size .. "|t",
+					"|TInterface/AddOns/RPGLootFeed/Icons/BankCount:" .. size .. ":" .. size .. "|t"
+				)
+				if api.HasAtlas("warbands-icon") then
+					legend = legend
+						.. "    "
+						.. G_RLF.L["BagBankCountsLegendWarband"]:format(
+							api.CreateAtlasMarkup("warbands-icon", size, size)
+						)
+				end
+				return legend .. "\n"
+			end,
+			hidden = function()
+				return not G_RLF.db.global.misc.showBagBankCounts
+			end,
+			width = "double",
+			order = 3.1,
+		},
 	},
 }
 

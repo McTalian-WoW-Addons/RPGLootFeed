@@ -13,6 +13,7 @@ G_RLF.defaults.global = G_RLF.defaults.global or {}
 G_RLF.defaults.global.misc = {
 	showOneQuantity = false,
 	hideAllIcons = false,
+	showBagBankCounts = false,
 }
 
 ---@class RLF_ConfigLootHistory

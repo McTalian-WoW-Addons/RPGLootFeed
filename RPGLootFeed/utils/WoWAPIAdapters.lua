@@ -290,6 +290,10 @@ G_RLF.WoWAPI.ItemLoot = {
 	CreateAtlasMarkup = function(icon, w, h, x, y)
 		return CreateAtlasMarkup(icon, w, h, x, y)
 	end,
+	--- Does this client ship the named atlas?
+	HasAtlas = function(atlas)
+		return C_Texture ~= nil and C_Texture.GetAtlasInfo ~= nil and C_Texture.GetAtlasInfo(atlas) ~= nil
+	end,
 	PlaySoundFile = function(sound)
 		return PlaySoundFile(sound)
 	end,
