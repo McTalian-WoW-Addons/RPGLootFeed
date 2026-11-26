@@ -31,6 +31,12 @@ L["OpenContainersUnsupported"] = "Open Containers is not yet available on this v
 L["Remove"] = "Remove"
 L["Restore Defaults"] = "Restore Defaults"
 L["RestoreDefaultsConfirm"] = "Replace both lists with the built-in defaults? Your changes to the lists will be lost."
+L["RollPlayerLeads"] = "%s leads (%d)"
+L["RollPlayerWon"] = "%s won (%s, %d)"
+L["RollTypeWon"] = "%s Won! (%d)%s"
+L["RollUpgraded"] = " (Upgraded!)"
+L["RollWaitingOn"] = "Waiting on %d player(s)"
+L["RollYouWon"] = "You won! (%s, %d)"
 --#endregion
 
 --#region 1.39.0

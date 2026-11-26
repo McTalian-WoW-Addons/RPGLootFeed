@@ -347,6 +347,111 @@ describe("RLF_LootRollRowMixin", function()
 		end)
 	end)
 
+	describe("with the secondary text line enabled", function()
+		before_each(function()
+			ns.DbAccessor.Styling = function()
+				return { enabledSecondaryRowText = true, textAlignment = 1, rowTextSpacing = 0 }
+			end
+			stub(row.SecondaryText, "SetText")
+			stub(row.SecondaryText, "Show")
+			stub(row.SecondaryText, "Hide")
+			row.SecondaryLineLayout.Show = function() end
+			row.SecondaryLineLayout.Hide = function() end
+			stub(row.SecondaryLineLayout, "Hide")
+			row.LayoutSecondaryLine = function() end
+			row.rollID = 555
+			row._rolled = true
+		end)
+
+		it("puts the leader after the waiting count on the secondary line, not on the primary line", function()
+			row:SetRollResults({
+				currentLeader = { playerName = "Carl", playerClass = "MAGE", roll = 33 },
+				rollInfos = {
+					{ playerName = "Carl", playerClass = "MAGE", state = 4 },
+					{ playerName = "Dee", playerClass = "MAGE", state = 4 },
+				},
+			})
+
+			assert
+				.stub(row.SecondaryText.SetText).was
+				.called_with(row.SecondaryText, "Waiting on 2 player(s) - Carl leads (33)")
+			assert.stub(row.ItemCountText.SetText).was_not.called()
+		end)
+
+		it("shows the winner on the secondary line and resolves the row", function()
+			row:SetRollResults({
+				winner = { playerName = "Bob", playerClass = "WARRIOR", roll = 55, state = 3 },
+				rollInfos = { { playerName = "Bob", playerClass = "WARRIOR", state = 3 } },
+			})
+
+			assert.stub(row.SecondaryText.SetText).was.called_with(row.SecondaryText, "Bob won (Greed, 55)")
+			assert.stub(row.ItemCountText.SetText).was_not.called()
+			assert.is_true(row._resolved)
+		end)
+
+		it("shows 'You won!' on the secondary line", function()
+			row:SetRollResults({
+				winner = { playerClass = "WARRIOR", isSelf = true, roll = 88, state = 0 },
+				rollInfos = { { playerName = "Self", playerClass = "WARRIOR", state = 0 } },
+			})
+
+			assert.stub(row.SecondaryText.SetText).was.called_with(row.SecondaryText, "|cff00ff00You won! (Need, 88)|r")
+		end)
+
+		it("shows 'All passed' on the secondary line", function()
+			row:SetRollResults({
+				rollInfos = { { playerName = "Carl", playerClass = "MAGE", state = 5 } },
+			})
+
+			assert.stub(row.SecondaryText.SetText).was.called_with(row.SecondaryText, "|cffb0b0b0All passed|r")
+			assert.stub(row.ItemCountText.SetText).was_not.called()
+		end)
+
+		it("hides the secondary line when there is nothing to say", function()
+			row._rolled = false
+			row:SetRollResults({
+				rollInfos = { { playerName = "Carl", playerClass = "MAGE", state = 1 } },
+			})
+
+			assert.stub(row.SecondaryLineLayout.Hide).was.called()
+			assert.stub(row.SecondaryText.SetText).was_not.called()
+		end)
+
+		it("shows a won roll from LOOT_ITEM_ROLL_WON on the secondary line", function()
+			row:OnRollWon(2, 55, false)
+
+			assert.stub(row.SecondaryText.SetText).was.called_with(row.SecondaryText, "|cff00ff00Greed Won! (55)|r")
+			assert.stub(row.ItemCountText.SetText).was_not.called()
+		end)
+
+		it("keeps the player's own choice on the primary line", function()
+			row._rollButtons = { newDummyButton() }
+			row:OnRollCast(_G.GREED, _G.LOOT_ROLL_TYPE_GREED)
+			row:SetRollResults({
+				winner = { playerName = "Bob", playerClass = "WARRIOR", roll = 55, state = 3 },
+				rollInfos = { { playerName = "Bob", playerClass = "WARRIOR", state = 3 } },
+			})
+
+			assert.stub(row.ItemCountText.SetText).was.called_with(row.ItemCountText, _G.GREED)
+			assert.stub(row.ItemCountText.SetText).was.called(1)
+		end)
+
+		it("re-renders when the secondary line setting changes between identical results", function()
+			local results = {
+				winner = { playerName = "Bob", playerClass = "WARRIOR", roll = 55, state = 3 },
+				rollInfos = { { playerName = "Bob", playerClass = "WARRIOR", state = 3 } },
+			}
+			row:SetRollResults(results)
+			ns.DbAccessor.Styling = function()
+				return { enabledSecondaryRowText = false, textAlignment = 1, rowTextSpacing = 0 }
+			end
+
+			row:SetRollResults(results)
+
+			assert.stub(row.ItemCountText.SetText).was.called_with(row.ItemCountText, "Bob won (Greed, 55)")
+		end)
+	end)
+
 	describe("OnPlayerRolled (roll made outside RLF's buttons, e.g. Blizzard's frame or a gamepad)", function()
 		local btn1, btn2
 

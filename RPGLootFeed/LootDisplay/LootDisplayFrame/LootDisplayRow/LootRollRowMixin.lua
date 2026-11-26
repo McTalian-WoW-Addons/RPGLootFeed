@@ -254,13 +254,56 @@ local function _ShowRollText(self, text)
 	self:LayoutPrimaryLine()
 end
 
+--- Is the secondary text line enabled for this row's frame?
+---@return boolean
+local function _SecondaryEnabled(self)
+	local stylingDb = G_RLF.DbAccessor:Styling(self.frameType)
+	return stylingDb.enabledSecondaryRowText and true or false
+end
+
+--- Show text on the secondary line (with the roll-details tooltip) and reflow the row.
+---@param text string
+local function _ShowRollSecondary(self, text)
+	local stylingDb = G_RLF.DbAccessor:Styling(self.frameType)
+	local sizingDb = G_RLF.DbAccessor:Sizing(self.frameType)
+	self.secondaryText = text
+	self.SecondaryText:SetText(text)
+	self.SecondaryText:Show()
+	local spacing = (stylingDb.rowTextSpacing or 0) == 0 and (sizingDb.iconSize / 4) or stylingDb.rowTextSpacing
+	self:_LayoutRowLines(
+		stylingDb.textAlignment,
+		stylingDb.textAlignment ~= G_RLF.TextAlignment.RIGHT,
+		sizingDb.padding,
+		spacing
+	)
+	self.SecondaryLineLayout:Show()
+	self:LayoutSecondaryLine()
+	self:_SetupRollTooltip()
+end
+
+--- Hide the secondary line and re-center the primary line.
+local function _HideRollSecondary(self)
+	local stylingDb = G_RLF.DbAccessor:Styling(self.frameType)
+	local sizingDb = G_RLF.DbAccessor:Sizing(self.frameType)
+	self.secondaryText = nil
+	self.SecondaryText:Hide()
+	self.SecondaryLineLayout:Hide()
+	local spacing = (stylingDb.rowTextSpacing or 0) == 0 and (sizingDb.iconSize / 4) or stylingDb.rowTextSpacing
+	self:_LayoutRowLines(
+		stylingDb.textAlignment,
+		stylingDb.textAlignment ~= G_RLF.TextAlignment.RIGHT,
+		sizingDb.padding,
+		spacing
+	)
+end
+
 --- Handle MAIN_SPEC_NEED_ROLL — show local player's need roll result.
 ---@param roll number
 ---@param isWinning boolean
 function RLF_LootRollRowMixin:OnMainSpecNeedRoll(roll, isWinning)
 	if self._rolled then
 		local color = isWinning and "ff00ff00" or "ffb0b0b0"
-		_ShowRollText(self, ("|c%sNeed (%d)|r"):format(color, roll))
+		_ShowRollText(self, ("|c%s%s (%d)|r"):format(color, NEED, roll))
 	end
 end
 
@@ -276,8 +319,16 @@ function RLF_LootRollRowMixin:OnRollWon(rollType, roll, isUpgraded)
 		[4] = TRANSMOGRIFICATION,
 	}
 	local typeName = rollTypeNames[rollType] or ""
-	local upgradeText = isUpgraded and " (Upgraded!)" or ""
-	_ShowRollText(self, ("|cff00ff00%s Won! (%d)%s|r"):format(typeName, roll, upgradeText))
+	local upgradeText = isUpgraded and G_RLF.L["RollUpgraded"] or ""
+	local text = ("|cff00ff00%s|r"):format(G_RLF.L["RollTypeWon"]:format(typeName, roll, upgradeText))
+	if _SecondaryEnabled(self) then
+		-- Results belong on the secondary line when there is one; the primary line's
+		-- right side keeps the player's own choice.
+		self._rollResultsSignature = nil
+		_ShowRollSecondary(self, text)
+	else
+		_ShowRollText(self, text)
+	end
 end
 
 ---@class RLF_RollTooltipIcons
@@ -521,11 +572,11 @@ function RLF_LootRollRowMixin:SetRollResults(dropInfo)
 		end
 
 		if dropInfo.winner.isSelf then
-			rollText = ("|cff00ff00You won! (%s, %d)|r"):format(rollTypeStr, dropInfo.winner.roll)
+			rollText = ("|cff00ff00%s|r"):format(G_RLF.L["RollYouWon"]:format(rollTypeStr, dropInfo.winner.roll))
 		else
 			local name = classColor and classColor:WrapTextInColorCode(dropInfo.winner.playerName)
 				or dropInfo.winner.playerName
-			rollText = ("%s won (%s, %d)"):format(name, rollTypeStr, dropInfo.winner.roll)
+			rollText = G_RLF.L["RollPlayerWon"]:format(name, rollTypeStr, dropInfo.winner.roll)
 		end
 	elseif allPassed then
 		rollText = ("|cffb0b0b0%s|r"):format(LOOT_HISTORY_ALL_PASSED)
@@ -533,15 +584,20 @@ function RLF_LootRollRowMixin:SetRollResults(dropInfo)
 		local classColor = _GetClassColor(dropInfo.currentLeader.playerClass)
 		local name = classColor and classColor:WrapTextInColorCode(dropInfo.currentLeader.playerName)
 			or dropInfo.currentLeader.playerName
-		rollText = ("%s leads (%d)"):format(name, dropInfo.currentLeader.roll)
+		rollText = G_RLF.L["RollPlayerLeads"]:format(name, dropInfo.currentLeader.roll)
 	end
 
 	local resolved = dropInfo.winner or allPassed or (waitingCount == 0 and self._rolled)
 
+	-- With a secondary line, results go there (after "Waiting on N", if anyone is
+	-- still waiting) and the primary line's right side keeps the player's own choice.
+	-- Without one, everything stays on the primary line's right side.
+	local secondaryEnabled = _SecondaryEnabled(self)
+
 	-- The 1s history poll re-sends identical results. Re-laying out the row
 	-- every tick moves the hover target under the cursor and drops the item
 	-- tooltip, so only touch the UI when what it shows has changed.
-	local signature = ("%d|%s"):format(waitingCount, rollText or "")
+	local signature = ("%d|%s|%s"):format(waitingCount, rollText or "", secondaryEnabled and "S" or "P")
 	if signature == self._rollResultsSignature then
 		if resolved then
 			self:OnRollResolved()
@@ -549,39 +605,22 @@ function RLF_LootRollRowMixin:SetRollResults(dropInfo)
 		return
 	end
 
-	-- Secondary text: waiting count with tooltip
-	local stylingDb = G_RLF.DbAccessor:Styling(self.frameType)
-	if waitingCount > 0 and stylingDb.enabledSecondaryRowText then
-		self.secondaryText = format("Waiting on %d player(s)", waitingCount)
-		self.SecondaryText:SetText(self.secondaryText)
-		self.SecondaryText:Show()
-		local sizingDb = G_RLF.DbAccessor:Sizing(self.frameType)
-		local spacing = (stylingDb.rowTextSpacing or 0) == 0 and (sizingDb.iconSize / 4) or stylingDb.rowTextSpacing
-		self:_LayoutRowLines(
-			stylingDb.textAlignment,
-			stylingDb.textAlignment ~= G_RLF.TextAlignment.RIGHT,
-			sizingDb.padding,
-			spacing
-		)
-		self.SecondaryLineLayout:Show()
-		self:LayoutSecondaryLine()
-		self:_SetupRollTooltip()
+	local secondaryParts = {}
+	if secondaryEnabled then
+		if waitingCount > 0 then
+			table.insert(secondaryParts, G_RLF.L["RollWaitingOn"]:format(waitingCount))
+		end
+		if rollText then
+			table.insert(secondaryParts, rollText)
+		end
+	end
+	if #secondaryParts > 0 then
+		_ShowRollSecondary(self, table.concat(secondaryParts, " - "))
 	else
-		self.secondaryText = nil
-		self.SecondaryText:Hide()
-		self.SecondaryLineLayout:Hide()
-		-- Re-center primary line now that secondary text is gone
-		local sizingDb = G_RLF.DbAccessor:Sizing(self.frameType)
-		local spacing = (stylingDb.rowTextSpacing or 0) == 0 and (sizingDb.iconSize / 4) or stylingDb.rowTextSpacing
-		self:_LayoutRowLines(
-			stylingDb.textAlignment,
-			stylingDb.textAlignment ~= G_RLF.TextAlignment.RIGHT,
-			sizingDb.padding,
-			spacing
-		)
+		_HideRollSecondary(self)
 	end
 
-	if rollText then
+	if rollText and not secondaryEnabled then
 		_ShowRollText(self, rollText)
 	end
 	self._rollResultsSignature = signature
