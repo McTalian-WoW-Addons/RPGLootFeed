@@ -1309,6 +1309,77 @@ describe("ItemLoot Module", function()
 				ItemLoot:OnEnable()
 			end)
 
+			describe("grey equippable items", function()
+				local function greyGear(overrides)
+					local fields = {
+						itemQuality = 0,
+						sellPrice = 10000,
+						itemEquipLoc = "INVTYPE_HEAD",
+						IsEquippableItem = function()
+							return true
+						end,
+						GetEquipmentTypeText = function()
+							return " [Head]"
+						end,
+					}
+					for k, v in pairs(overrides or {}) do
+						fields[k] = v
+					end
+					return makeItemInfo(fields)
+				end
+
+				before_each(function()
+					ns.db.global.item.pricesForSellableItems = "Vendor"
+				end)
+
+				it("shows the equipment type when the player can wear it and the slot is empty", function()
+					local info = greyGear({
+						IsEligibleEquipment = function()
+							return true
+						end,
+					})
+					local payload = ItemLoot:BuildPayload(info, 1, nil)
+
+					assert.equals(" [Head]", payload.secondaryTextFn())
+					assert.is_nil(payload.secondaryCoinDataFn(0))
+				end)
+
+				it("shows the vendor value when something is already equipped in the slot", function()
+					ItemLoot.itemLootApi.GetInventoryItemLink = function()
+						return "|cffffffff|Hitem:1::::::::60:::::|h[Worn Hat]|h|r"
+					end
+					local info = greyGear({
+						IsEligibleEquipment = function()
+							return true
+						end,
+					})
+					local payload = ItemLoot:BuildPayload(info, 1, nil)
+
+					assert.equals(" ", payload.secondaryTextFn())
+					local g = payload.secondaryCoinDataFn(0)
+					assert.equals(1, g)
+				end)
+
+				it("shows the vendor value when the player cannot wear it", function()
+					local info = greyGear() -- IsEligibleEquipment defaults to false
+					local payload = ItemLoot:BuildPayload(info, 1, nil)
+
+					assert.equals(" ", payload.secondaryTextFn())
+					assert.equals(1, payload.secondaryCoinDataFn(0))
+				end)
+
+				it("keeps the equipment type for better quality gear even when the slot is full", function()
+					ItemLoot.itemLootApi.GetInventoryItemLink = function()
+						return "|cffffffff|Hitem:1::::::::60:::::|h[Worn Hat]|h|r"
+					end
+					local info = greyGear({ itemQuality = 1 })
+					local payload = ItemLoot:BuildPayload(info, 1, nil)
+
+					assert.equals(" [Head]", payload.secondaryTextFn())
+					assert.is_nil(payload.secondaryCoinDataFn(0))
+				end)
+			end)
+
 			describe("plainTextPrices disabled (default)", function()
 				it("Vendor mode: returns spacer text and real coin data", function()
 					ns.db.global.item.pricesForSellableItems = "Vendor"

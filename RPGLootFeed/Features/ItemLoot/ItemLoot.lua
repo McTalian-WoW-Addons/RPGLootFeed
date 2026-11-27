@@ -46,6 +46,42 @@ local function getPriceParts(icon, fontSize, price)
 	return gold, silver, copper, icon or "", iconSize
 end
 
+--- The link of whatever the player has equipped in the slot this item would go in
+--- (the first occupied one for items with several slots, such as rings), or nil.
+---@param info RLF_ItemInfo
+---@return string?
+local function GetEquippedLinkForItem(info)
+	local slot = G_RLF.equipSlotMap[info.itemEquipLoc]
+	if type(slot) == "table" then
+		for _, s in ipairs(slot) do
+			local link = ItemLoot.itemLootApi.GetInventoryItemLink("player", s)
+			if link then
+				return link
+			end
+		end
+		return nil
+	end
+	if slot == nil then
+		return nil
+	end
+	return ItemLoot.itemLootApi.GetInventoryItemLink("player", slot)
+end
+
+--- Row 2 shows the equipment type for equippable gear. A grey item is only worth that
+--- when the player could actually wear it and has nothing in that slot; otherwise it is
+--- junk and the row shows what it sells for instead.
+---@param info RLF_ItemInfo
+---@return boolean
+local function ShowsEquipmentType(info)
+	if not info:IsEquippableItem() then
+		return false
+	end
+	if info.itemQuality ~= ItemLoot.itemQualEnum.Poor then
+		return true
+	end
+	return info:IsEligibleEquipment() and GetEquippedLinkForItem(info) == nil
+end
+
 -- ── Context provider ──────────────────────────────────────────────────────────
 
 local function createItemLootContextProvider()
@@ -79,7 +115,7 @@ local function createItemLootContextProvider()
 			return
 		end
 
-		if info:IsEquippableItem() then
+		if ShowsEquipmentType(info) then
 			local secondaryText = ""
 			if info:HasItemRollBonus() then
 				secondaryText = info:GetItemRollText()
@@ -255,18 +291,7 @@ end
 
 local function IsBetterThanEquipped(info)
 	if info:IsEligibleEquipment() then
-		local equippedLink
-		local slot = G_RLF.equipSlotMap[info.itemEquipLoc]
-		if type(slot) == "table" then
-			for _, s in ipairs(slot) do
-				equippedLink = ItemLoot.itemLootApi.GetInventoryItemLink("player", s)
-				if equippedLink then
-					break
-				end
-			end
-		else
-			equippedLink = ItemLoot.itemLootApi.GetInventoryItemLink("player", slot)
-		end
+		local equippedLink = GetEquippedLinkForItem(info)
 
 		if not equippedLink then
 			return false
@@ -486,7 +511,7 @@ function ItemLoot:BuildPayload(info, quantity, fromLink)
 	-- single-price modes when plainTextPrices is enabled, so they fall back
 	-- to the plain-text secondaryTextFn above.
 	payload.secondaryCoinDataFn = function(existingQuantity)
-		if info:IsEquippableItem() then
+		if ShowsEquipmentType(info) then
 			return nil
 		end
 		local effectiveQuantity = (existingQuantity or 0) + quantity
