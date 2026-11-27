@@ -166,7 +166,7 @@ describe("ItemLoot Module", function()
 							legendary = false,
 							betterThanEquipped = false,
 							quest = false,
-							tertiaryOrSocket = false,
+							hasTertiaryOrSocket = false,
 							transmog = false,
 						},
 						itemCountTextEnabled = false,
@@ -1045,6 +1045,30 @@ describe("ItemLoot Module", function()
 				local payload = ItemLoot:BuildPayload(info, 1, nil)
 
 				assert.is_true(payload.highlight)
+			end)
+
+			it("highlight is true for tertiary or socket items when hasTertiaryOrSocket is enabled", function()
+				ns.db.global.item.itemHighlights.hasTertiaryOrSocket = true
+				local info = makeItemInfo({
+					HasItemRollBonus = function()
+						return true
+					end,
+				})
+				local payload = ItemLoot:BuildPayload(info, 1, nil)
+
+				assert.is_true(payload.highlight)
+			end)
+
+			it("highlight is false for tertiary or socket items when hasTertiaryOrSocket is off", function()
+				ns.db.global.item.itemHighlights.hasTertiaryOrSocket = false
+				local info = makeItemInfo({
+					HasItemRollBonus = function()
+						return true
+					end,
+				})
+				local payload = ItemLoot:BuildPayload(info, 1, nil)
+
+				assert.is_false(payload.highlight)
 			end)
 
 			it("highlight is true for legendary items when itemHighlights.legendary is enabled", function()

@@ -364,7 +364,7 @@ function ItemLoot:BuildPayload(info, quantity, fromLink)
 		or (isLegendary and itemHighlights.legendary and "Legendary")
 		or (isBetterThanEquipped and itemHighlights.betterThanEquipped and "Better than Equipped")
 		or (isQuestItem and itemHighlights.quest and "Quest Item")
-		or (hasTertiaryOrSocket and itemHighlights.tertiaryOrSocket and "Tertiary or Socket")
+		or (hasTertiaryOrSocket and itemHighlights.hasTertiaryOrSocket and "Tertiary or Socket")
 		or (isNewTransmog and itemHighlights.transmog and "New Transmog")
 	local highlight = highlightReason and true or false
 	if highlight then
