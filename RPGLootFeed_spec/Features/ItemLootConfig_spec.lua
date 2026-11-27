@@ -69,10 +69,11 @@ describe("ItemLootConfig module", function()
 		assert.is_table(group.args)
 		assert.is_table(group.args.enableItemLoot)
 		assert.equal("toggle", group.args.enableItemLoot.type)
-		assert.is_table(group.args.itemLootOptions)
-		assert.is_table(group.args.itemLootOptions.args.itemQualityFilter)
-		assert.is_table(group.args.itemLootOptions.args.itemHighlights)
-		assert.is_table(group.args.itemLootOptions.args.itemSounds)
+		assert.equal("tree", group.childGroups)
+		assert.is_nil(group.args.itemLootOptions)
+		assert.is_table(group.args.itemQualityFilter)
+		assert.is_table(group.args.itemHighlights)
+		assert.is_table(group.args.itemSounds)
 	end)
 
 	it("should set up an enabled/duration toggle pair for every item quality", function()
@@ -83,7 +84,7 @@ describe("ItemLootConfig module", function()
 			},
 		}
 		local group = ns.ItemLoot:BuildConfigArgs(1, 5)
-		local qualityArgs = group.args.itemLootOptions.args.itemQualityFilter.args
+		local qualityArgs = group.args.itemQualityFilter.args
 		for _, key in ipairs({
 			"poor",
 			"common",
@@ -165,6 +166,69 @@ describe("ItemLootConfig module", function()
 		end)
 	end)
 
+	describe("tree layout", function()
+		local group, itemLootCfg
+
+		before_each(function()
+			itemLootCfg = {}
+			for k, v in pairs(ns.defaults.global.frames["**"].features.itemLoot) do
+				itemLootCfg[k] = v
+			end
+			itemLootCfg.enabled = true
+			ns.db = {
+				global = { frames = { [1] = { features = { itemLoot = itemLootCfg } } }, interactions = {} },
+			}
+			group = ns.ItemLoot:BuildConfigArgs(1, 5)
+		end)
+
+		it("shows each section as its own page in the tree", function()
+			assert.equal("tree", group.childGroups)
+			for _, key in ipairs({
+				"itemCountText",
+				"itemSecondaryTextOptions",
+				"itemQualityFilter",
+				"itemTypeDurations",
+				"itemHighlights",
+				"itemSounds",
+				"itemStyleOverrides",
+				"itemDenyList",
+			}) do
+				local section = group.args[key]
+				assert.is_table(section, key .. " is missing")
+				assert.equal("group", section.type)
+				assert.is_not_true(section.inline, key .. " should not be inline")
+			end
+		end)
+
+		it("keeps the enable toggle and general controls on the group's own page", function()
+			assert.equal("toggle", group.args.enableItemLoot.type)
+			assert.equal("toggle", group.args.showIcon.type)
+			assert.is_true(group.args.showIcon.order > group.args.enableItemLoot.order)
+		end)
+
+		it("greys out every section while Item Loot is disabled", function()
+			itemLootCfg.enabled = false
+			for _, key in ipairs({ "itemHighlights", "itemSounds", "itemQualityFilter", "itemDenyList" }) do
+				assert.is_true(group.args[key].disabled(), key .. " should be disabled")
+			end
+			itemLootCfg.enabled = true
+			assert.is_false(group.args.itemHighlights.disabled())
+		end)
+	end)
+
+	it("explains on the quality filter that a non-zero duration overrides the show duration", function()
+		ns.db = {
+			global = {
+				frames = { [1] = { features = { itemLoot = ns.defaults.global.frames["**"].features.itemLoot } } },
+				interactions = {},
+			},
+		}
+		local description = ns.ItemLoot:BuildConfigArgs(1, 5).args.itemQualityFilter.args.durationDescription
+		assert.is_table(description)
+		assert.equal("description", description.type)
+		assert.is_truthy(description.name:find("override", 1, true))
+	end)
+
 	describe("item highlight colors (issue #670)", function()
 		local highlightArgs, itemLootCfg
 
@@ -177,7 +241,7 @@ describe("ItemLootConfig module", function()
 			ns.db = {
 				global = { frames = { [1] = { features = { itemLoot = itemLootCfg } } }, interactions = {} },
 			}
-			highlightArgs = ns.ItemLoot:BuildConfigArgs(1, 5).args.itemLootOptions.args.itemHighlights.args
+			highlightArgs = ns.ItemLoot:BuildConfigArgs(1, 5).args.itemHighlights.args
 		end)
 
 		it("gives every highlight reason its own default color", function()
@@ -231,7 +295,7 @@ describe("ItemLootConfig module", function()
 				global = { frames = { [1] = { features = { itemLoot = itemLootCfg } } }, interactions = {} },
 			}
 			group = ns.ItemLoot:BuildConfigArgs(1, 5)
-			typeArgs = group.args.itemLootOptions.args.itemTypeDurations.args
+			typeArgs = group.args.itemTypeDurations.args
 		end)
 
 		it("has a duration range for every item class", function()
@@ -259,6 +323,23 @@ describe("ItemLootConfig module", function()
 			assert.is_true(typeArgs.class16.hidden())
 		end)
 
+		it("hides the obsolete classes that classic clients still list", function()
+			local original = ns.WoWAPI.ItemLoot.GetItemClassName
+			ns.WoWAPI.ItemLoot.GetItemClassName = function(classID)
+				if classID == 3 then
+					return "Jewelry (OBSOLETE)"
+				elseif classID == 8 then
+					return "Generic (OBSOLETE)"
+				end
+				return "Class" .. classID
+			end
+			local rebuilt = ns.ItemLoot:BuildConfigArgs(1, 5).args.itemTypeDurations.args
+			assert.is_true(rebuilt.class3.hidden())
+			assert.is_true(rebuilt.class8.hidden())
+			assert.is_false(rebuilt.class4.hidden())
+			ns.WoWAPI.ItemLoot.GetItemClassName = original
+		end)
+
 		it("names a class when the options render, even if the client could not name it at build time", function()
 			local original = ns.WoWAPI.ItemLoot.GetItemClassName
 			local available = false
@@ -266,7 +347,7 @@ describe("ItemLootConfig module", function()
 				return available and ("Late" .. classID) or nil
 			end
 			local lateGroup = ns.ItemLoot:BuildConfigArgs(1, 5)
-			local late = lateGroup.args.itemLootOptions.args.itemTypeDurations.args.class4
+			local late = lateGroup.args.itemTypeDurations.args.class4
 
 			assert.is_true(late.hidden())
 

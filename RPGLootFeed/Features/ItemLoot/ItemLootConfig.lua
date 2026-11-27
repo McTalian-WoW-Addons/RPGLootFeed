@@ -105,13 +105,54 @@ end
 --- Build the AceConfig options group for Item Loot on the given frame.
 --- Called from the config system by function name.
 ---@param frameId integer
+--- The sections of the Item Loot options that get their own page in the left-hand tree
+--- instead of stacking as inline blocks on one long page.
+local TREE_SECTIONS = {
+	"itemCountText",
+	"itemSecondaryTextOptions",
+	"itemQualityFilter",
+	"itemTypeDurations",
+	"itemHighlights",
+	"itemSounds",
+	"itemStyleOverrides",
+	"itemDenyList",
+}
+
+--- Turn the built Item Loot group into a tree: the enable toggle and the few general
+--- controls stay on the group's own page, and each section in TREE_SECTIONS becomes a
+--- child page. Only the options layout changes; every setting keeps its DB path.
+---@param group table The group built by BuildConfigArgs, with its itemLootOptions wrapper
+---@return table
+local function liftSectionsIntoTree(group)
+	local wrapper = group.args.itemLootOptions
+	group.args.itemLootOptions = nil
+	group.childGroups = "tree"
+
+	local isSection = {}
+	for _, key in ipairs(TREE_SECTIONS) do
+		isSection[key] = true
+	end
+	for key, child in pairs(wrapper.args) do
+		if isSection[key] then
+			child.inline = false
+			-- The wrapper greyed everything out while the feature was off; keep that.
+			child.disabled = child.disabled or wrapper.disabled
+		else
+			-- General controls sit right under the enable toggle (order 1).
+			child.order = 1 + (child.order or 0) / 100
+		end
+		group.args[key] = child
+	end
+	return group
+end
+
 ---@param order number
 ---@return table
 function G_RLF.ItemLoot:BuildConfigArgs(frameId, order)
 	local function fc()
 		return G_RLF.db.global.frames[frameId].features.itemLoot
 	end
-	return {
+	return liftSectionsIntoTree({
 		type = "group",
 		name = G_RLF.L["Item Loot Config"],
 		order = order,
@@ -538,6 +579,11 @@ function G_RLF.ItemLoot:BuildConfigArgs(frameId, order)
 						inline = true,
 						order = 2,
 						args = {
+							durationDescription = {
+								type = "description",
+								name = G_RLF.L["ItemQualityDurationsDesc"],
+								order = 0.1,
+							},
 							resetAllDurationOverrides = {
 								type = "execute",
 								name = G_RLF.L["Reset All Duration Overrides"],
@@ -880,9 +926,11 @@ function G_RLF.ItemLoot:BuildConfigArgs(frameId, order)
 									min = 0,
 									max = 30,
 									step = 1,
-									-- A client without this item class has no name for it.
+									-- A client without this item class has no name for it, and classic
+									-- clients list some old classes as "(OBSOLETE)".
 									hidden = function()
-										return className() == nil
+										local name = className()
+										return name == nil or G_RLF.IsObsoleteItemClassName(name)
 									end,
 									get = function()
 										return fc().itemTypeSettings[classID].duration
@@ -1334,7 +1382,7 @@ function G_RLF.ItemLoot:BuildConfigArgs(frameId, order)
 				},
 			},
 		},
-	}
+	})
 end
 
 return {}

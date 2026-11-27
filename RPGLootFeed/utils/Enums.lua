@@ -113,6 +113,22 @@ G_RLF.FeatureModule = {
 --- are simply not shown in the options.
 G_RLF.ItemDurationClasses = { 0, 1, 2, 3, 4, 5, 7, 8, 9, 12, 13, 15, 16, 17, 19 }
 
+--- Is this the name of an item class the game keeps only for old data? Classic clients
+--- list classes such as Jewelry and Generic as "(OBSOLETE)" (translated on other
+--- locales), and no item uses them. Real class names never contain parentheses, so a
+--- parenthesised name, or one that says obsolete, is treated as one.
+---@param name string?
+---@return boolean
+function G_RLF.IsObsoleteItemClassName(name)
+	if not name then
+		return false
+	end
+	if name:lower():find("obsolete", 1, true) then
+		return true
+	end
+	return name:find("(", 1, true) ~= nil or name:find("\239\188\136", 1, true) ~= nil
+end
+
 --- A fresh per-frame table of item type durations, 0 (no override) for every class.
 ---@return table<number, { duration: number }>
 function G_RLF.DefaultItemTypeSettings()
