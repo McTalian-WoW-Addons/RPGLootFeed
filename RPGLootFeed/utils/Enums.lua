@@ -123,6 +123,20 @@ function G_RLF.DefaultItemTypeSettings()
 	return settings
 end
 
+--- Glow color per item highlight reason (the itemHighlights keys), so a highlighted
+--- row says why it is highlighted. Returns a fresh table each call for AceDB defaults.
+---@return table<string, number[]>
+function G_RLF.DefaultItemHighlightColors()
+	return {
+		mounts = { 0.64, 0.21, 0.93 },
+		legendary = { 1, 0.5, 0 },
+		betterThanEquipped = { 0.12, 1, 0 },
+		hasTertiaryOrSocket = { 0, 0.8, 1 },
+		quest = { 1, 0.82, 0 },
+		transmog = { 1, 0.4, 0.8 },
+	}
+end
+
 ---@enum G_RLF.BlizzModule
 G_RLF.BlizzModule = {
 	BossBanner = "BossBanner",

@@ -205,6 +205,45 @@ describe("RLF_RowAnimationMixin shift animation", function()
 		end)
 	end)
 
+	-- ── HighlightIcon ─────────────────────────────────────────────────────
+
+	describe("HighlightIcon", function()
+		local glow
+
+		before_each(function()
+			glow = {
+				SetDesaturated = stub.new(),
+				SetVertexColor = stub.new(),
+				SetAlpha = stub.new(),
+				Show = stub.new(),
+			}
+			row.glowTexture = glow
+			row.glowAnimationGroup = { Play = stub.new() }
+			row.highlight = true
+			row.type = "ItemLoot"
+			stub(row, "IsShifting").returns(false)
+		end)
+
+		it("tints the desaturated glow with the highlight reason color", function()
+			row.highlightColor = { 0.64, 0.21, 0.93 }
+
+			row:HighlightIcon()
+
+			assert.stub(glow.SetDesaturated).was.called_with(glow, true)
+			assert.stub(glow.SetVertexColor).was.called_with(glow, 0.64, 0.21, 0.93)
+			assert.stub(row.glowAnimationGroup.Play).was.called()
+		end)
+
+		it("restores the stock glow when there is no highlight color", function()
+			row.highlightColor = nil
+
+			row:HighlightIcon()
+
+			assert.stub(glow.SetDesaturated).was.called_with(glow, false)
+			assert.stub(glow.SetVertexColor).was.called_with(glow, 1, 1, 1)
+		end)
+	end)
+
 	-- ── StyleShiftAnimation ───────────────────────────────────────────────
 
 	describe("StyleShiftAnimation", function()

@@ -193,6 +193,7 @@ function G_RLF.LootElementBase:fromPayload(payload)
 
 	-- ── Effects ────────────────────────────────────────────────────────────────
 	element.highlight = payload.highlight or false
+	element.highlightColor = payload.highlightColor
 	element.sound = payload.sound
 
 	-- ── Interaction ────────────────────────────────────────────────────────────
@@ -273,6 +274,7 @@ end
 ---@field a? number Alpha channel (0-1, default 1)
 ---@field colorFn? fun(netQty: number): number, number, number, number Dynamic color recomputer
 ---@field highlight? boolean Border glow / entry animation
+---@field highlightColor? number[] {r, g, b} tint for the icon glow; nil keeps the default glow
 ---@field sound? string Sound file path
 ---@field isCustomLink? boolean Custom tooltip behavior flag
 ---@field sampleTooltipText? string Label shown on row hover in the options preview (sample rows only)

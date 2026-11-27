@@ -181,6 +181,8 @@ G_RLF.defaults = {
 							betterThanEquipped = true,
 							hasTertiaryOrSocket = true,
 						},
+						--- Glow color for each highlight reason.
+						itemHighlightColors = G_RLF.DefaultItemHighlightColors(),
 						auctionHouseSource = "None",
 						pricesForSellableItems = "vendor",
 						plainTextPrices = false,
@@ -468,6 +470,8 @@ G_RLF.defaults = {
 							betterThanEquipped = true,
 							hasTertiaryOrSocket = true,
 						},
+						--- Glow color for each highlight reason.
+						itemHighlightColors = G_RLF.DefaultItemHighlightColors(),
 						auctionHouseSource = "None",
 						pricesForSellableItems = "vendor",
 						plainTextPrices = false,

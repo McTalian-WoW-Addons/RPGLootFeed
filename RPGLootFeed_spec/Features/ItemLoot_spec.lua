@@ -169,6 +169,11 @@ describe("ItemLoot Module", function()
 							hasTertiaryOrSocket = false,
 							transmog = false,
 						},
+						itemHighlightColors = {
+							mounts = { 0.64, 0.21, 0.93 },
+							legendary = { 1, 0.5, 0 },
+							hasTertiaryOrSocket = { 0, 0.8, 1 },
+						},
 						itemCountTextEnabled = false,
 						itemCountTextColor = { 1, 1, 1, 1 },
 						itemCountTextWrapChar = nil,
@@ -1045,6 +1050,29 @@ describe("ItemLoot Module", function()
 				local payload = ItemLoot:BuildPayload(info, 1, nil)
 
 				assert.is_true(payload.highlight)
+			end)
+
+			it("carries the glow color of the reason that matched", function()
+				ns.db.global.item.itemHighlights.mounts = true
+				ns.db.global.item.itemHighlights.legendary = true
+				local info = makeItemInfo({
+					IsMount = function()
+						return true
+					end,
+					IsLegendary = function()
+						return true
+					end,
+				})
+				local payload = ItemLoot:BuildPayload(info, 1, nil)
+
+				-- mounts come first, so the mount color wins over legendary
+				assert.same({ 0.64, 0.21, 0.93 }, payload.highlightColor)
+			end)
+
+			it("has no glow color when nothing is highlighted", function()
+				local payload = ItemLoot:BuildPayload(makeItemInfo(), 1, nil)
+
+				assert.is_nil(payload.highlightColor)
 			end)
 
 			it("highlight is true for tertiary or socket items when hasTertiaryOrSocket is enabled", function()

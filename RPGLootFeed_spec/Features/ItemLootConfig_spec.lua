@@ -165,6 +165,59 @@ describe("ItemLootConfig module", function()
 		end)
 	end)
 
+	describe("item highlight colors (issue #670)", function()
+		local highlightArgs, itemLootCfg
+
+		before_each(function()
+			itemLootCfg = {}
+			for k, v in pairs(ns.defaults.global.frames["**"].features.itemLoot) do
+				itemLootCfg[k] = v
+			end
+			itemLootCfg.enabled = true
+			ns.db = {
+				global = { frames = { [1] = { features = { itemLoot = itemLootCfg } } }, interactions = {} },
+			}
+			highlightArgs = ns.ItemLoot:BuildConfigArgs(1, 5).args.itemLootOptions.args.itemHighlights.args
+		end)
+
+		it("gives every highlight reason its own default color", function()
+			local seen = {}
+			for key, color in pairs(ns.DefaultItemHighlightColors()) do
+				assert.is_not_nil(itemLootCfg.itemHighlights[key], key .. " is not a highlight reason")
+				local id = table.concat(color, ",")
+				assert.is_nil(seen[id], key .. " reuses another reason's color")
+				seen[id] = true
+			end
+		end)
+
+		for arg, key in pairs({
+			highlightMountColor = "mounts",
+			highlightLegendaryColor = "legendary",
+			highlightBetterThanEquippedColor = "betterThanEquipped",
+			hasTertiaryOrSocketColor = "hasTertiaryOrSocket",
+			highlightQuestColor = "quest",
+			highlightTransmogColor = "transmog",
+		}) do
+			it("has a color picker for " .. key, function()
+				local option = highlightArgs[arg]
+				assert.is_table(option)
+				assert.equal("color", option.type)
+
+				option.set(nil, 0.1, 0.2, 0.3)
+				assert.same({ 0.1, 0.2, 0.3 }, itemLootCfg.itemHighlightColors[key])
+				local r, g, b = option.get()
+				assert.same({ 0.1, 0.2, 0.3 }, { r, g, b })
+			end)
+
+			it("disables the " .. key .. " picker while its highlight is off", function()
+				itemLootCfg.itemHighlights[key] = true
+				assert.is_false(highlightArgs[arg].disabled())
+				itemLootCfg.itemHighlights[key] = false
+				assert.is_true(highlightArgs[arg].disabled())
+			end)
+		end
+	end)
+
 	describe("item type durations option (issue #415)", function()
 		local group, typeArgs, itemLootCfg
 

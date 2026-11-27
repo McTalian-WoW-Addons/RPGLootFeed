@@ -1009,6 +1009,16 @@ function RLF_RowAnimationMixin:HighlightIcon()
 			if self.type == G_RLF.FeatureModule.Transmog and G_RLF:IsRetail() then
 				self:PlayTransmogEffect()
 			else
+				-- A highlight reason's color tints the glow. The stock texture is gold, so
+				-- desaturate it first or every tint would be multiplied with that gold.
+				local color = self.highlightColor
+				if color then
+					self.glowTexture:SetDesaturated(true)
+					self.glowTexture:SetVertexColor(color[1], color[2], color[3])
+				else
+					self.glowTexture:SetDesaturated(false)
+					self.glowTexture:SetVertexColor(1, 1, 1)
+				end
 				-- Show the glow texture and play the animation
 				self.glowTexture:SetAlpha(0.75)
 				self.glowTexture:Show()

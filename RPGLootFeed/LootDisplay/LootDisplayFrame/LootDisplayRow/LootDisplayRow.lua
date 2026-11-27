@@ -14,6 +14,7 @@ local G_RLF = ns
 ---@field unit string
 ---@field type string
 ---@field highlight boolean
+---@field highlightColor? number[]
 ---@field isHistoryMode boolean
 ---@field pendingElement table
 ---@field updatePending boolean
@@ -131,6 +132,7 @@ function LootDisplayRowMixin:Reset()
 	self.unit = nil
 	self.type = nil
 	self.highlight = nil
+	self.highlightColor = nil
 	self.isHistoryMode = false
 	self.isSampleRow = false
 	self.hasElementFadeOverride = false
@@ -493,6 +495,7 @@ function LootDisplayRowMixin:BootstrapFromElement(element)
 	end
 
 	self.highlight = highlight
+	self.highlightColor = element.highlightColor
 	RunNextFrame(function()
 		self:Enter()
 		self:UpdateItemCount()

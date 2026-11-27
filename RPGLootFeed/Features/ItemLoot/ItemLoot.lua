@@ -360,15 +360,17 @@ function ItemLoot:BuildPayload(info, quantity, fromLink)
 
 	-- ── Highlight ────────────────────────────────────────────────────────────
 	local itemHighlights = itemConfig.itemHighlights or {}
-	local highlightReason = (isMount and itemHighlights.mounts and "Mount")
-		or (isLegendary and itemHighlights.legendary and "Legendary")
-		or (isBetterThanEquipped and itemHighlights.betterThanEquipped and "Better than Equipped")
-		or (isQuestItem and itemHighlights.quest and "Quest Item")
-		or (hasTertiaryOrSocket and itemHighlights.hasTertiaryOrSocket and "Tertiary or Socket")
-		or (isNewTransmog and itemHighlights.transmog and "New Transmog")
-	local highlight = highlightReason and true or false
+	-- First matching reason wins; the key is the itemHighlights / itemHighlightColors key.
+	local highlightKey = (isMount and itemHighlights.mounts and "mounts")
+		or (isLegendary and itemHighlights.legendary and "legendary")
+		or (isBetterThanEquipped and itemHighlights.betterThanEquipped and "betterThanEquipped")
+		or (isQuestItem and itemHighlights.quest and "quest")
+		or (hasTertiaryOrSocket and itemHighlights.hasTertiaryOrSocket and "hasTertiaryOrSocket")
+		or (isNewTransmog and itemHighlights.transmog and "transmog")
+	local highlight = highlightKey and true or false
+	local highlightColor = highlightKey and (itemConfig.itemHighlightColors or {})[highlightKey] or nil
 	if highlight then
-		self:LogDebug("Highlighted because of " .. highlightReason, addonName, self.moduleName, key)
+		self:LogDebug("Highlighted because of " .. highlightKey, addonName, self.moduleName, key)
 	end
 
 	-- ── Quest color override ─────────────────────────────────────────────────
@@ -436,6 +438,7 @@ function ItemLoot:BuildPayload(info, quantity, fromLink)
 		isLink = true,
 		quantity = quantity,
 		highlight = highlight,
+		highlightColor = highlightColor,
 		sound = soundPath,
 		r = r,
 		g = g,

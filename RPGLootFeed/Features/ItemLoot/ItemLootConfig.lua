@@ -916,6 +916,22 @@ function G_RLF.ItemLoot:BuildConfigArgs(frameId, order)
 								end,
 								order = 1,
 							},
+							highlightMountColor = {
+								type = "color",
+								name = G_RLF.L["Highlight Color"],
+								desc = G_RLF.L["HighlightColorDesc"],
+								width = "half",
+								disabled = function()
+									return not fc().enabled or not fc().itemHighlights.mounts
+								end,
+								get = function()
+									return unpack(fc().itemHighlightColors.mounts)
+								end,
+								set = function(_, r, g, b)
+									fc().itemHighlightColors.mounts = { r, g, b }
+								end,
+								order = 2,
+							},
 							highlightLegendary = {
 								type = "toggle",
 								name = G_RLF.L["Highlight Legendary Items"],
@@ -927,7 +943,23 @@ function G_RLF.ItemLoot:BuildConfigArgs(frameId, order)
 								set = function(_, value)
 									fc().itemHighlights.legendary = value
 								end,
-								order = 2,
+								order = 3,
+							},
+							highlightLegendaryColor = {
+								type = "color",
+								name = G_RLF.L["Highlight Color"],
+								desc = G_RLF.L["HighlightColorDesc"],
+								width = "half",
+								disabled = function()
+									return not fc().enabled or not fc().itemHighlights.legendary
+								end,
+								get = function()
+									return unpack(fc().itemHighlightColors.legendary)
+								end,
+								set = function(_, r, g, b)
+									fc().itemHighlightColors.legendary = { r, g, b }
+								end,
+								order = 4,
 							},
 							highlightBetterThanEquipped = {
 								type = "toggle",
@@ -940,7 +972,23 @@ function G_RLF.ItemLoot:BuildConfigArgs(frameId, order)
 								set = function(_, value)
 									fc().itemHighlights.betterThanEquipped = value
 								end,
-								order = 3,
+								order = 5,
+							},
+							highlightBetterThanEquippedColor = {
+								type = "color",
+								name = G_RLF.L["Highlight Color"],
+								desc = G_RLF.L["HighlightColorDesc"],
+								width = "half",
+								disabled = function()
+									return not fc().enabled or not fc().itemHighlights.betterThanEquipped
+								end,
+								get = function()
+									return unpack(fc().itemHighlightColors.betterThanEquipped)
+								end,
+								set = function(_, r, g, b)
+									fc().itemHighlightColors.betterThanEquipped = { r, g, b }
+								end,
+								order = 6,
 							},
 							hasTertiaryOrSocket = {
 								type = "toggle",
@@ -953,7 +1001,23 @@ function G_RLF.ItemLoot:BuildConfigArgs(frameId, order)
 								set = function(_, value)
 									fc().itemHighlights.hasTertiaryOrSocket = value
 								end,
-								order = 4,
+								order = 7,
+							},
+							hasTertiaryOrSocketColor = {
+								type = "color",
+								name = G_RLF.L["Highlight Color"],
+								desc = G_RLF.L["HighlightColorDesc"],
+								width = "half",
+								disabled = function()
+									return not fc().enabled or not fc().itemHighlights.hasTertiaryOrSocket
+								end,
+								get = function()
+									return unpack(fc().itemHighlightColors.hasTertiaryOrSocket)
+								end,
+								set = function(_, r, g, b)
+									fc().itemHighlightColors.hasTertiaryOrSocket = { r, g, b }
+								end,
+								order = 8,
 							},
 							highlightQuest = {
 								type = "toggle",
@@ -966,7 +1030,23 @@ function G_RLF.ItemLoot:BuildConfigArgs(frameId, order)
 								set = function(_, value)
 									fc().itemHighlights.quest = value
 								end,
-								order = 5,
+								order = 9,
+							},
+							highlightQuestColor = {
+								type = "color",
+								name = G_RLF.L["Highlight Color"],
+								desc = G_RLF.L["HighlightColorDesc"],
+								width = "half",
+								disabled = function()
+									return not fc().enabled or not fc().itemHighlights.quest
+								end,
+								get = function()
+									return unpack(fc().itemHighlightColors.quest)
+								end,
+								set = function(_, r, g, b)
+									fc().itemHighlightColors.quest = { r, g, b }
+								end,
+								order = 10,
 							},
 							highlightTransmog = {
 								type = "toggle",
@@ -979,7 +1059,23 @@ function G_RLF.ItemLoot:BuildConfigArgs(frameId, order)
 								set = function(_, value)
 									fc().itemHighlights.transmog = value
 								end,
-								order = 6,
+								order = 11,
+							},
+							highlightTransmogColor = {
+								type = "color",
+								name = G_RLF.L["Highlight Color"],
+								desc = G_RLF.L["HighlightColorDesc"],
+								width = "half",
+								disabled = function()
+									return not fc().enabled or not fc().itemHighlights.transmog
+								end,
+								get = function()
+									return unpack(fc().itemHighlightColors.transmog)
+								end,
+								set = function(_, r, g, b)
+									fc().itemHighlightColors.transmog = { r, g, b }
+								end,
+								order = 12,
 							},
 						},
 					},
