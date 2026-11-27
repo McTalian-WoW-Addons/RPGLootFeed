@@ -579,52 +579,11 @@ local function testClientDependentFeatures()
 	runner:assertEqual(type(itemLootApi.ItemStartsQuest), "function", "QuestStart: adapter ItemLoot.ItemStartsQuest")
 	local ok, startsQuest = pcall(itemLootApi.ItemStartsQuest, "item:6948") -- Hearthstone, control
 	runner:assertEqual(ok, true, "QuestStart: adapter runs without error", ok and nil or startsQuest)
-	runner:assertEqual(startsQuest ~= true, true, "QuestStart: Hearthstone does not start a quest")
-
-	-- Positive control: a head that begins a quest. Retail has its own pair of items;
-	-- Forever and the classics share the older pair.
-	local retailOnly = G_RLF:IsRetail() and not G_RLF:IsForever()
-	local isAlliance = UnitFactionGroup("player") == "Alliance"
-	local questStartItemId
-	if retailOnly then
-		questStartItemId = isAlliance and 49644 or 49643
-	else
-		questStartItemId = isAlliance and 18423 or 18422
-	end
-	local okQuest, controlResult = pcall(itemLootApi.ItemStartsQuest, "item:" .. questStartItemId)
 	runner:assertEqual(
-		okQuest,
+		startsQuest == nil or type(startsQuest) == "boolean",
 		true,
-		"QuestStart: adapter runs on the quest-starting item",
-		okQuest and nil or controlResult
+		"QuestStart: returns a boolean or nil"
 	)
-	if controlResult == nil then
-		-- The tooltip had no lines yet, so the item is not cached. Ask for it; the next run will have it.
-		C.Item.RequestLoadItemDataByID(questStartItemId)
-		note("Quest-start control item " .. questStartItemId .. " was not cached yet; run the smoke test again")
-	else
-		runner:assertEqual(controlResult, true, "QuestStart: item " .. questStartItemId .. " begins a quest")
-		local controlLines = itemLootApi.GetItemTooltipLines("item:" .. questStartItemId)
-		note(
-			"Quest-start control "
-				.. questStartItemId
-				.. ": "
-				.. tostring(controlResult)
-				.. " ("
-				.. (controlLines and #controlLines or "?")
-				.. " tooltip lines)"
-		)
-		if controlResult ~= true then
-			-- Show what the tooltip actually said, to tell a text mismatch from a missing line.
-			local lines = controlLines
-			note(
-				"Quest-start control: looking for "
-					.. tostring(_G["ITEM_STARTS_QUEST"])
-					.. "; tooltip lines: "
-					.. (lines and table.concat(lines, " | ") or "unavailable")
-			)
-		end
-	end
 
 	-- Unusable equipment types: the red right-hand tooltip column, read from C_TooltipInfo
 	-- or a scan tooltip depending on the client. Item 25 is a level 1 sword.
@@ -660,37 +619,16 @@ local function testClientDependentFeatures()
 		end
 	end
 
-	-- Positive control: no class can use every one of these starter weapons (a warrior
-	-- lacks none of the weapon types, so a relic is included), so at least one reads unusable.
-	local controlUnusable, controlLoaded = 0, 0
-	for _, controlId in ipairs({ 25, 35, 36, 37, 2092, 23201 }) do
-		local flagged = itemLootApi.ItemTypeUnusable("item:" .. controlId)
-		if flagged ~= nil then
-			controlLoaded = controlLoaded + 1
-			if flagged then
-				controlUnusable = controlUnusable + 1
-			end
-		else
-			G_RLF.WoWAPI.OpenContainers.RequestItemData(controlId)
-		end
-	end
-	if controlLoaded > 0 and controlUnusable == 0 then
-		note("TypeUnusable: no control item was unusable for this class, so the positive case was not exercised")
-	end
-
 	-- One line to paste when comparing flavors.
 	local _, _, _, interfaceVersion = GetBuildInfo()
 	note(
 		string.format(
-			"TypeUnusable summary: interface %s, %s, equipped %d checked/%d flagged/%d loading, controls %d of %d loaded unusable %d",
+			"TypeUnusable summary: interface %s, %s, equipped %d checked/%d flagged/%d loading",
 			tostring(interfaceVersion),
 			(C_TooltipInfo and C_TooltipInfo.GetHyperlink) and "C_TooltipInfo" or "scan tooltip",
 			equippedChecked,
 			equippedFlagged,
-			equippedPending,
-			controlLoaded,
-			6,
-			controlUnusable
+			equippedPending
 		)
 	)
 
@@ -811,6 +749,111 @@ local function testEventHandlers()
 	end
 end
 
+--- The checks that need real items. Items are not cached at login, so ask for all of them,
+--- wait for them to load, then assert; this runs after the main smoke test and records its own result.
+local itemRunner = G_RLF.GameTestRunner:new("Smoke Test: Items", {
+	printHeader = function(msg)
+		G_RLF:Print(msg)
+	end,
+	printLine = print,
+	raiseError = error,
+	record = function(result)
+		TestMode:RecordTestResult(result)
+	end,
+})
+
+local function itemControlNote(text)
+	TestMode:LogDiagnostic("Smoke Test: Items", text)
+end
+
+local function runItemControlChecks(questStartItemId, typeControlIds)
+	local itemLootApi = G_RLF.WoWAPI.ItemLoot
+	itemRunner:reset()
+
+	-- A head that begins a quest.
+	local startsQuest = itemLootApi.ItemStartsQuest("item:" .. questStartItemId)
+	if startsQuest == nil then
+		itemControlNote("Quest-start control item " .. questStartItemId .. " did not load in time")
+	else
+		itemRunner:assertEqual(startsQuest, true, "QuestStart: item " .. questStartItemId .. " begins a quest")
+		if startsQuest ~= true then
+			local lines = itemLootApi.GetItemTooltipLines("item:" .. questStartItemId)
+			itemControlNote(
+				"Quest-start control: looking for "
+					.. tostring(_G["ITEM_STARTS_QUEST"])
+					.. "; tooltip lines: "
+					.. (lines and table.concat(lines, " | ") or "unavailable")
+			)
+		end
+	end
+	local hearthstone = itemLootApi.ItemStartsQuest("item:6948")
+	if hearthstone ~= nil then
+		itemRunner:assertEqual(hearthstone, false, "QuestStart: Hearthstone does not start a quest")
+	end
+
+	-- No class can use every one of these starter weapons (a warrior lacks none of the weapon
+	-- types, so a relic is included), so at least one reads unusable.
+	local loaded, unusable = 0, 0
+	for _, controlId in ipairs(typeControlIds) do
+		local flagged = itemLootApi.ItemTypeUnusable("item:" .. controlId)
+		if flagged ~= nil then
+			loaded = loaded + 1
+			if flagged then
+				unusable = unusable + 1
+			end
+		end
+	end
+	if loaded == #typeControlIds then
+		itemRunner:assertEqual(unusable > 0, true, "TypeUnusable: at least one control item is unusable for this class")
+	end
+	itemControlNote(
+		string.format("TypeUnusable controls: %d of %d loaded, %d unusable", loaded, #typeControlIds, unusable)
+	)
+
+	itemRunner:displayResults()
+end
+
+--- Request the control items, wait until they have all loaded (or a timeout), then check.
+local function startItemControlChecks()
+	if not (Item and Item.CreateFromItemID) then
+		return
+	end
+	local questStartItemId
+	if G_RLF:IsRetail() and not G_RLF:IsForever() then
+		questStartItemId = UnitFactionGroup("player") == "Alliance" and 49644 or 49643
+	else
+		questStartItemId = UnitFactionGroup("player") == "Alliance" and 18423 or 18422
+	end
+	local typeControlIds = { 25, 35, 36, 37, 2092, 23201 }
+	local ids = { questStartItemId, 6948 }
+	for _, id in ipairs(typeControlIds) do
+		table.insert(ids, id)
+	end
+
+	TestMode:BeginTestRun("Smoke Test: Items")
+	local pending, finished = #ids, false
+	local function finish()
+		if finished then
+			return
+		end
+		finished = true
+		-- A tooltip can lag a moment behind the item data, so give it a beat.
+		C_Timer.After(1, function()
+			runItemControlChecks(questStartItemId, typeControlIds)
+		end)
+	end
+	for _, id in ipairs(ids) do
+		Item:CreateFromItemID(id):ContinueOnItemLoad(function()
+			pending = pending - 1
+			if pending == 0 then
+				finish()
+			end
+		end)
+	end
+	-- Items the realm does not have never load; do not wait for them forever.
+	C_Timer.After(10, finish)
+end
+
 function TestMode:SmokeTest()
 	runner:reset()
 	TestMode:BeginTestRun("Smoke Test")
@@ -847,6 +890,7 @@ function TestMode:SmokeTest()
 
 	runner:section("Client-Dependent Features")
 	testClientDependentFeatures()
+	startItemControlChecks()
 
 	runner:displayResults()
 end
