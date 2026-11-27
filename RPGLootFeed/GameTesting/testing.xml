@@ -6,5 +6,6 @@
   <Script file="IntegrationTest.lua"/>
   <Script file="ConfigTest.lua"/>
   <Script file="Profiling.lua"/>
+  <Script file="DebugProbe.lua"/>
   <!--@end-alpha@-->
 </Ui>
