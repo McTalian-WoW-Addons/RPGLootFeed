@@ -100,27 +100,102 @@ function TestMode:DebugProbe()
 	probeEquippedItems()
 end
 
-local debugButton
+--- Rows the "RLF Rows" button fires into the feed, in order, so item rendering can be
+--- checked without typing item links. `quality` overrides the item's quality (0 makes a
+--- grey copy), and `equippedSlot` uses whatever the character wears in that slot.
+local TEST_ROWS = {
+	{ label = "red type text: a mace a mage cannot use", item = 36 },
+	{ label = "red type text: a shield a mage cannot use", item = 1168 },
+	{ label = "white type text: your own chest piece", equippedSlot = 5 },
+	{ label = "quest start highlight: Head of Onyxia", item = 18423 },
+	{ label = "grey, cannot wear it: shows vendor value", item = 36, quality = 0 },
+	{ label = "grey, slot already worn: shows vendor value", equippedSlot = 5, quality = 0 },
+}
 
---- Show or hide a button in the middle of the screen that runs the probe, so a
---- longer script does not have to fit in the chat box. Drag it to move it.
+--- Fire one test row, then the next, once each item has loaded.
+---@param index number
+local function fireTestRow(index)
+	local row = TEST_ROWS[index]
+	if not row then
+		emit("Test rows done") -- nocheck
+		return
+	end
+	local link = row.item and ("item:" .. row.item) or GetInventoryItemLink("player", row.equippedSlot)
+	if not link then
+		emit(index .. ". skipped, nothing available: " .. row.label)
+		return fireTestRow(index + 1)
+	end
+	local itemApi = G_RLF.WoWAPI.ItemLoot
+	local itemModule = G_RLF.RLF:GetModule(G_RLF.FeatureModule.ItemLoot) --[[@as RLF_ItemLoot]]
+	local itemId = itemApi.GetItemIDForItemInfo(link)
+	Item:CreateFromItemID(itemId):ContinueOnItemLoad(function()
+		local info = G_RLF.ItemInfo:new(itemId, itemApi.GetItemInfo(link))
+		if not info then
+			emit(index .. ". could not load item for: " .. row.label)
+		else
+			if row.quality then
+				info.itemQuality = row.quality
+			end
+			local payload = itemModule:BuildPayload(info, 1)
+			if payload then
+				emit(index .. ". " .. row.label)
+				-- The feed merges rows that share a key, and several test rows are the same
+				-- item; give each its own.
+				payload.key = tostring(payload.key) .. "#debugrow" .. index
+				G_RLF.LootElementBase:fromPayload(payload):Show(info.itemName, info.itemQuality)
+			else
+				emit(index .. ". no row built (Item Loot disabled or filtered): " .. row.label)
+			end
+		end
+		C_Timer.After(0.4, function()
+			fireTestRow(index + 1)
+		end)
+	end)
+end
+
+--- Fire the TEST_ROWS into the feed; the chat lists them in the order they appear.
+function TestMode:FireTestRows()
+	TestMode:BeginTestRun("Debug Rows")
+	emit("Firing " .. #TEST_ROWS .. " test rows") -- nocheck
+	fireTestRow(1)
+end
+
+local debugButton, rowsButton
+
+local function makeButton(label, anchorTo, onClick)
+	local button = CreateFrame("Button", nil, UIParent, "UIPanelButtonTemplate")
+	button:SetSize(140, 32)
+	button:SetText(label)
+	button:SetFrameStrata("DIALOG")
+	button:SetMovable(true)
+	button:EnableMouse(true)
+	button:RegisterForDrag("RightButton")
+	button:SetScript("OnDragStart", button.StartMoving)
+	button:SetScript("OnDragStop", button.StopMovingOrSizing)
+	button:SetScript("OnClick", onClick)
+	if anchorTo then
+		button:SetPoint("TOP", anchorTo, "BOTTOM", 0, -4)
+	else
+		button:SetPoint("CENTER")
+	end
+	button:Hide()
+	return button
+end
+
+--- Show or hide two buttons in the middle of the screen so scripts do not have to fit
+--- in the chat box: "RLF Debug" runs the item probe and "RLF Rows" fires test rows into
+--- the feed. Right-drag a button to move it.
 function TestMode:ToggleDebugButton()
 	if not debugButton then
-		debugButton = CreateFrame("Button", nil, UIParent, "UIPanelButtonTemplate")
-		debugButton:SetSize(140, 32)
-		debugButton:SetPoint("CENTER")
-		debugButton:SetText("RLF Debug")
-		debugButton:SetFrameStrata("DIALOG")
-		debugButton:SetMovable(true)
-		debugButton:EnableMouse(true)
-		debugButton:RegisterForDrag("RightButton")
-		debugButton:SetScript("OnDragStart", debugButton.StartMoving)
-		debugButton:SetScript("OnDragStop", debugButton.StopMovingOrSizing)
-		debugButton:SetScript("OnClick", function()
+		debugButton = makeButton("RLF Debug", nil, function()
 			TestMode:DebugProbe()
 		end)
-		debugButton:Hide()
+		rowsButton = makeButton("RLF Rows", debugButton, function()
+			TestMode:FireTestRows()
+		end)
 	end
-	debugButton:SetShown(not debugButton:IsShown())
+	local show = not debugButton:IsShown()
+	debugButton:SetShown(show)
+	rowsButton:SetShown(show)
 end
 --@end-alpha@
