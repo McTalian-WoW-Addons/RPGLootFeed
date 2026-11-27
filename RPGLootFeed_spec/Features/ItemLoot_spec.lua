@@ -34,6 +34,9 @@ describe("ItemLoot Module", function()
 			IsEligibleEquipment = function()
 				return false
 			end,
+			IsUnusableType = function()
+				return false
+			end,
 			IsEquippableItem = function()
 				return false
 			end,
@@ -1333,11 +1336,7 @@ describe("ItemLoot Module", function()
 				end)
 
 				it("shows the equipment type when the player can wear it and the slot is empty", function()
-					local info = greyGear({
-						IsEligibleEquipment = function()
-							return true
-						end,
-					})
+					local info = greyGear()
 					local payload = ItemLoot:BuildPayload(info, 1, nil)
 
 					assert.equals(" [Head]", payload.secondaryTextFn())
@@ -1348,11 +1347,7 @@ describe("ItemLoot Module", function()
 					ItemLoot.itemLootApi.GetInventoryItemLink = function()
 						return "|cffffffff|Hitem:1::::::::60:::::|h[Worn Hat]|h|r"
 					end
-					local info = greyGear({
-						IsEligibleEquipment = function()
-							return true
-						end,
-					})
+					local info = greyGear()
 					local payload = ItemLoot:BuildPayload(info, 1, nil)
 
 					assert.equals(" ", payload.secondaryTextFn())
@@ -1361,7 +1356,11 @@ describe("ItemLoot Module", function()
 				end)
 
 				it("shows the vendor value when the player cannot wear it", function()
-					local info = greyGear() -- IsEligibleEquipment defaults to false
+					local info = greyGear({
+						IsUnusableType = function()
+							return true
+						end,
+					})
 					local payload = ItemLoot:BuildPayload(info, 1, nil)
 
 					assert.equals(" ", payload.secondaryTextFn())

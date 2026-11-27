@@ -79,7 +79,7 @@ local function ShowsEquipmentType(info)
 	if info.itemQuality ~= ItemLoot.itemQualEnum.Poor then
 		return true
 	end
-	return info:IsEligibleEquipment() and GetEquippedLinkForItem(info) == nil
+	return not info:IsUnusableType() and GetEquippedLinkForItem(info) == nil
 end
 
 -- ── Context provider ──────────────────────────────────────────────────────────

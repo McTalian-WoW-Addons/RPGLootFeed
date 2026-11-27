@@ -79,13 +79,15 @@ function TestMode:DebugProbe()
 		local _, _, subType, equipLoc = C_Item.GetItemInfoInstant(itemId)
 		local canUse = C_PlayerInfo and C_PlayerInfo.CanUseItem and C_PlayerInfo.CanUseItem(itemId)
 		local red = redTooltipLines(itemId)
+		local unusable = G_RLF.WoWAPI.ItemLoot.ItemTypeUnusable("item:" .. itemId)
 		G_RLF:Print(
 			string.format(
-				"%d %s %s canUse=%s red=%s",
+				"%d %s %s canUse=%s typeUnusable=%s red=%s",
 				itemId,
 				tostring(subType),
 				tostring(equipLoc),
 				tostring(canUse),
+				tostring(unusable),
 				red == nil and "(not loaded yet, click again)" or (red == "" and "-" or red)
 			)
 		)

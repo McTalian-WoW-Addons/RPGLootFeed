@@ -618,6 +618,74 @@ local function testClientDependentFeatures()
 		end
 	end
 
+	-- Unusable equipment types: the red right-hand tooltip column, read from C_TooltipInfo
+	-- or a scan tooltip depending on the client. Item 25 is a level 1 sword.
+	runner:assertEqual(
+		type(itemLootApi.ItemTypeUnusable),
+		"function",
+		"TypeUnusable: adapter ItemLoot.ItemTypeUnusable"
+	)
+	local okType, unusableType = pcall(itemLootApi.ItemTypeUnusable, "item:25")
+	runner:assertEqual(okType, true, "TypeUnusable: adapter runs without error", okType and nil or unusableType)
+	runner:assertEqual(
+		unusableType == nil or type(unusableType) == "boolean",
+		true,
+		"TypeUnusable: returns a boolean, or nil while the item has not loaded"
+	)
+
+	-- Everything the character is wearing is usable by them, so none of it may be flagged
+	-- unusable (a false positive). An item that has not loaded yet answers nil; skip those.
+	local equippedChecked, equippedFlagged, equippedPending = 0, 0, 0
+	for slot = 1, 19 do
+		local equippedLink = itemLootApi.GetInventoryItemLink("player", slot)
+		if equippedLink then
+			local flagged = itemLootApi.ItemTypeUnusable(equippedLink)
+			if flagged == nil then
+				equippedPending = equippedPending + 1
+			else
+				equippedChecked = equippedChecked + 1
+				if flagged then
+					equippedFlagged = equippedFlagged + 1
+				end
+				runner:assertEqual(flagged, false, "TypeUnusable: equipped slot " .. slot .. " is not flagged unusable")
+			end
+		end
+	end
+
+	-- Positive control: no class can use every one of these starter weapons (a warrior
+	-- lacks none of the weapon types, so a relic is included), so at least one reads unusable.
+	local controlUnusable, controlLoaded = 0, 0
+	for _, controlId in ipairs({ 25, 35, 36, 37, 2092, 23201 }) do
+		local flagged = itemLootApi.ItemTypeUnusable("item:" .. controlId)
+		if flagged ~= nil then
+			controlLoaded = controlLoaded + 1
+			if flagged then
+				controlUnusable = controlUnusable + 1
+			end
+		else
+			G_RLF.WoWAPI.OpenContainers.RequestItemData(controlId)
+		end
+	end
+	if controlLoaded > 0 and controlUnusable == 0 then
+		G_RLF:Print("TypeUnusable: no control item was unusable for this class, so the positive case was not exercised")
+	end
+
+	-- One line to paste when comparing flavors.
+	local _, _, _, interfaceVersion = GetBuildInfo()
+	G_RLF:Print(
+		string.format(
+			"TypeUnusable summary: interface %s, %s, equipped %d checked/%d flagged/%d loading, controls %d of %d loaded unusable %d",
+			tostring(interfaceVersion),
+			(C_TooltipInfo and C_TooltipInfo.GetHyperlink) and "C_TooltipInfo" or "scan tooltip",
+			equippedChecked,
+			equippedFlagged,
+			equippedPending,
+			controlLoaded,
+			6,
+			controlUnusable
+		)
+	)
+
 	-- Bag and bank counts: our icons plus the warband atlas on clients that have it.
 	runner:assertEqual(type(itemLootApi.HasAtlas), "function", "BagBank: adapter ItemLoot.HasAtlas")
 	runner:assertEqual(type(itemLootApi.CreateAtlasMarkup), "function", "BagBank: adapter ItemLoot.CreateAtlasMarkup")

@@ -226,8 +226,69 @@ G_RLF.WoWAPI.Transmog = {
 -- Wraps WoW API calls used by the ItemLoot feature module: unit queries,
 -- C_Item stat/count/info lookups, GetCoinTextureString, CreateAtlasMarkup,
 -- PlaySoundFile, and the AuctionIntegrations price hook.
+--- A tooltip red enough to be the game's "you cannot use this" color.
+local function isRedColor(r, g)
+	return (r or 0) > 0.9 and (g or 1) < 0.2
+end
+
 ---@class RLF_WoWAPI_ItemLoot
 G_RLF.WoWAPI.ItemLoot = {
+	--- Is the item's type (armor class, weapon type, shield, relic...) one this character
+	--- cannot use? The tooltip draws the type in red in its right-hand column when the
+	--- character lacks the proficiency, while requirements such as a minimum level are
+	--- separate red lines in the left column, so only the right column is read. Returns
+	--- nil while the item's tooltip has not loaded (callers fall back to their own rules).
+	---@param itemLink string
+	---@return boolean?
+	ItemTypeUnusable = function(itemLink)
+		if not itemLink then
+			return nil
+		end
+		local placeholder = _G["RETRIEVING_ITEM_INFO"]
+		if C_TooltipInfo and C_TooltipInfo.GetHyperlink then
+			local data = C_TooltipInfo.GetHyperlink(itemLink)
+			if not data or not data.lines or #data.lines == 0 then
+				return nil
+			end
+			if placeholder and data.lines[1].leftText == placeholder then
+				return nil
+			end
+			for _, line in ipairs(data.lines) do
+				local color = line.rightColor
+				if color and isRedColor(color.r, color.g) and line.rightText and line.rightText ~= "" then
+					return true
+				end
+			end
+			return false
+		end
+		local tooltipName = "RLFItemScanTooltip"
+		local tooltip = _G[tooltipName]
+		if not tooltip then
+			tooltip = CreateFrame("GameTooltip", tooltipName, nil, "GameTooltipTemplate")
+		end
+		tooltip:SetOwner(UIParent, "ANCHOR_NONE")
+		tooltip:ClearLines()
+		tooltip:SetHyperlink(itemLink)
+		local numLines = tooltip:NumLines()
+		if numLines == 0 then
+			return nil
+		end
+		local first = _G[tooltipName .. "TextLeft1"]
+		if placeholder and first and first:GetText() == placeholder then
+			return nil
+		end
+		for i = 1, numLines do
+			local right = _G[tooltipName .. "TextRight" .. i]
+			if right and right:IsShown() then
+				local text = right:GetText()
+				local r, g = right:GetTextColor()
+				if text and text ~= "" and isRedColor(r, g) then
+					return true
+				end
+			end
+		end
+		return false
+	end,
 	--- Does the item's tooltip carry the "This Item Begins a Quest" line? Reads
 	--- C_TooltipInfo where the client has it (Retail, Forever), otherwise a hidden
 	--- tooltip frame. Returns nil while the tooltip has no lines yet (item data still
