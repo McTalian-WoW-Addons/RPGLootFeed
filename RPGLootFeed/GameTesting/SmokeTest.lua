@@ -542,10 +542,135 @@ local function testLocale()
 		"Enable Item Loot in Feed",
 		"Enable Party Loot in Feed",
 		"Show Money Total",
+		"Highlight Color",
+		"Attributions",
+		"BagBankCountsLegend",
 	}
 	for _, key in ipairs(criticalKeys) do
 		runner:assertEqual(G_RLF.L[key] ~= nil, true, "Locale: key '" .. key .. "' exists")
 	end
+end
+
+--- Client-dependent pieces the newer features lean on, so logging in on any flavor
+--- says which of them that client has: quest-start detection, bag/bank count icons,
+--- highlight glow tinting and item type names.
+local function testClientDependentFeatures()
+	local itemLootApi = G_RLF.WoWAPI.ItemLoot
+
+	-- Quest-starting items: needs the localized tooltip line and a way to read tooltips.
+	runner:assertEqual(
+		type(_G["ITEM_STARTS_QUEST"]) == "string" and _G["ITEM_STARTS_QUEST"] ~= "",
+		true,
+		"QuestStart: ITEM_STARTS_QUEST global string"
+	)
+	runner:assertEqual(
+		(C_TooltipInfo ~= nil and type(C_TooltipInfo.GetHyperlink) == "function") or type(CreateFrame) == "function",
+		true,
+		"QuestStart: a tooltip reader (C_TooltipInfo or a scan tooltip)"
+	)
+	runner:assertEqual(type(itemLootApi.ItemStartsQuest), "function", "QuestStart: adapter ItemLoot.ItemStartsQuest")
+	local ok, startsQuest = pcall(itemLootApi.ItemStartsQuest, "item:6948") -- Hearthstone, control
+	runner:assertEqual(ok, true, "QuestStart: adapter runs without error", ok and nil or startsQuest)
+	runner:assertEqual(startsQuest ~= true, true, "QuestStart: Hearthstone does not start a quest")
+
+	-- Positive control: a head that begins a quest. Retail has its own pair of items;
+	-- Forever and the classics share the older pair.
+	local retailOnly = G_RLF:IsRetail() and not G_RLF:IsForever()
+	local isAlliance = UnitFactionGroup("player") == "Alliance"
+	local questStartItemId
+	if retailOnly then
+		questStartItemId = isAlliance and 49644 or 49643
+	else
+		questStartItemId = isAlliance and 18423 or 18422
+	end
+	local okQuest, controlResult = pcall(itemLootApi.ItemStartsQuest, "item:" .. questStartItemId)
+	runner:assertEqual(
+		okQuest,
+		true,
+		"QuestStart: adapter runs on the quest-starting item",
+		okQuest and nil or controlResult
+	)
+	if controlResult == nil then
+		-- The tooltip had no lines yet, so the item is not cached. Ask for it; the next run will have it.
+		C.Item.RequestLoadItemDataByID(questStartItemId)
+		G_RLF:Print("Quest-start control item " .. questStartItemId .. " was not cached yet; run the smoke test again")
+	else
+		runner:assertEqual(controlResult, true, "QuestStart: item " .. questStartItemId .. " begins a quest")
+		local controlLines = itemLootApi.GetItemTooltipLines("item:" .. questStartItemId)
+		G_RLF:Print(
+			"Quest-start control "
+				.. questStartItemId
+				.. ": "
+				.. tostring(controlResult)
+				.. " ("
+				.. (controlLines and #controlLines or "?")
+				.. " tooltip lines)"
+		)
+		if controlResult ~= true then
+			-- Show what the tooltip actually said, to tell a text mismatch from a missing line.
+			local lines = controlLines
+			G_RLF:Print(
+				"Quest-start control: looking for "
+					.. tostring(_G["ITEM_STARTS_QUEST"])
+					.. "; tooltip lines: "
+					.. (lines and table.concat(lines, " | ") or "unavailable")
+			)
+		end
+	end
+
+	-- Bag and bank counts: our icons plus the warband atlas on clients that have it.
+	runner:assertEqual(type(itemLootApi.HasAtlas), "function", "BagBank: adapter ItemLoot.HasAtlas")
+	runner:assertEqual(type(itemLootApi.CreateAtlasMarkup), "function", "BagBank: adapter ItemLoot.CreateAtlasMarkup")
+	runner:assertEqual(type(itemLootApi.GetItemCount), "function", "BagBank: adapter ItemLoot.GetItemCount")
+	local hasWarbandAtlas = itemLootApi.HasAtlas("warbands-icon")
+	runner:assertEqual(type(hasWarbandAtlas), "boolean", "BagBank: HasAtlas returns a boolean")
+	G_RLF:Print("Client has the warband atlas: " .. tostring(hasWarbandAtlas))
+	local itemLootModule = G_RLF.RLF:GetModule(G_RLF.FeatureModule.ItemLoot, true)
+	runner:assertEqual(
+		itemLootModule ~= nil and type(itemLootModule.FormatBagBankCounts) == "function",
+		true,
+		"BagBank: ItemLoot:FormatBagBankCounts"
+	)
+
+	-- Highlight glow tinting: the row desaturates the glow texture and tints it.
+	local probe = UIParent:CreateTexture()
+	runner:assertEqual(type(probe.SetDesaturated), "function", "Highlight: Texture:SetDesaturated")
+	runner:assertEqual(type(probe.SetVertexColor), "function", "Highlight: Texture:SetVertexColor")
+	local tinted = pcall(function()
+		probe:SetDesaturated(true)
+		probe:SetVertexColor(0.64, 0.21, 0.93)
+	end)
+	runner:assertEqual(tinted, true, "Highlight: desaturate and tint a texture")
+	runner:assertEqual(type(G_RLF.DefaultItemHighlightColors), "function", "Highlight: DefaultItemHighlightColors")
+	local frames = G_RLF.db.global.frames
+	local mainItemCfg = frames and frames[G_RLF.Frames.MAIN] and frames[G_RLF.Frames.MAIN].features.itemLoot
+	if mainItemCfg then
+		for key in pairs(G_RLF.DefaultItemHighlightColors()) do
+			local color = mainItemCfg.itemHighlightColors and mainItemCfg.itemHighlightColors[key]
+			runner:assertEqual(
+				type(color) == "table" and #color >= 3,
+				true,
+				"Highlight: itemHighlightColors." .. key .. " in the main frame's DB"
+			)
+		end
+	end
+
+	-- Item type names for the duration overrides.
+	for _, classID in ipairs({ 0, 2, 4 }) do
+		runner:assertEqual(
+			type(itemLootApi.GetItemClassName(classID)),
+			"string",
+			"ItemClass: name for item class " .. classID
+		)
+	end
+
+	-- About page attributions.
+	local about = G_RLF.options and G_RLF.options.args.about
+	runner:assertEqual(
+		about ~= nil and about.args.attributions ~= nil and about.args.attributionsHeader ~= nil,
+		true,
+		"About: attributions entries"
+	)
 end
 
 --- Feature module → primary event handler map
@@ -642,6 +767,9 @@ function TestMode:SmokeTest()
 
 	runner:section("Event Handlers")
 	testEventHandlers()
+
+	runner:section("Client-Dependent Features")
+	testClientDependentFeatures()
 
 	runner:displayResults()
 end

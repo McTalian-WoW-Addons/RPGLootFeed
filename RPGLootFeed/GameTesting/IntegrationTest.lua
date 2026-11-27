@@ -164,6 +164,54 @@ local function runItemLootIntegrationTest()
 	return rowsShown
 end
 
+--- Checks the newer Item Loot features against a real item on this client. Fires no
+--- rows, so it does not change the accepted-row count.
+local function runItemFeatureChecks()
+	local module = G_RLF.RLF:GetModule(G_RLF.FeatureModule.ItemLoot) --[[@as RLF_ItemLoot]]
+	local info = TestMode.testItems[2]
+	if not info or info.itemName == nil or not info.itemLink then
+		G_RLF:Print("Item not cached, skipping Item Loot feature checks")
+		return
+	end
+
+	-- Bag and bank counts: ask for 5 of an item the player does not hold, so everything
+	-- beyond the bags is "elsewhere" and must show up as a warband or folded bank figure.
+	local text = module:FormatBagBankCounts(info.itemLink, 5)
+	runner:assertEqual(type(text), "string", "BagBank: FormatBagBankCounts returns text")
+	if type(text) == "string" then
+		runner:assertEqual(text:find("Icons/BagCount", 1, true) ~= nil, true, "BagBank: shows the bag icon")
+		if G_RLF.WoWAPI.ItemLoot.HasAtlas("warbands-icon") then
+			runner:assertEqual(text:find("warbands-icon", 1, true) ~= nil, true, "BagBank: shows the warband atlas")
+		else
+			runner:assertEqual(
+				text:find("Icons/BankCount", 1, true) ~= nil,
+				true,
+				"BagBank: folds the warband count into the bank without the atlas"
+			)
+		end
+	end
+
+	-- Quest-starting detection runs against this item's real tooltip.
+	if type(info.IsQuestItem) == "function" then
+		runner:runTestSafely(function()
+			assert(type(info:StartsQuest()) == "boolean", "StartsQuest did not return a boolean")
+			assert(type(info:IsQuestItem()) == "boolean", "IsQuestItem did not return a boolean")
+		end, "QuestStart: ItemInfo:StartsQuest on a real item")
+	end
+
+	-- A highlight color rides the payload onto the element the row reads.
+	local payload = module:BuildPayload(info, 1)
+	if payload then
+		payload.highlightColor = { 0.64, 0.21, 0.93 }
+		local e = G_RLF.LootElementBase:fromPayload(payload)
+		runner:assertEqual(
+			e.highlightColor ~= nil and e.highlightColor[1] == 0.64 and e.highlightColor[3] == 0.93,
+			true,
+			"Highlight: color carried from payload to element"
+		)
+	end
+end
+
 --- Exercises the PartyLoot BuildPayload → fromPayload → Show pipeline directly.
 local function runPartyLootIntegrationTest()
 	local module = G_RLF.RLF:GetModule(G_RLF.FeatureModule.PartyLoot) --[[@as RLF_PartyLoot]]
@@ -450,6 +498,7 @@ function TestMode:IntegrationTest()
 		newRowsExpected = newRowsExpected + runTravelPointsIntegrationTest()
 	end
 	newRowsExpected = newRowsExpected + runItemLootIntegrationTest()
+	runItemFeatureChecks()
 	if GetExpansionLevel() >= G_RLF.Expansion.WOTLK then
 		newRowsExpected = newRowsExpected + runCurrencyIntegrationTest()
 	end

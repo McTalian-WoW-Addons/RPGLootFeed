@@ -284,6 +284,28 @@ G_RLF.WoWAPI.ItemLoot = {
 		end
 		return false
 	end,
+	--- The left-hand text of each tooltip line of an item link, for diagnosing what
+	--- ItemStartsQuest sees. Secret strings are shown as "<secret>"; nil when unavailable.
+	---@param itemLink string
+	---@return string[]?
+	GetItemTooltipLines = function(itemLink)
+		if not (C_TooltipInfo and C_TooltipInfo.GetHyperlink) then
+			return nil
+		end
+		local data = C_TooltipInfo.GetHyperlink(itemLink)
+		if not data or not data.lines then
+			return nil
+		end
+		local out = {}
+		for i, line in ipairs(data.lines) do
+			local text = line.leftText
+			if issecretvalue and issecretvalue(text) then
+				text = "<secret>"
+			end
+			out[i] = tostring(text)
+		end
+		return out
+	end,
 	GetExpansionLevel = function()
 		return GetExpansionLevel()
 	end,
