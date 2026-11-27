@@ -12,6 +12,10 @@ local TestMode = G_RLF.RLF:GetModule(G_RLF.SupportModule.TestMode) --[[@as RLF_T
 --- current set checks how usability shows up for a cloth-only class (a mage).
 local PROBE_ITEM_IDS = { 25, 35, 2092, 36, 37, 16799, 16795, 16720, 16667, 16866, 14551, 1168, 23201 }
 
+local function emit(text)
+	TestMode:LogDiagnostic("Debug Probe", text)
+end
+
 local function isRed(color)
 	return color ~= nil and (color.r or 0) > 0.9 and (color.g or 1) < 0.2
 end
@@ -49,13 +53,13 @@ end
 --- Everything the character is wearing should be usable by them, so a type flagged as
 --- unusable on one of these is a false positive.
 local function probeEquippedItems()
-	G_RLF:Print("Equipped items (all should be typeUnusable=false)") -- nocheck
+	emit("Equipped items (all should be typeUnusable=false)") -- nocheck
 	for slot = 1, 19 do
 		local link = GetInventoryItemLink("player", slot)
 		if link then
 			local unusable = G_RLF.WoWAPI.ItemLoot.ItemTypeUnusable(link)
 			local _, _, subType, equipLoc = C_Item.GetItemInfoInstant(link)
-			G_RLF:Print(
+			emit(
 				string.format(
 					"slot %d %s %s %s typeUnusable=%s",
 					slot,
@@ -72,7 +76,8 @@ end
 --- Prints, for each probe item: its type, whether C_PlayerInfo.CanUseItem says the
 --- character can use it, and which tooltip lines are red.
 function TestMode:DebugProbe()
-	G_RLF:Print("Debug probe (" .. #PROBE_ITEM_IDS .. " items)") -- nocheck
+	TestMode:BeginTestRun("Debug Probe")
+	emit("Debug probe (" .. #PROBE_ITEM_IDS .. " items)") -- nocheck
 	for _, itemId in ipairs(PROBE_ITEM_IDS) do
 		-- Ask for the item every time; click the button again once they have loaded.
 		C_Item.RequestLoadItemDataByID(itemId)
@@ -80,7 +85,7 @@ function TestMode:DebugProbe()
 		local canUse = C_PlayerInfo and C_PlayerInfo.CanUseItem and C_PlayerInfo.CanUseItem(itemId)
 		local red = redTooltipLines(itemId)
 		local unusable = G_RLF.WoWAPI.ItemLoot.ItemTypeUnusable("item:" .. itemId)
-		G_RLF:Print(
+		emit(
 			string.format(
 				"%d %s %s canUse=%s typeUnusable=%s red=%s",
 				itemId,

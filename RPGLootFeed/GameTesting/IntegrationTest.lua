@@ -14,7 +14,15 @@ local runner = G_RLF.GameTestRunner:new("Integration Test", {
 	end,
 	printLine = print,
 	raiseError = error,
+	record = function(result)
+		TestMode:RecordTestResult(result)
+	end,
 })
+
+--- Print a diagnostic line and keep it with the saved results.
+local function note(text)
+	TestMode:LogDiagnostic("Integration Test", text)
+end
 
 local function runExperienceIntegrationTest()
 	local module = G_RLF.RLF:GetModule(G_RLF.FeatureModule.Experience) --[[@as RLF_Experience]]
@@ -23,7 +31,7 @@ local function runExperienceIntegrationTest()
 
 	local payload = module:BuildPayload(1336)
 	if not payload then
-		G_RLF:Print("Experience payload not created, something went wrong")
+		note("Experience payload not created, something went wrong")
 		return accepts
 	end
 	local e = LootElementBase:fromPayload(payload)
@@ -32,7 +40,7 @@ local function runExperienceIntegrationTest()
 
 	local payload2 = module:BuildPayload(1)
 	if not payload2 then
-		G_RLF:Print("Experience update payload not created, something went wrong")
+		note("Experience update payload not created, something went wrong")
 		return accepts
 	end
 	local e2 = LootElementBase:fromPayload(payload2)
@@ -45,7 +53,7 @@ local function runMoneyIntegrationTest()
 	local module = G_RLF.RLF:GetModule(G_RLF.FeatureModule.Money) --[[@as RLF_Money]]
 	local payload = module:BuildPayload(12345)
 	if not payload then
-		G_RLF:Print("Money payload not created, something went wrong")
+		note("Money payload not created, something went wrong")
 		return 0
 	end
 	local e = G_RLF.LootElementBase:fromPayload(payload)
@@ -145,9 +153,9 @@ local function runItemLootIntegrationTest()
 	local rowsShown = 0
 	local payload = module:BuildPayload(info, amountLooted)
 	if not payload then
-		G_RLF:Print("Item not cached or filtered, skipping ItemLoot test")
+		note("Item not cached or filtered, skipping ItemLoot test")
 	elseif info.itemName == nil then
-		G_RLF:Print("Item not cached, skipping ItemLoot test")
+		note("Item not cached, skipping ItemLoot test")
 	else
 		payload.highlight = true
 		local e = LootElementBase:fromPayload(payload)
@@ -170,7 +178,7 @@ local function runItemFeatureChecks()
 	local module = G_RLF.RLF:GetModule(G_RLF.FeatureModule.ItemLoot) --[[@as RLF_ItemLoot]]
 	local info = TestMode.testItems[2]
 	if not info or info.itemName == nil or not info.itemLink then
-		G_RLF:Print("Item not cached, skipping Item Loot feature checks")
+		note("Item not cached, skipping Item Loot feature checks")
 		return
 	end
 
@@ -220,7 +228,7 @@ local function runPartyLootIntegrationTest()
 	local amountLooted = 1
 	local payload = module:BuildPayload(info, amountLooted, "player")
 	if not payload then
-		G_RLF:Print("PartyLoot payload not created, something went wrong")
+		note("PartyLoot payload not created, something went wrong")
 		return 0
 	end
 	local e = LootElementBase:fromPayload(payload)
@@ -303,7 +311,7 @@ local function runCurrencyIntegrationTest()
 	local accepts = 0
 	local payload = module:BuildPayload(testObj.link, testObj.info, testObj.basicInfo)
 	if not payload then
-		G_RLF:Print("Currency payload not created, something went wrong")
+		note("Currency payload not created, something went wrong")
 		return accepts
 	end
 	local e = LootElementBase:fromPayload(payload)
@@ -311,7 +319,7 @@ local function runCurrencyIntegrationTest()
 	accepts = accepts + 1
 	payload = module:BuildPayload(testObj.link, testObj.info, testObj.basicInfo)
 	if not payload then
-		G_RLF:Print("Currency update payload not created, something went wrong")
+		note("Currency update payload not created, something went wrong")
 		return accepts
 	end
 	e = LootElementBase:fromPayload(payload)
@@ -342,7 +350,7 @@ local function runReputationPayloadIntegrationTest()
 	local accepts = 0
 	local payload = module:BuildPayload(testFactionData)
 	if not payload then
-		G_RLF:Print("Reputation payload not created, something went wrong")
+		note("Reputation payload not created, something went wrong")
 		return accepts
 	end
 	local e = LootElementBase:fromPayload(payload)
@@ -352,7 +360,7 @@ local function runReputationPayloadIntegrationTest()
 	-- Second call with same key should stack/update the existing row
 	local payload2 = module:BuildPayload(testFactionData)
 	if not payload2 then
-		G_RLF:Print("Reputation update payload not created, something went wrong")
+		note("Reputation update payload not created, something went wrong")
 		return accepts
 	end
 	payload2.quantity = payload2.quantity + 1
@@ -440,7 +448,7 @@ local function runTransmogIntegrationTest()
 	local transmogLink = "|cff9d9d9d|Htransmogappearance:285269|h[Test Transmog]|h|r"
 	local payload = module:BuildPayload(transmogLink, nil)
 	if not payload then
-		G_RLF:Print("Transmog payload not created, something went wrong")
+		note("Transmog payload not created, something went wrong")
 		return 0
 	end
 	local e = LootElementBase:fromPayload(payload)
@@ -452,7 +460,7 @@ end
 --- so the skill-delta badge can be verified without actually levelling a profession.
 function TestMode:ProfessionTest()
 	if not self.integrationTestReady then
-		G_RLF:Print("Integration test not ready")
+		note("Integration test not ready")
 		return
 	end
 
@@ -466,11 +474,12 @@ end
 
 function TestMode:IntegrationTest()
 	if not self.integrationTestReady then
-		G_RLF:Print("Integration test not ready")
+		note("Integration test not ready")
 		return
 	end
 
 	runner:reset()
+	TestMode:BeginTestRun("Integration Test")
 	local lootDisplay = G_RLF.LootDisplay
 	local mainFrame = lootDisplay:GetFrame(G_RLF.Frames.MAIN)
 	if not mainFrame then

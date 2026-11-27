@@ -16,7 +16,15 @@ local runner = G_RLF.GameTestRunner:new("Smoke Test", {
 	end,
 	printLine = print,
 	raiseError = error,
+	record = function(result)
+		TestMode:RecordTestResult(result)
+	end,
 })
+
+--- Print a diagnostic line and keep it with the saved results.
+local function note(text)
+	TestMode:LogDiagnostic("Smoke Test", text)
+end
 
 local function testGetItemInfo(id)
 	local itemName, itemLink, itemQuality, itemLevel, itemMinLevel, itemType, itemSubType, itemStackCount, itemEquipLoc, itemTexture, sellPrice, classID, subclassID, bindType, expansionID, _, isCraftingReagent =
@@ -99,7 +107,7 @@ local function testWoWGlobals()
 	local link = GetInventoryItemLink("player", legSlot)
 	local isCached = C.Item.GetItemInfo(link) ~= nil
 	if not isCached then
-		G_RLF:Print("Item not cached, skipping GetItemInfo test")
+		note("Item not cached, skipping GetItemInfo test")
 	else
 		testGetItemInfo(link)
 	end
@@ -593,11 +601,11 @@ local function testClientDependentFeatures()
 	if controlResult == nil then
 		-- The tooltip had no lines yet, so the item is not cached. Ask for it; the next run will have it.
 		C.Item.RequestLoadItemDataByID(questStartItemId)
-		G_RLF:Print("Quest-start control item " .. questStartItemId .. " was not cached yet; run the smoke test again")
+		note("Quest-start control item " .. questStartItemId .. " was not cached yet; run the smoke test again")
 	else
 		runner:assertEqual(controlResult, true, "QuestStart: item " .. questStartItemId .. " begins a quest")
 		local controlLines = itemLootApi.GetItemTooltipLines("item:" .. questStartItemId)
-		G_RLF:Print(
+		note(
 			"Quest-start control "
 				.. questStartItemId
 				.. ": "
@@ -609,7 +617,7 @@ local function testClientDependentFeatures()
 		if controlResult ~= true then
 			-- Show what the tooltip actually said, to tell a text mismatch from a missing line.
 			local lines = controlLines
-			G_RLF:Print(
+			note(
 				"Quest-start control: looking for "
 					.. tostring(_G["ITEM_STARTS_QUEST"])
 					.. "; tooltip lines: "
@@ -667,12 +675,12 @@ local function testClientDependentFeatures()
 		end
 	end
 	if controlLoaded > 0 and controlUnusable == 0 then
-		G_RLF:Print("TypeUnusable: no control item was unusable for this class, so the positive case was not exercised")
+		note("TypeUnusable: no control item was unusable for this class, so the positive case was not exercised")
 	end
 
 	-- One line to paste when comparing flavors.
 	local _, _, _, interfaceVersion = GetBuildInfo()
-	G_RLF:Print(
+	note(
 		string.format(
 			"TypeUnusable summary: interface %s, %s, equipped %d checked/%d flagged/%d loading, controls %d of %d loaded unusable %d",
 			tostring(interfaceVersion),
@@ -692,7 +700,7 @@ local function testClientDependentFeatures()
 	runner:assertEqual(type(itemLootApi.GetItemCount), "function", "BagBank: adapter ItemLoot.GetItemCount")
 	local hasWarbandAtlas = itemLootApi.HasAtlas("warbands-icon")
 	runner:assertEqual(type(hasWarbandAtlas), "boolean", "BagBank: HasAtlas returns a boolean")
-	G_RLF:Print("Client has the warband atlas: " .. tostring(hasWarbandAtlas))
+	note("Client has the warband atlas: " .. tostring(hasWarbandAtlas))
 	local itemLootModule = G_RLF.RLF:GetModule(G_RLF.FeatureModule.ItemLoot, true)
 	runner:assertEqual(
 		itemLootModule ~= nil and type(itemLootModule.FormatBagBankCounts) == "function",
@@ -805,6 +813,7 @@ end
 
 function TestMode:SmokeTest()
 	runner:reset()
+	TestMode:BeginTestRun("Smoke Test")
 
 	runner:section("WoW Globals")
 	testWoWGlobals()

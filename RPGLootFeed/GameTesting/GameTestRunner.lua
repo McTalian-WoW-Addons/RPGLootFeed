@@ -4,6 +4,12 @@ local addonName, ns = ...
 ---@class G_RLF
 local G_RLF = ns
 
+---@class RLF_GameTestResult
+---@field suite string
+---@field successes number
+---@field failures number
+---@field failed string[] One "name: expected X, got Y" entry per failed assertion
+
 --- Lightweight test runner for in-game smoke and integration tests.
 --- Pure Lua logic — no WoW API dependencies — so it can be busted-tested.
 ---@class RLF_GameTestRunner
@@ -21,7 +27,7 @@ GameTestRunner.__index = GameTestRunner
 
 --- Create a new test runner instance.
 ---@param suiteName string The name of the test suite (e.g., "Smoke Test")
----@param opts? {printHeader: fun(msg: string), printLine: fun(msg: string), raiseError: fun(msg: string)}
+---@param opts? {printHeader: fun(msg: string), printLine: fun(msg: string), raiseError: fun(msg: string), record: fun(result: RLF_GameTestResult)}
 ---@return RLF_GameTestRunner
 function GameTestRunner:new(suiteName, opts)
 	opts = opts or {}
@@ -30,6 +36,7 @@ function GameTestRunner:new(suiteName, opts)
 	instance.printHeader = opts.printHeader or print
 	instance.printLine = opts.printLine or print
 	instance.raiseError = opts.raiseError or error
+	instance.record = opts.record
 	instance:reset()
 	return instance
 end
@@ -98,6 +105,32 @@ function GameTestRunner:displayResults()
 	self.printLine("|cff00ff00Successes: " .. self.successCount .. "|r")
 	if self.failureCount > 0 then
 		self.printLine("|cffff0000Failures: " .. self.failureCount .. "|r")
+	end
+
+	-- Hand the outcome to the recorder (if any) before a failure raises, so a run that
+	-- errors out is still captured.
+	if self.record then
+		local failed = {}
+		for testName, testData in pairs(self.tests) do
+			if not testData.result then
+				table.insert(
+					failed,
+					testName
+						.. ": expected "
+						.. tostring(testData.expected)
+						.. ", got "
+						.. tostring(testData.actual)
+						.. (testData.err and (" (" .. tostring(testData.err) .. ")") or "")
+				)
+			end
+		end
+		table.sort(failed)
+		self.record({
+			suite = self.suiteName,
+			successes = self.successCount,
+			failures = self.failureCount,
+			failed = failed,
+		})
 	end
 
 	local msg = ""

@@ -2,6 +2,7 @@
   <Script file="TestMode.lua"/>
   <!--@alpha@-->
   <Script file="GameTestRunner.lua"/>
+  <Script file="TestResults.lua"/>
   <Script file="SmokeTest.lua"/>
   <Script file="IntegrationTest.lua"/>
   <Script file="ConfigTest.lua"/>
