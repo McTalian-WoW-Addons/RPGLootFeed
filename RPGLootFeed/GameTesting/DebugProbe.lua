@@ -103,7 +103,9 @@ function TestMode:DebugProbe()
 				tostring(equipLoc),
 				tostring(canUse),
 				tostring(unusable),
-				red == nil and "(not loaded yet, click again)" or (red == "" and "-" or red)
+				red == nil
+						and (C_TooltipInfo and "(not loaded yet, click again)" or "(n/a: no C_TooltipInfo on this client)")
+					or (red == "" and "-" or red)
 			)
 		)
 	end
