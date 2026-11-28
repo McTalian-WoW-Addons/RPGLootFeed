@@ -12,9 +12,19 @@ local TestMode = G_RLF.RLF:GetModule(G_RLF.SupportModule.TestMode) --[[@as RLF_T
 --- current set checks how usability shows up for a cloth-only class (a mage).
 local PROBE_ITEM_IDS = { 25, 35, 2092, 36, 37, 16799, 16795, 16720, 16667, 16866, 14551, 1168, 23201 }
 
-local function emit(text)
-	TestMode:LogDiagnostic("Debug Probe", text)
+--- A logger that prints a line and keeps it with the named suite's saved results, so each
+--- button's output is saved on its own and read back after a reload.
+---@param suite string
+---@return fun(text: string)
+local function emitter(suite)
+	return function(text)
+		TestMode:LogDiagnostic(suite, text)
+	end
 end
+
+local probeEmit = emitter("Debug Probe")
+local rowsEmit = emitter("Debug Rows")
+local edgesEmit = emitter("Debug Edges")
 
 local function isRed(color)
 	return color ~= nil and (color.r or 0) > 0.9 and (color.g or 1) < 0.2
@@ -53,13 +63,13 @@ end
 --- Everything the character is wearing should be usable by them, so a type flagged as
 --- unusable on one of these is a false positive.
 local function probeEquippedItems()
-	emit("Equipped items (all should be typeUnusable=false)") -- nocheck
+	probeEmit("Equipped items (all should be typeUnusable=false)") -- nocheck
 	for slot = 1, 19 do
 		local link = GetInventoryItemLink("player", slot)
 		if link then
 			local unusable = G_RLF.WoWAPI.ItemLoot.ItemTypeUnusable(link)
 			local _, _, subType, equipLoc = C_Item.GetItemInfoInstant(link)
-			emit(
+			probeEmit(
 				string.format(
 					"slot %d %s %s %s typeUnusable=%s",
 					slot,
@@ -77,7 +87,7 @@ end
 --- character can use it, and which tooltip lines are red.
 function TestMode:DebugProbe()
 	TestMode:BeginTestRun("Debug Probe")
-	emit("Debug probe (" .. #PROBE_ITEM_IDS .. " items)") -- nocheck
+	probeEmit("Debug probe (" .. #PROBE_ITEM_IDS .. " items)") -- nocheck
 	for _, itemId in ipairs(PROBE_ITEM_IDS) do
 		-- Ask for the item every time; click the button again once they have loaded.
 		C_Item.RequestLoadItemDataByID(itemId)
@@ -85,7 +95,7 @@ function TestMode:DebugProbe()
 		local canUse = C_PlayerInfo and C_PlayerInfo.CanUseItem and C_PlayerInfo.CanUseItem(itemId)
 		local red = redTooltipLines(itemId)
 		local unusable = G_RLF.WoWAPI.ItemLoot.ItemTypeUnusable("item:" .. itemId)
-		emit(
+		probeEmit(
 			string.format(
 				"%d %s %s canUse=%s typeUnusable=%s red=%s",
 				itemId,
@@ -117,12 +127,12 @@ local TEST_ROWS = {
 local function fireTestRow(index)
 	local row = TEST_ROWS[index]
 	if not row then
-		emit("Test rows done") -- nocheck
+		rowsEmit("Test rows done") -- nocheck
 		return
 	end
 	local link = row.item and ("item:" .. row.item) or GetInventoryItemLink("player", row.equippedSlot)
 	if not link then
-		emit(index .. ". skipped, nothing available: " .. row.label)
+		rowsEmit(index .. ". skipped, nothing available: " .. row.label)
 		return fireTestRow(index + 1)
 	end
 	local itemApi = G_RLF.WoWAPI.ItemLoot
@@ -131,20 +141,20 @@ local function fireTestRow(index)
 	Item:CreateFromItemID(itemId):ContinueOnItemLoad(function()
 		local info = G_RLF.ItemInfo:new(itemId, itemApi.GetItemInfo(link))
 		if not info then
-			emit(index .. ". could not load item for: " .. row.label)
+			rowsEmit(index .. ". could not load item for: " .. row.label)
 		else
 			if row.quality then
 				info.itemQuality = row.quality
 			end
 			local payload = itemModule:BuildPayload(info, 1)
 			if payload then
-				emit(index .. ". " .. row.label)
+				rowsEmit(index .. ". " .. row.label)
 				-- The feed merges rows that share a key, and several test rows are the same
 				-- item; give each its own.
 				payload.key = tostring(payload.key) .. "#debugrow" .. index
 				G_RLF.LootElementBase:fromPayload(payload):Show(info.itemName, info.itemQuality)
 			else
-				emit(index .. ". no row built (Item Loot disabled or filtered): " .. row.label)
+				rowsEmit(index .. ". no row built (Item Loot disabled or filtered): " .. row.label)
 			end
 		end
 		C_Timer.After(0.4, function()
@@ -156,7 +166,7 @@ end
 --- Fire the TEST_ROWS into the feed; the chat lists them in the order they appear.
 function TestMode:FireTestRows()
 	TestMode:BeginTestRun("Debug Rows")
-	emit("Firing " .. #TEST_ROWS .. " test rows") -- nocheck
+	rowsEmit("Firing " .. #TEST_ROWS .. " test rows") -- nocheck
 	fireTestRow(1)
 end
 
@@ -188,7 +198,7 @@ end
 --- candidate. Run it while the rows you are looking at are still on screen.
 function TestMode:AuditRowEdges()
 	TestMode:BeginTestRun("Debug Edges")
-	emit(
+	edgesEmit(
 		string.format(
 			"UIParent scale %.4f, pixel factor %.5f, row border size %s",
 			UIParent:GetEffectiveScale(),
@@ -200,7 +210,7 @@ function TestMode:AuditRowEdges()
 		local frame = G_RLF.LootDisplay:GetFrame(id)
 		if frame then
 			local unitsPerPixel = unitsPerPixelFor(frame)
-			emit(
+			edgesEmit(
 				string.format(
 					"frame %s (1px = %.4f units): %s %s %s %s",
 					tostring(id),
@@ -230,7 +240,7 @@ function TestMode:AuditRowEdges()
 			for rank, entry in ipairs(shown) do
 				local row = entry.row
 				local unitsPerRowPixel = unitsPerPixelFor(row)
-				emit(
+				edgesEmit(
 					string.format(
 						"  row %d (walk %d): %s %s %s %s",
 						rank,
@@ -268,11 +278,11 @@ function TestMode:AuditRowEdges()
 						table.insert(pieces, spec[1]:gsub("Edge", "") .. " none")
 					end
 				end
-				emit("      border: " .. table.concat(pieces, " | ")) -- nocheck
+				edgesEmit("      border: " .. table.concat(pieces, " | ")) -- nocheck
 			end
 		end
 	end
-	emit("Edge audit done") -- nocheck
+	edgesEmit("Edge audit done") -- nocheck
 end
 
 local buttons
