@@ -301,6 +301,59 @@ local function runLootRollsIntegrationTest()
 	return 1
 end
 
+--- Resolve the loot roll row the integration test showed, as if the roll had ended with
+--- TestWar winning, instead of waiting out the whole simulated 60 second roll.
+local function resolveLootRollIntegrationRow()
+	local row
+	for _, frame in G_RLF.LootDisplay:GetAllFrames() do
+		row = row or frame:GetRow("it_loot_roll_test")
+	end
+	runner:assertEqual(row ~= nil, true, "LootRolls: the integration roll row is on screen")
+	if not row then
+		return
+	end
+	runner:assertEqual(row._resolved == true, false, "LootRolls: the roll row is still open before it resolves")
+	runner:runTestSafely(function()
+		row:SetRollResults({
+			lootListID = 1,
+			itemHyperlink = "|cff0070dd|Hitem:14344::::::::60:::::|h[Large Brilliant Shard]|h|r",
+			rollInfos = {
+				{
+					playerName = "TestWar",
+					playerClass = "WARRIOR",
+					state = 0,
+					roll = 87,
+					isWinner = true,
+					isSelf = false,
+				},
+				{
+					playerName = "TestMage",
+					playerClass = "MAGE",
+					state = 3,
+					roll = 42,
+					isWinner = false,
+					isSelf = false,
+				},
+				{ playerName = "You", playerClass = "HUNTER", state = 5, roll = nil, isWinner = false, isSelf = true },
+			},
+			currentLeader = { playerName = "TestWar", playerClass = "WARRIOR", roll = 87 },
+			winner = {
+				playerName = "TestWar",
+				playerClass = "WARRIOR",
+				state = 0,
+				roll = 87,
+				isWinner = true,
+				isSelf = false,
+			},
+			allPassed = false,
+			startTime = 0,
+			duration = 60,
+		})
+	end, "LootRolls: SetRollResults with a winner")
+	runner:assertEqual(row._resolved, true, "LootRolls: the roll row resolves when a winner is known")
+	runner:assertEqual(row._isLootRollRow, false, "LootRolls: a resolved row behaves as a normal row")
+end
+
 --- Exercises the Currency BuildPayload → fromPayload → Show pipeline directly.
 local function runCurrencyIntegrationTest()
 	local module = G_RLF.RLF:GetModule(G_RLF.FeatureModule.Currency) --[[@as RLF_Currency]]
@@ -540,6 +593,9 @@ function TestMode:IntegrationTest()
 			-- ── Phase 3: wait for routing's OnLootReady, then verify all ────────
 			RunNextFrame(function()
 				RunNextFrame(function()
+					if lootRollsModule:IsEnabled() then
+						resolveLootRollIntegrationRow()
+					end
 					verifyRouting()
 					cleanupRouting()
 
