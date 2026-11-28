@@ -205,6 +205,56 @@ describe("GameTestRunner", function()
 		end)
 	end)
 
+	describe("record hook", function()
+		it("hands the counts and failed assertions to the recorder before raising", function()
+			local recorded
+			local runner = GameTestRunner:new("Suite", {
+				printHeader = function() end,
+				printLine = function() end,
+				raiseError = function() end,
+				record = function(result)
+					recorded = result
+				end,
+			})
+			runner:assertEqual(1, 1, "passes")
+			runner:assertEqual(1, 2, "fails")
+			runner:displayResults()
+			assert.are.equal("Suite", recorded.suite)
+			assert.are.equal(1, recorded.successes)
+			assert.are.equal(1, recorded.failures)
+			assert.same({ "fails: expected 2, got 1" }, recorded.failed)
+		end)
+
+		it("records even when the failure raises an error", function()
+			local recorded
+			local runner = GameTestRunner:new("Suite", {
+				printHeader = function() end,
+				printLine = function() end,
+				raiseError = error,
+				record = function(result)
+					recorded = result
+				end,
+			})
+			runner:assertEqual(1, 2, "fails")
+			assert.has_error(function()
+				runner:displayResults()
+			end)
+			assert.are.equal(1, recorded.failures)
+		end)
+
+		it("is optional", function()
+			local runner = GameTestRunner:new("Suite", {
+				printHeader = function() end,
+				printLine = function() end,
+				raiseError = error,
+			})
+			runner:assertEqual(1, 1, "ok")
+			assert.has_no.errors(function()
+				runner:displayResults()
+			end)
+		end)
+	end)
+
 	describe("displayResults", function()
 		it("calls printHeader with the suite name", function()
 			local headerSpy = spy.new(function() end)

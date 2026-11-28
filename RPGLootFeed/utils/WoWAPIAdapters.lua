@@ -226,10 +226,162 @@ G_RLF.WoWAPI.Transmog = {
 -- Wraps WoW API calls used by the ItemLoot feature module: unit queries,
 -- C_Item stat/count/info lookups, GetCoinTextureString, CreateAtlasMarkup,
 -- PlaySoundFile, and the AuctionIntegrations price hook.
+--- A tooltip red enough to be the game's "you cannot use this" color.
+local function isRedColor(r, g)
+	return (r or 0) > 0.9 and (g or 1) < 0.2
+end
+
 ---@class RLF_WoWAPI_ItemLoot
 G_RLF.WoWAPI.ItemLoot = {
+	--- Is the item's type (armor class, weapon type, shield, relic...) one this character
+	--- cannot use? The tooltip draws the type in red in its right-hand column when the
+	--- character lacks the proficiency, while requirements such as a minimum level are
+	--- separate red lines in the left column, so only the right column is read. Returns
+	--- nil while the item's tooltip has not loaded (callers fall back to their own rules).
+	---@param itemLink string
+	---@return boolean?
+	ItemTypeUnusable = function(itemLink)
+		if not itemLink then
+			return nil
+		end
+		local placeholder = _G["RETRIEVING_ITEM_INFO"]
+		if C_TooltipInfo and C_TooltipInfo.GetHyperlink then
+			local data = C_TooltipInfo.GetHyperlink(itemLink)
+			if not data or not data.lines or #data.lines == 0 then
+				return nil
+			end
+			if placeholder and data.lines[1].leftText == placeholder then
+				return nil
+			end
+			for _, line in ipairs(data.lines) do
+				local color = line.rightColor
+				if color and isRedColor(color.r, color.g) and line.rightText and line.rightText ~= "" then
+					return true
+				end
+			end
+			return false
+		end
+		local tooltipName = "RLFItemScanTooltip"
+		local tooltip = _G[tooltipName]
+		if not tooltip then
+			tooltip = CreateFrame("GameTooltip", tooltipName, nil, "GameTooltipTemplate")
+		end
+		tooltip:SetOwner(UIParent, "ANCHOR_NONE")
+		tooltip:ClearLines()
+		tooltip:SetHyperlink(itemLink)
+		local numLines = tooltip:NumLines()
+		if numLines == 0 then
+			return nil
+		end
+		local first = _G[tooltipName .. "TextLeft1"]
+		if placeholder and first and first:GetText() == placeholder then
+			return nil
+		end
+		for i = 1, numLines do
+			local right = _G[tooltipName .. "TextRight" .. i]
+			if right and right:IsShown() then
+				local text = right:GetText()
+				local r, g = right:GetTextColor()
+				if text and text ~= "" and isRedColor(r, g) then
+					return true
+				end
+			end
+		end
+		return false
+	end,
+	--- Does the item's tooltip carry the "This Item Begins a Quest" line? Reads
+	--- C_TooltipInfo where the client has it (Retail, Forever), otherwise a hidden
+	--- tooltip frame. Returns nil while the tooltip has no lines yet (item data still
+	--- loading) so callers do not cache a false negative.
+	---@param itemLink string
+	---@return boolean?
+	ItemStartsQuest = function(itemLink)
+		local needle = _G["ITEM_STARTS_QUEST"]
+		if not needle or not itemLink then
+			return false
+		end
+		-- An item the client has not loaded yet gives a partial tooltip (often just the
+		-- name), which would read as "does not start a quest". Ask for it and report
+		-- "unknown" so the caller does not cache or assert on a false negative.
+		local itemId = tonumber(tostring(itemLink):match("item:(%d+)"))
+		if itemId and C_Item and C_Item.IsItemDataCachedByID and not C_Item.IsItemDataCachedByID(itemId) then
+			if C_Item.RequestLoadItemDataByID then
+				C_Item.RequestLoadItemDataByID(itemId)
+			end
+			return nil
+		end
+		local function matches(text)
+			return text ~= nil and not (issecretvalue and issecretvalue(text)) and text == needle
+		end
+		if C_TooltipInfo and C_TooltipInfo.GetHyperlink then
+			local data = C_TooltipInfo.GetHyperlink(itemLink)
+			if not data or not data.lines or #data.lines == 0 then
+				return nil
+			end
+			for _, line in ipairs(data.lines) do
+				if matches(line.leftText) then
+					return true
+				end
+			end
+			return false
+		end
+		local tooltipName = "RLFItemScanTooltip"
+		local tooltip = _G[tooltipName]
+		if not tooltip then
+			tooltip = CreateFrame("GameTooltip", tooltipName, nil, "GameTooltipTemplate")
+		end
+		tooltip:SetOwner(UIParent, "ANCHOR_NONE")
+		tooltip:ClearLines()
+		tooltip:SetHyperlink(itemLink)
+		local numLines = tooltip:NumLines()
+		if numLines == 0 then
+			return nil
+		end
+		for i = 1, numLines do
+			local region = _G[tooltipName .. "TextLeft" .. i]
+			if region and matches(region:GetText()) then
+				return true
+			end
+		end
+		return false
+	end,
+	--- The left-hand text of each tooltip line of an item link, for diagnosing what
+	--- ItemStartsQuest sees. Secret strings are shown as "<secret>"; nil when unavailable.
+	---@param itemLink string
+	---@return string[]?
+	GetItemTooltipLines = function(itemLink)
+		if not (C_TooltipInfo and C_TooltipInfo.GetHyperlink) then
+			return nil
+		end
+		local data = C_TooltipInfo.GetHyperlink(itemLink)
+		if not data or not data.lines then
+			return nil
+		end
+		local out = {}
+		for i, line in ipairs(data.lines) do
+			local text = line.leftText
+			if issecretvalue and issecretvalue(text) then
+				text = "<secret>"
+			end
+			out[i] = tostring(text)
+		end
+		return out
+	end,
 	GetExpansionLevel = function()
 		return GetExpansionLevel()
+	end,
+	--- Localized name of an item class (nil on clients that do not have it). The global
+	--- GetItemClassInfo is deprecated on current clients, so C_Item is tried first.
+	GetItemClassName = function(classID)
+		local getInfo = (C_Item and C_Item.GetItemClassInfo) or GetItemClassInfo
+		if not getInfo then
+			return nil
+		end
+		local name = getInfo(classID)
+		if name == nil or name == "" then
+			return nil
+		end
+		return name
 	end,
 	UnitName = function(unit)
 		return UnitName(unit)
@@ -276,6 +428,10 @@ G_RLF.WoWAPI.ItemLoot = {
 	end,
 	CreateAtlasMarkup = function(icon, w, h, x, y)
 		return CreateAtlasMarkup(icon, w, h, x, y)
+	end,
+	--- Does this client ship the named atlas?
+	HasAtlas = function(atlas)
+		return C_Texture ~= nil and C_Texture.GetAtlasInfo ~= nil and C_Texture.GetAtlasInfo(atlas) ~= nil
 	end,
 	PlaySoundFile = function(sound)
 		return PlaySoundFile(sound)
@@ -364,6 +520,16 @@ G_RLF.WoWAPI.LootHistory = {
 }
 
 G_RLF.WoWAPI.LootRolls = {
+	--- Does this client have the named event? CANCEL_ALL_LOOT_ROLLS and MAIN_SPEC_NEED_ROLL
+	--- exist only on Retail and Forever; registering one the client lacks throws.
+	---@param event string
+	---@return boolean
+	IsValidEvent = function(event)
+		if C_EventUtils and C_EventUtils.IsEventValid then
+			return C_EventUtils.IsEventValid(event) and true or false
+		end
+		return true
+	end,
 	GetLootRollItemInfo = function(rollID)
 		return GetLootRollItemInfo(rollID)
 	end,
@@ -437,6 +603,143 @@ G_RLF.WoWAPI.LootRolls = {
 	end,
 }
 
+--- Does this client know the named event? RegisterEvent on an unknown name can error,
+--- so callers check first. Assume yes where the check itself does not exist.
+---@param event string
+---@return boolean
+local function isValidEvent(event)
+	if C_EventUtils and C_EventUtils.IsEventValid then
+		return C_EventUtils.IsEventValid(event) and true or false
+	end
+	return true
+end
+
+-- ── OpenContainers API Adapter ────────────────────────────────────────────────
+-- Wraps the bag, item and player-state calls used by the OpenContainers
+-- support module.
+---@class RLF_WoWAPI_OpenContainers
+G_RLF.WoWAPI.OpenContainers = {
+	GetContainerNumSlots = function(bag)
+		return C_Container.GetContainerNumSlots(bag)
+	end,
+	GetContainerNumFreeSlots = function(bag)
+		return C_Container.GetContainerNumFreeSlots(bag)
+	end,
+	GetContainerItemID = function(bag, slot)
+		return C_Container.GetContainerItemID(bag, slot)
+	end,
+	UseContainerItem = function(bag, slot)
+		return C_Container.UseContainerItem(bag, slot)
+	end,
+	--- Returns the item's required level (nil if the item is not cached yet).
+	GetItemRequiredLevel = function(itemId)
+		local _, _, _, _, requiredLevel = C_Item.GetItemInfo(itemId)
+		return requiredLevel
+	end,
+	GetItemName = function(itemId)
+		return C_Item.GetItemNameByID(itemId)
+	end,
+	--- Ask the server for an item's data; the name arrives via GET_ITEM_INFO_RECEIVED.
+	RequestItemData = function(itemId)
+		return C_Item.RequestLoadItemDataByID(itemId)
+	end,
+	GetLocale = function()
+		return GetLocale()
+	end,
+	After = function(seconds, fn)
+		return C_Timer.After(seconds, fn)
+	end,
+	GetTime = function()
+		return GetTime()
+	end,
+	UnitLevel = function()
+		return UnitLevel("player")
+	end,
+	--- Combat state for deciding whether a protected action is allowed. InCombatLockdown
+	--- is the one Blizzard gates protected functions on; UnitAffectingCombat can differ
+	--- at the edges, so either one counts.
+	IsInCombat = function()
+		return (InCombatLockdown and InCombatLockdown()) or UnitAffectingCombat("player") or false
+	end,
+	--- Casting reads can be secret on newer clients; a secret answer counts as "casting".
+	IsPlayerCasting = function()
+		if
+			C_Secrets
+			and C_Secrets.ShouldUnitSpellCastingBeSecret
+			and C_Secrets.ShouldUnitSpellCastingBeSecret("player")
+		then
+			return true
+		end
+		return (UnitCastingInfo("player") or UnitChannelInfo("player")) ~= nil
+	end,
+	--- A secret result (newer clients hide some state while restricted) counts as stealthed,
+	--- so we never branch on it.
+	IsStealthed = function()
+		local stealthed = IsStealthed()
+		if issecretvalue and issecretvalue(stealthed) then
+			return true
+		end
+		return stealthed and true or false
+	end,
+	IsValidEvent = function(event)
+		return isValidEvent(event)
+	end,
+	--- Listen for the player's casts ending (finished, stopped, failed, interrupted or a
+	--- channel ending) without hearing every other unit's casts: unit events only for "player".
+	---@param onCastEnd fun()
+	---@return { Start: fun(), Stop: fun() }
+	RegisterCastEndListener = function(onCastEnd)
+		local events = {
+			"UNIT_SPELLCAST_STOP",
+			"UNIT_SPELLCAST_SUCCEEDED",
+			"UNIT_SPELLCAST_FAILED",
+			"UNIT_SPELLCAST_INTERRUPTED",
+			"UNIT_SPELLCAST_CHANNEL_STOP",
+		}
+		local frame = CreateFrame("Frame")
+		frame:SetScript("OnEvent", function()
+			onCastEnd()
+		end)
+		return {
+			Start = function()
+				for _, event in ipairs(events) do
+					if isValidEvent(event) then
+						frame:RegisterUnitEvent(event, "player")
+					end
+				end
+			end,
+			Stop = function()
+				frame:UnregisterAllEvents()
+			end,
+		}
+	end,
+	--- True while the player is at a vendor, mailbox, bank, auction house, trade window, etc.
+	IsInteractionActive = function()
+		local frames = {
+			MerchantFrame,
+			MailFrame,
+			TradeFrame,
+			BankFrame,
+			GuildBankFrame,
+			AuctionFrame,
+			AuctionHouseFrame,
+			GossipFrame,
+			QuestFrame,
+			LootFrame,
+		}
+		for _, frame in pairs(frames) do
+			if frame and frame:IsShown() then
+				return true
+			end
+		end
+		return false
+	end,
+	--- Highest bag index to scan (backpack through the last equipped bag).
+	GetLastBagIndex = function()
+		return NUM_BAG_SLOTS or 4
+	end,
+}
+
 -- ── Self-register in DI container ─────────────────────────────────────────────
 if G_RLF.DI then
 	for _, key in ipairs({
@@ -450,6 +753,7 @@ if G_RLF.DI then
 		"ItemLoot",
 		"PartyLoot",
 		"LootRolls",
+		"OpenContainers",
 	}) do
 		G_RLF.DI:Register("WoWAPI." .. key, G_RLF.WoWAPI[key])
 	end

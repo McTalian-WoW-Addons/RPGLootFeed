@@ -244,10 +244,43 @@ function ItemInfo:IsMount()
 	return self.classID == Enum.ItemClass.Miscellaneous and self.subclassID == Enum.ItemMiscellaneousSubclass.Mount
 end
 
----Determine if the item is a quest item
+-- itemId -> true, for items whose tooltip showed the quest-start line. A "no" is never
+-- cached: an item's tooltip can fill in after the first read, and a stale "no" would
+-- hide a quest starter for the rest of the session.
+local startsQuestCache = {}
+
+---Does this item begin a quest? Usually a Consumable or Miscellaneous item rather than
+---a Questitem class one, so only its tooltip line gives it away.
+---@return boolean
+function ItemInfo:StartsQuest()
+	if startsQuestCache[self.itemId] then
+		return true
+	end
+	local api = G_RLF.WoWAPI and G_RLF.WoWAPI.ItemLoot
+	if not api or not api.ItemStartsQuest then
+		return false
+	end
+	local startsQuest = api.ItemStartsQuest(self.itemLink)
+	if startsQuest == nil then
+		G_RLF:LogDebug(
+			"Quest start unknown, tooltip not loaded yet",
+			addonName,
+			G_RLF.FeatureModule.ItemLoot,
+			tostring(self.itemId)
+		)
+		return false
+	end
+	if startsQuest then
+		startsQuestCache[self.itemId] = true
+		G_RLF:LogDebug("Item begins a quest", addonName, G_RLF.FeatureModule.ItemLoot, tostring(self.itemId))
+	end
+	return startsQuest
+end
+
+---Determine if the item is a quest item, or one that begins a quest
 ---@return boolean
 function ItemInfo:IsQuestItem()
-	return self.classID == Enum.ItemClass.Questitem
+	return self.classID == Enum.ItemClass.Questitem or self:StartsQuest()
 end
 
 ---Determine if the item is Legendary

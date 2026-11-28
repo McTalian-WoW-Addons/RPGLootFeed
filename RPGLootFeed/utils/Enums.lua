@@ -106,6 +106,53 @@ G_RLF.FeatureModule = {
 	LootRolls = "LootRolls",
 }
 
+--- Item classes that can have their own display duration, in the order they are
+--- listed in the options (Enum.ItemClass values: Consumable, Container, Weapon,
+--- Gem, Armor, Reagent, Tradegoods, ItemEnhancement, Recipe, Questitem, Key,
+--- Miscellaneous, Glyph, Battlepet, Profession). Classes a client does not have
+--- are simply not shown in the options.
+G_RLF.ItemDurationClasses = { 0, 1, 2, 3, 4, 5, 7, 8, 9, 12, 13, 15, 16, 17, 19 }
+
+--- Is this the name of an item class the game keeps only for old data? Classic clients
+--- list classes such as Jewelry and Generic as "(OBSOLETE)" (translated on other
+--- locales), and no item uses them. Real class names never contain parentheses, so a
+--- parenthesised name, or one that says obsolete, is treated as one.
+---@param name string?
+---@return boolean
+function G_RLF.IsObsoleteItemClassName(name)
+	if not name then
+		return false
+	end
+	if name:lower():find("obsolete", 1, true) then
+		return true
+	end
+	return name:find("(", 1, true) ~= nil or name:find("\239\188\136", 1, true) ~= nil
+end
+
+--- A fresh per-frame table of item type durations, 0 (no override) for every class.
+---@return table<number, { duration: number }>
+function G_RLF.DefaultItemTypeSettings()
+	local settings = {}
+	for _, classID in ipairs(G_RLF.ItemDurationClasses) do
+		settings[classID] = { duration = 0 }
+	end
+	return settings
+end
+
+--- Glow color per item highlight reason (the itemHighlights keys), so a highlighted
+--- row says why it is highlighted. Returns a fresh table each call for AceDB defaults.
+---@return table<string, number[]>
+function G_RLF.DefaultItemHighlightColors()
+	return {
+		mounts = { 0.64, 0.21, 0.93 },
+		legendary = { 1, 0.5, 0 },
+		betterThanEquipped = { 0.12, 1, 0 },
+		hasTertiaryOrSocket = { 0, 0.8, 1 },
+		quest = { 1, 0.82, 0 },
+		transmog = { 1, 0.4, 0.8 },
+	}
+end
+
 ---@enum G_RLF.BlizzModule
 G_RLF.BlizzModule = {
 	BossBanner = "BossBanner",
@@ -121,6 +168,7 @@ G_RLF.SupportModule = {
 	Logger = "Logger",
 	LootDisplay = "LootDisplay",
 	Notifications = "Notifications",
+	OpenContainers = "OpenContainers",
 	TestMode = "TestMode",
 }
 

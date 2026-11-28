@@ -4,6 +4,13 @@ local addonName, ns = ...
 ---@class G_RLF
 local G_RLF = ns
 
+-- Bag/bank count icons: our own textures (Twemoji, CC-BY 4.0, credited on the About page).
+-- Distinct colors (red pack, grey-blue bank) so they stay readable at row text size, where
+-- the game's brown bag and crate icons blur together. 64px TGA, shipped on every flavor.
+local BAG_ICON = "Interface/AddOns/RPGLootFeed/Icons/BagCount"
+local BANK_ICON = "Interface/AddOns/RPGLootFeed/Icons/BankCount"
+local WARBAND_ICON_ATLAS = "warbands-icon"
+
 -- logging and DI injected via FeatureBase
 
 ---@class RLF_ItemLoot: RLF_Module, AceEvent-3.0, AceBucket-3.0
@@ -39,6 +46,42 @@ local function getPriceParts(icon, fontSize, price)
 	return gold, silver, copper, icon or "", iconSize
 end
 
+--- The link of whatever the player has equipped in the slot this item would go in
+--- (the first occupied one for items with several slots, such as rings), or nil.
+---@param info RLF_ItemInfo
+---@return string?
+local function GetEquippedLinkForItem(info)
+	local slot = G_RLF.equipSlotMap[info.itemEquipLoc]
+	if type(slot) == "table" then
+		for _, s in ipairs(slot) do
+			local link = ItemLoot.itemLootApi.GetInventoryItemLink("player", s)
+			if link then
+				return link
+			end
+		end
+		return nil
+	end
+	if slot == nil then
+		return nil
+	end
+	return ItemLoot.itemLootApi.GetInventoryItemLink("player", slot)
+end
+
+--- Row 2 shows the equipment type for equippable gear. A grey item is only worth that
+--- when the player could actually wear it and has nothing in that slot; otherwise it is
+--- junk and the row shows what it sells for instead.
+---@param info RLF_ItemInfo
+---@return boolean
+local function ShowsEquipmentType(info)
+	if not info:IsEquippableItem() then
+		return false
+	end
+	if info.itemQuality ~= ItemLoot.itemQualEnum.Poor then
+		return true
+	end
+	return not info:IsUnusableType() and GetEquippedLinkForItem(info) == nil
+end
+
 -- ── Context provider ──────────────────────────────────────────────────────────
 
 local function createItemLootContextProvider()
@@ -72,7 +115,7 @@ local function createItemLootContextProvider()
 			return
 		end
 
-		if info:IsEquippableItem() then
+		if ShowsEquipmentType(info) then
 			local secondaryText = ""
 			if info:HasItemRollBonus() then
 				secondaryText = info:GetItemRollText()
@@ -95,6 +138,7 @@ local function createItemLootContextProvider()
 		local pricesForSellableItems = itemCfg.pricesForSellableItems
 		local plainTextPrices = itemCfg.plainTextPrices
 		local plainTextPricesColored = itemCfg.plainTextPricesColored
+		local combinedPriceIcons = itemCfg.combinedPriceIcons
 		if info.sellPrice and info.sellPrice > 0 then
 			vendorPrice = info.sellPrice
 		end
@@ -178,26 +222,33 @@ local function createItemLootContextProvider()
 			end
 		end
 
+		-- The combined modes only carry the source icons when the player opts in
+		-- (combinedPriceIcons); otherwise the order alone tells the prices apart.
+		local function sourcePrice(icon, price)
+			local prefix = combinedPriceIcons and iconMarkup(icon) or ""
+			return prefix .. plainPrice(price * effectiveQuantity)
+		end
+
 		local str = ""
 		if pricesForSellableItems == G_RLF.PricesEnum.VendorAH then
 			if showVendorPrice then
-				str = str .. plainPrice(vendorPrice * effectiveQuantity)
+				str = str .. sourcePrice(vendorIcon, vendorPrice)
 			end
 			if showVendorPrice and showAuctionPrice then
 				str = str .. "    "
 			end
 			if showAuctionPrice then
-				str = str .. plainPrice(auctionPrice * effectiveQuantity)
+				str = str .. sourcePrice(auctionIcon, auctionPrice)
 			end
 		elseif pricesForSellableItems == G_RLF.PricesEnum.AHVendor then
 			if showAuctionPrice then
-				str = str .. plainPrice(auctionPrice * effectiveQuantity)
+				str = str .. sourcePrice(auctionIcon, auctionPrice)
 			end
 			if showAuctionPrice and showVendorPrice then
 				str = str .. "    "
 			end
 			if showVendorPrice then
-				str = str .. plainPrice(vendorPrice * effectiveQuantity)
+				str = str .. sourcePrice(vendorIcon, vendorPrice)
 			end
 		end
 		context.secondaryText = str
@@ -240,18 +291,7 @@ end
 
 local function IsBetterThanEquipped(info)
 	if info:IsEligibleEquipment() then
-		local equippedLink
-		local slot = G_RLF.equipSlotMap[info.itemEquipLoc]
-		if type(slot) == "table" then
-			for _, s in ipairs(slot) do
-				equippedLink = ItemLoot.itemLootApi.GetInventoryItemLink("player", s)
-				if equippedLink then
-					break
-				end
-			end
-		else
-			equippedLink = ItemLoot.itemLootApi.GetInventoryItemLink("player", slot)
-		end
+		local equippedLink = GetEquippedLinkForItem(info)
 
 		if not equippedLink then
 			return false
@@ -345,15 +385,17 @@ function ItemLoot:BuildPayload(info, quantity, fromLink)
 
 	-- ── Highlight ────────────────────────────────────────────────────────────
 	local itemHighlights = itemConfig.itemHighlights or {}
-	local highlightReason = (isMount and itemHighlights.mounts and "Mount")
-		or (isLegendary and itemHighlights.legendary and "Legendary")
-		or (isBetterThanEquipped and itemHighlights.betterThanEquipped and "Better than Equipped")
-		or (isQuestItem and itemHighlights.quest and "Quest Item")
-		or (hasTertiaryOrSocket and itemHighlights.tertiaryOrSocket and "Tertiary or Socket")
-		or (isNewTransmog and itemHighlights.transmog and "New Transmog")
-	local highlight = highlightReason and true or false
+	-- First matching reason wins; the key is the itemHighlights / itemHighlightColors key.
+	local highlightKey = (isMount and itemHighlights.mounts and "mounts")
+		or (isLegendary and itemHighlights.legendary and "legendary")
+		or (isBetterThanEquipped and itemHighlights.betterThanEquipped and "betterThanEquipped")
+		or (isQuestItem and itemHighlights.quest and "quest")
+		or (hasTertiaryOrSocket and itemHighlights.hasTertiaryOrSocket and "hasTertiaryOrSocket")
+		or (isNewTransmog and itemHighlights.transmog and "transmog")
+	local highlight = highlightKey and true or false
+	local highlightColor = highlightKey and (itemConfig.itemHighlightColors or {})[highlightKey] or nil
 	if highlight then
-		self:LogDebug("Highlighted because of " .. highlightReason, addonName, self.moduleName, key)
+		self:LogDebug("Highlighted because of " .. highlightKey, addonName, self.moduleName, key)
 	end
 
 	-- ── Quest color override ─────────────────────────────────────────────────
@@ -421,6 +463,7 @@ function ItemLoot:BuildPayload(info, quantity, fromLink)
 		isLink = true,
 		quantity = quantity,
 		highlight = highlight,
+		highlightColor = highlightColor,
 		sound = soundPath,
 		r = r,
 		g = g,
@@ -428,6 +471,7 @@ function ItemLoot:BuildPayload(info, quantity, fromLink)
 		a = a,
 		filterItemId = info.itemId,
 		filterItemQuality = info.itemQuality,
+		filterItemClassId = info.classID,
 		moduleRef = ItemLoot,
 	}
 
@@ -467,7 +511,7 @@ function ItemLoot:BuildPayload(info, quantity, fromLink)
 	-- single-price modes when plainTextPrices is enabled, so they fall back
 	-- to the plain-text secondaryTextFn above.
 	payload.secondaryCoinDataFn = function(existingQuantity)
-		if info:IsEquippableItem() then
+		if ShowsEquipmentType(info) then
 			return nil
 		end
 		local effectiveQuantity = (existingQuantity or 0) + quantity
@@ -522,6 +566,11 @@ function ItemLoot:BuildPayload(info, quantity, fromLink)
 			return nil
 		end
 		local itemCount = ItemLoot.itemLootApi.GetItemCount(itemLink, true, false, true, true)
+		if itemCount > 1 and G_RLF.db.global.misc.showBagBankCounts then
+			-- Same visibility rule as the plain total (only shown above 1), but split by
+			-- where the items are. A nil breakdown (nothing to split) keeps the total.
+			itemCount = ItemLoot:FormatBagBankCounts(itemLink, itemCount) or itemCount
+		end
 		return itemCount,
 			{
 				color = G_RLF:RGBAToHexFormat(unpack(itemDb.itemCountTextColor)),
@@ -530,6 +579,39 @@ function ItemLoot:BuildPayload(info, quantity, fromLink)
 	end
 
 	return payload
+end
+
+--- Where the player's copies of an item are, as inline icons and numbers:
+--- "[bag] 12  [bank] 30  [warband] 5". Bags always show; bank and warband bank only
+--- when they hold some. The bag and bank icons are our own textures; the warband bank
+--- uses the game's atlas where the client has it, otherwise the warband count is folded
+--- into the bank number so the parts still add up to the total.
+---@param itemLink string
+---@param total number The total across everywhere (bags, bank, reagent bank, warband bank)
+---@return string?
+function ItemLoot:FormatBagBankCounts(itemLink, total)
+	local api = self.itemLootApi
+	local bags = api.GetItemCount(itemLink, false, false, false, false)
+	local withBank = api.GetItemCount(itemLink, true, false, true, false)
+	local bank = math.max(withBank - bags, 0)
+	local warband = math.max(total - withBank, 0)
+
+	local fontSize = (G_RLF.DbAccessor:Styling(G_RLF.Frames.MAIN) or {}).fontSize or 10
+	local size = fontSize + 4
+	local hasWarbandIcon = api.HasAtlas(WARBAND_ICON_ATLAS)
+	if warband > 0 and not hasWarbandIcon then
+		bank = bank + warband
+		warband = 0
+	end
+
+	local parts = { ("|T%s:%d:%d|t %d"):format(BAG_ICON, size, size, bags) }
+	if bank > 0 then
+		table.insert(parts, ("|T%s:%d:%d|t %d"):format(BANK_ICON, size, size, bank))
+	end
+	if warband > 0 then
+		table.insert(parts, api.CreateAtlasMarkup(WARBAND_ICON_ATLAS, size, size) .. " " .. warband)
+	end
+	return table.concat(parts, "  ")
 end
 
 function ItemLoot:OnInitialize()

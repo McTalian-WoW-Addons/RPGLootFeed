@@ -16,7 +16,15 @@ local runner = G_RLF.GameTestRunner:new("Smoke Test", {
 	end,
 	printLine = print,
 	raiseError = error,
+	record = function(result)
+		TestMode:RecordTestResult(result)
+	end,
 })
+
+--- Print a diagnostic line and keep it with the saved results.
+local function note(text)
+	TestMode:LogDiagnostic("Smoke Test", text)
+end
 
 local function testGetItemInfo(id)
 	local itemName, itemLink, itemQuality, itemLevel, itemMinLevel, itemType, itemSubType, itemStackCount, itemEquipLoc, itemTexture, sellPrice, classID, subclassID, bindType, expansionID, _, isCraftingReagent =
@@ -99,7 +107,7 @@ local function testWoWGlobals()
 	local link = GetInventoryItemLink("player", legSlot)
 	local isCached = C.Item.GetItemInfo(link) ~= nil
 	if not isCached then
-		G_RLF:Print("Item not cached, skipping GetItemInfo test")
+		note("Item not cached, skipping GetItemInfo test")
 	else
 		testGetItemInfo(link)
 	end
@@ -542,10 +550,109 @@ local function testLocale()
 		"Enable Item Loot in Feed",
 		"Enable Party Loot in Feed",
 		"Show Money Total",
+		"Highlight Color",
+		"Attributions",
+		"BagBankCountsLegend",
 	}
 	for _, key in ipairs(criticalKeys) do
 		runner:assertEqual(G_RLF.L[key] ~= nil, true, "Locale: key '" .. key .. "' exists")
 	end
+end
+
+--- Client-dependent pieces the newer features lean on, so logging in on any flavor
+--- says which of them that client has: quest-start detection, bag/bank count icons,
+--- highlight glow tinting and item type names.
+local function testClientDependentFeatures()
+	local itemLootApi = G_RLF.WoWAPI.ItemLoot
+
+	-- Quest-starting items: needs the localized tooltip line and a way to read tooltips.
+	runner:assertEqual(
+		type(_G["ITEM_STARTS_QUEST"]) == "string" and _G["ITEM_STARTS_QUEST"] ~= "",
+		true,
+		"QuestStart: ITEM_STARTS_QUEST global string"
+	)
+	runner:assertEqual(
+		(C_TooltipInfo ~= nil and type(C_TooltipInfo.GetHyperlink) == "function") or type(CreateFrame) == "function",
+		true,
+		"QuestStart: a tooltip reader (C_TooltipInfo or a scan tooltip)"
+	)
+	runner:assertEqual(type(itemLootApi.ItemStartsQuest), "function", "QuestStart: adapter ItemLoot.ItemStartsQuest")
+	local ok, startsQuest = pcall(itemLootApi.ItemStartsQuest, "item:6948") -- Hearthstone, control
+	runner:assertEqual(ok, true, "QuestStart: adapter runs without error", ok and nil or startsQuest)
+	runner:assertEqual(
+		startsQuest == nil or type(startsQuest) == "boolean",
+		true,
+		"QuestStart: returns a boolean or nil"
+	)
+
+	-- Unusable equipment types: the red right-hand tooltip column, read from C_TooltipInfo
+	-- or a scan tooltip depending on the client. Item 25 is a level 1 sword.
+	runner:assertEqual(
+		type(itemLootApi.ItemTypeUnusable),
+		"function",
+		"TypeUnusable: adapter ItemLoot.ItemTypeUnusable"
+	)
+	local okType, unusableType = pcall(itemLootApi.ItemTypeUnusable, "item:25")
+	runner:assertEqual(okType, true, "TypeUnusable: adapter runs without error", okType and nil or unusableType)
+	runner:assertEqual(
+		unusableType == nil or type(unusableType) == "boolean",
+		true,
+		"TypeUnusable: returns a boolean, or nil while the item has not loaded"
+	)
+
+	-- Bag and bank counts: our icons plus the warband atlas on clients that have it.
+	runner:assertEqual(type(itemLootApi.HasAtlas), "function", "BagBank: adapter ItemLoot.HasAtlas")
+	runner:assertEqual(type(itemLootApi.CreateAtlasMarkup), "function", "BagBank: adapter ItemLoot.CreateAtlasMarkup")
+	runner:assertEqual(type(itemLootApi.GetItemCount), "function", "BagBank: adapter ItemLoot.GetItemCount")
+	local hasWarbandAtlas = itemLootApi.HasAtlas("warbands-icon")
+	runner:assertEqual(type(hasWarbandAtlas), "boolean", "BagBank: HasAtlas returns a boolean")
+	note("Client has the warband atlas: " .. tostring(hasWarbandAtlas))
+	local itemLootModule = G_RLF.RLF:GetModule(G_RLF.FeatureModule.ItemLoot, true)
+	runner:assertEqual(
+		itemLootModule ~= nil and type(itemLootModule.FormatBagBankCounts) == "function",
+		true,
+		"BagBank: ItemLoot:FormatBagBankCounts"
+	)
+
+	-- Highlight glow tinting: the row desaturates the glow texture and tints it.
+	local probe = UIParent:CreateTexture()
+	runner:assertEqual(type(probe.SetDesaturated), "function", "Highlight: Texture:SetDesaturated")
+	runner:assertEqual(type(probe.SetVertexColor), "function", "Highlight: Texture:SetVertexColor")
+	local tinted = pcall(function()
+		probe:SetDesaturated(true)
+		probe:SetVertexColor(0.64, 0.21, 0.93)
+	end)
+	runner:assertEqual(tinted, true, "Highlight: desaturate and tint a texture")
+	runner:assertEqual(type(G_RLF.DefaultItemHighlightColors), "function", "Highlight: DefaultItemHighlightColors")
+	local frames = G_RLF.db.global.frames
+	local mainItemCfg = frames and frames[G_RLF.Frames.MAIN] and frames[G_RLF.Frames.MAIN].features.itemLoot
+	if mainItemCfg then
+		for key in pairs(G_RLF.DefaultItemHighlightColors()) do
+			local color = mainItemCfg.itemHighlightColors and mainItemCfg.itemHighlightColors[key]
+			runner:assertEqual(
+				type(color) == "table" and #color >= 3,
+				true,
+				"Highlight: itemHighlightColors." .. key .. " in the main frame's DB"
+			)
+		end
+	end
+
+	-- Item type names for the duration overrides.
+	for _, classID in ipairs({ 0, 2, 4 }) do
+		runner:assertEqual(
+			type(itemLootApi.GetItemClassName(classID)),
+			"string",
+			"ItemClass: name for item class " .. classID
+		)
+	end
+
+	-- About page attributions.
+	local about = G_RLF.options and G_RLF.options.args.about
+	runner:assertEqual(
+		about ~= nil and about.args.attributions ~= nil and about.args.attributionsHeader ~= nil,
+		true,
+		"About: attributions entries"
+	)
 end
 
 --- Feature module → primary event handler map
@@ -610,8 +717,161 @@ local function testEventHandlers()
 	end
 end
 
+--- The checks that need real items. Items are not cached at login, so ask for all of them,
+--- wait for them to load, then assert; this runs after the main smoke test and records its own result.
+local itemRunner = G_RLF.GameTestRunner:new("Smoke Test: Items", {
+	printHeader = function(msg)
+		G_RLF:Print(msg)
+	end,
+	printLine = print,
+	raiseError = error,
+	record = function(result)
+		TestMode:RecordTestResult(result)
+	end,
+})
+
+local function itemControlNote(text)
+	TestMode:LogDiagnostic("Smoke Test: Items", text)
+end
+
+local function runItemControlChecks(questStartItemId, typeControlIds)
+	local itemLootApi = G_RLF.WoWAPI.ItemLoot
+	itemRunner:reset()
+
+	-- A head that begins a quest.
+	local startsQuest = itemLootApi.ItemStartsQuest("item:" .. questStartItemId)
+	if startsQuest == nil then
+		itemControlNote("Quest-start control item " .. questStartItemId .. " did not load in time")
+	else
+		itemRunner:assertEqual(startsQuest, true, "QuestStart: item " .. questStartItemId .. " begins a quest")
+		if startsQuest ~= true then
+			local lines = itemLootApi.GetItemTooltipLines("item:" .. questStartItemId)
+			itemControlNote(
+				"Quest-start control: looking for "
+					.. tostring(_G["ITEM_STARTS_QUEST"])
+					.. "; tooltip lines: "
+					.. (lines and table.concat(lines, " | ") or "unavailable")
+			)
+		end
+	end
+	local hearthstone = itemLootApi.ItemStartsQuest("item:6948")
+	if hearthstone ~= nil then
+		itemRunner:assertEqual(hearthstone, false, "QuestStart: Hearthstone does not start a quest")
+	end
+
+	-- No class can use every one of these starter weapons (a warrior lacks none of the weapon
+	-- types, so a relic is included), so at least one reads unusable.
+	local loaded, unusable = 0, 0
+	for _, controlId in ipairs(typeControlIds) do
+		local flagged = itemLootApi.ItemTypeUnusable("item:" .. controlId)
+		if flagged ~= nil then
+			loaded = loaded + 1
+			if flagged then
+				unusable = unusable + 1
+			end
+		end
+	end
+	if loaded == #typeControlIds then
+		itemRunner:assertEqual(unusable > 0, true, "TypeUnusable: at least one control item is unusable for this class")
+	end
+	itemControlNote(
+		string.format("TypeUnusable controls: %d of %d loaded, %d unusable", loaded, #typeControlIds, unusable)
+	)
+
+	-- Everything the character is wearing is usable by them, so none of it may be flagged
+	-- unusable (a false positive).
+	local equippedChecked, equippedFlagged, equippedPending = 0, 0, 0
+	for slot = 1, 19 do
+		local equippedLink = itemLootApi.GetInventoryItemLink("player", slot)
+		if equippedLink then
+			local flagged = itemLootApi.ItemTypeUnusable(equippedLink)
+			if flagged == nil then
+				equippedPending = equippedPending + 1
+			else
+				equippedChecked = equippedChecked + 1
+				if flagged then
+					equippedFlagged = equippedFlagged + 1
+				end
+				itemRunner:assertEqual(
+					flagged,
+					false,
+					"TypeUnusable: equipped slot " .. slot .. " is not flagged unusable"
+				)
+			end
+		end
+	end
+	local _, _, _, interfaceVersion = GetBuildInfo()
+	itemControlNote(
+		string.format(
+			"TypeUnusable summary: interface %s, %s, equipped %d checked/%d flagged/%d loading",
+			tostring(interfaceVersion),
+			(C_TooltipInfo and C_TooltipInfo.GetHyperlink) and "C_TooltipInfo" or "scan tooltip",
+			equippedChecked,
+			equippedFlagged,
+			equippedPending
+		)
+	)
+
+	itemRunner:displayResults()
+end
+
+--- Request the control items, wait until they have all loaded (or a timeout), then check.
+local function startItemControlChecks()
+	if not (Item and Item.CreateFromItemID) then
+		return
+	end
+	local questStartItemId
+	if G_RLF:IsRetail() and not G_RLF:IsForever() then
+		questStartItemId = UnitFactionGroup("player") == "Alliance" and 49644 or 49643
+	else
+		questStartItemId = UnitFactionGroup("player") == "Alliance" and 18423 or 18422
+	end
+	local typeControlIds = { 25, 35, 36, 37, 2092, 23201 }
+	local ids = { questStartItemId, 6948 }
+	for _, id in ipairs(typeControlIds) do
+		table.insert(ids, id)
+	end
+
+	-- The equipped items are checked too, so wait for those as well.
+	local itemLinks = {}
+	for slot = 1, 19 do
+		local equippedLink = G_RLF.WoWAPI.ItemLoot.GetInventoryItemLink("player", slot)
+		if equippedLink then
+			table.insert(itemLinks, equippedLink)
+		end
+	end
+
+	TestMode:BeginTestRun("Smoke Test: Items")
+	local pending, finished = #ids + #itemLinks, false
+	local function finish()
+		if finished then
+			return
+		end
+		finished = true
+		-- A tooltip can lag a moment behind the item data, so give it a beat.
+		C_Timer.After(1, function()
+			runItemControlChecks(questStartItemId, typeControlIds)
+		end)
+	end
+	local function onLoaded()
+		pending = pending - 1
+		if pending == 0 then
+			finish()
+		end
+	end
+	for _, id in ipairs(ids) do
+		Item:CreateFromItemID(id):ContinueOnItemLoad(onLoaded)
+	end
+	for _, link in ipairs(itemLinks) do
+		Item:CreateFromItemLink(link):ContinueOnItemLoad(onLoaded)
+	end
+	-- Items the realm does not have never load; do not wait for them forever.
+	C_Timer.After(10, finish)
+end
+
 function TestMode:SmokeTest()
 	runner:reset()
+	TestMode:BeginTestRun("Smoke Test")
 
 	runner:section("WoW Globals")
 	testWoWGlobals()
@@ -642,6 +902,10 @@ function TestMode:SmokeTest()
 
 	runner:section("Event Handlers")
 	testEventHandlers()
+
+	runner:section("Client-Dependent Features")
+	testClientDependentFeatures()
+	startItemControlChecks()
 
 	runner:displayResults()
 end

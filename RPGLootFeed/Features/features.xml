@@ -13,4 +13,5 @@
     <Include file="TravelPoints/TravelPoints.xml"/>
     <Include file="Transmog/Transmog.xml"/>
     <Include file="LootRolls/LootRolls.xml"/>
+    <Include file="OpenContainers/OpenContainers.xml"/>
 </Ui>

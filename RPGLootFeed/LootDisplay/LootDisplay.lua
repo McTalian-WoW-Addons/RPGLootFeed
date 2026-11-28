@@ -117,6 +117,8 @@ function LootDisplay:OnEnable()
 	self:RegisterEvent("PLAYER_REGEN_DISABLED", "OnPlayerCombatChange")
 	self:RegisterEvent("PLAYER_REGEN_ENABLED", "OnPlayerCombatChange")
 	self:RegisterBucketEvent("BAG_UPDATE_DELAYED", 0.5, "BAG_UPDATE_DELAYED")
+	self:RegisterBucketEvent({ "UI_SCALE_CHANGED", "DISPLAY_SIZE_CHANGED" }, 0.5, "OnUIScaleChanged")
+	self:RegisterEvent("PLAYER_ENTERING_WORLD", "OnPlayerEnteringWorld")
 	self:RegisterMessage("RLF_NEW_LOOT", "OnLootReady")
 	self:RegisterBucketMessage("RLF_ROW_RETURNED", 0.3, "OnRowReturn")
 
@@ -131,6 +133,30 @@ function LootDisplay:OnEnable()
 	end)
 
 	G_RLF.ClassicToRetail:InstallItemButtonFallbacks()
+end
+
+--- A new UI scale or window size changes how big a physical pixel is in UI units, so
+--- the pixel-snapped sizes and offsets have to be worked out again or the 1px borders
+--- end up off the pixel grid. That includes the spacing between rows: rows are placed
+--- one padding apart, and a padding snapped at the wrong scale drifts every row further
+--- off the grid (a third of a pixel by the sixth row), which drops a side of its border.
+function LootDisplay:OnUIScaleChanged()
+	for id, frame in pairs(lootFrames) do
+		if frame then
+			self:UpdateSize(id)
+			self:UpdatePosition(id)
+			self:UpdateRowPositions(id)
+		end
+	end
+end
+
+--- The frames are built while the addon loads, before the client has applied the saved UI
+--- scale, so everything they snapped to pixels used the wrong scale. Redo it once the
+--- world is up and the scale has settled.
+function LootDisplay:OnPlayerEnteringWorld()
+	RunNextFrame(function()
+		self:OnUIScaleChanged()
+	end)
 end
 
 function LootDisplay:OnDisableAllInteractionChange()
@@ -220,7 +246,13 @@ function LootDisplay:UpdatePosition(frame)
 	end
 	local positioningDb = G_RLF.DbAccessor:Positioning(frame or G_RLF.Frames.MAIN)
 	f:ClearAllPoints()
-	f:SetPoint(positioningDb.anchorPoint, _G[positioningDb.relativePoint], positioningDb.xOffset, positioningDb.yOffset)
+	-- Whole-pixel offsets keep the 1px row borders from rounding differently row to row.
+	f:SetPoint(
+		positioningDb.anchorPoint,
+		_G[positioningDb.relativePoint],
+		G_RLF.PerfPixel.PScale(positioningDb.xOffset),
+		G_RLF.PerfPixel.PScale(positioningDb.yOffset)
+	)
 end
 
 --- Update row positions for the frame

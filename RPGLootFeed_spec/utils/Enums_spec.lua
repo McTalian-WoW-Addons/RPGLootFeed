@@ -13,6 +13,28 @@ describe("Enums", function()
 		assert(loadfile("RPGLootFeed/utils/Enums.lua"))("TestAddon", ns)
 	end)
 
+	describe("IsObsoleteItemClassName", function()
+		it("flags the classic client's obsolete class names", function()
+			assert.is_true(ns.IsObsoleteItemClassName("Jewelry (OBSOLETE)"))
+			assert.is_true(ns.IsObsoleteItemClassName("Generic (OBSOLETE)"))
+		end)
+
+		it("flags a translated or full-width parenthesised name", function()
+			assert.is_true(ns.IsObsoleteItemClassName("Schmuck (VERALTET)"))
+			assert.is_true(ns.IsObsoleteItemClassName("珠宝\239\188\136废弃）"))
+		end)
+
+		it("does not flag a real class", function()
+			for _, name in ipairs({ "Consumable", "Armor", "Trade Goods", "Item Enhancement", "Battle Pets" }) do
+				assert.is_false(ns.IsObsoleteItemClassName(name), name)
+			end
+		end)
+
+		it("treats a missing name as not obsolete", function()
+			assert.is_false(ns.IsObsoleteItemClassName(nil))
+		end)
+	end)
+
 	it("defines Expansion enum", function()
 		assert.is_not_nil(ns.Expansion)
 	end)

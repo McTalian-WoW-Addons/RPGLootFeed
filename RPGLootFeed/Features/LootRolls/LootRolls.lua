@@ -52,6 +52,51 @@ function LootRolls:FindRollRows(rollID)
 	return results
 end
 
+--- Is this roll still open for rolling? nil when the client cannot say.
+---@param rollID number
+---@return boolean?
+function LootRolls:IsRollOpen(rollID)
+	local activeIDs = self._adapter.GetActiveLootRollIDs and self._adapter.GetActiveLootRollIDs()
+	if type(activeIDs) ~= "table" then
+		return nil
+	end
+	for _, id in ipairs(activeIDs) do
+		if id == rollID then
+			return true
+		end
+	end
+	return false
+end
+
+--- The player rolled on rollID, through RLF's buttons, Blizzard's roll frame, a
+--- macro or a gamepad. Put any live row for it into its "rolled" state, and tell
+--- the Blizzard frame override so it never reveals that roll's frame again.
+---@param rollID number
+---@param rollType number
+function LootRolls:OnPlayerRolled(rollID, rollType)
+	for _, entry in ipairs(self:FindRollRows(rollID)) do
+		entry.row:OnPlayerRolled(rollType)
+	end
+	local override = G_RLF.RLF:GetModule(G_RLF.BlizzModule.LootRollFrames, true)
+	if override then
+		override:MarkRolled(rollID)
+	end
+end
+
+--- Hook RollOnLoot once so rolls made outside RLF's own buttons are noticed.
+--- hooksecurefunc is a post-hook and cannot taint Blizzard's roll code.
+function LootRolls:_HookRollOnLoot()
+	if self._rollOnLootHooked or not hooksecurefunc or not RollOnLoot then
+		return
+	end
+	self._rollOnLootHooked = true
+	hooksecurefunc("RollOnLoot", function(rollID, rollType)
+		if self:IsEnabled() then
+			self:OnPlayerRolled(rollID, rollType)
+		end
+	end)
+end
+
 --- Release loot roll rows for given rollID from all frames.
 ---@param rollID number
 function LootRolls:ReleaseRollRows(rollID)
@@ -660,15 +705,32 @@ function LootRolls:OnDisable()
 	self:CANCEL_ALL_LOOT_ROLLS()
 end
 
+--- Register an event that only some flavors have. Registering one the client does not
+--- know throws, which would stop OnEnable partway and leave the events after it
+--- unregistered; both checks keep a missing event from doing that.
+---@param event string
+function LootRolls:RegisterOptionalEvent(event)
+	if not self._adapter.IsValidEvent(event) then
+		self:LogDebug("Skipping event this client does not have: " .. event, addonName, self.moduleName)
+		return
+	end
+	local ok, err = pcall(self.RegisterEvent, self, event)
+	if not ok then
+		self:LogWarn("Could not register " .. event .. ": " .. tostring(err), addonName, self.moduleName)
+	end
+end
+
 function LootRolls:OnEnable()
 	self:LogDebug("OnEnable", addonName, self.moduleName)
 
 	self:RegisterEvent("START_LOOT_ROLL")
 	self:RegisterEvent("CANCEL_LOOT_ROLL")
-	self:RegisterEvent("CANCEL_ALL_LOOT_ROLLS")
-	self:RegisterEvent("MAIN_SPEC_NEED_ROLL")
+	-- Retail and Forever only; the classic clients have no equivalent.
+	self:RegisterOptionalEvent("CANCEL_ALL_LOOT_ROLLS")
+	self:RegisterOptionalEvent("MAIN_SPEC_NEED_ROLL")
 	self:RegisterEvent("LOOT_ROLLS_COMPLETE")
 	self:RegisterEvent("LOOT_ITEM_ROLL_WON")
+	self:_HookRollOnLoot()
 
 	if not G_RLF:HasModernLootHistoryAPI() then
 		-- Classic Era, TBC Anniversary, MoP Classic: same older, index-based

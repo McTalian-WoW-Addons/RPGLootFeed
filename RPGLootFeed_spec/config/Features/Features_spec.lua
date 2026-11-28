@@ -61,9 +61,11 @@ describe("Features module", function()
 		local featureImports = 0
 		for line in file:lines() do
 			if line:find("file=") then
-				-- Skip internal files, co-located config files, and co-located sample files
+				-- Skip internal files, support modules with no feed output (OpenContainers),
+				-- co-located config files, and co-located sample files
 				if
 					not (line:find('file="_Internals'))
+					and not (line:find('file="OpenContainers/'))
 					and not (line:find('Config%.lua"'))
 					and not (line:find('Sample%.lua"'))
 				then
@@ -80,6 +82,11 @@ describe("Features module", function()
 			featureImports,
 			"Number of feature imports in features.xml should match the number of features in mainFeatureOrder"
 		)
+	end)
+
+	it("defaults the global bag and bank counts breakdown to off", function()
+		assert.is_false(ns.defaults.global.misc.showBagBankCounts)
+		assert.is_false(ns.defaults.global.misc.showOneQuantity)
 	end)
 
 	it("does not create the old lootFeeds options group", function()

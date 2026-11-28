@@ -93,6 +93,29 @@ function RLF_RowIconMixin:ClearQualityBorder(restoreIconBorder)
 	self.qualityBorderApplied = false
 end
 
+--- Show or hide the icon's quality border, whichever skin draws it: Blizzard's
+--- rounded IconBorder, our square edges, or a skin addon's border (Masque, ElvUI).
+--- Alpha is used as well as Hide because those skins re-show IconBorder on their
+--- own; it is reset when the border is turned back on.
+---@param visible boolean
+function RLF_RowIconMixin:SetQualityBorderVisible(visible)
+	local iconBorder = self.Icon.IconBorder
+	if visible then
+		if iconBorder then
+			iconBorder:SetAlpha(1)
+		end
+		return
+	end
+	for _, edge in ipairs(self:GetSquareBorderEdges()) do
+		edge:Hide()
+	end
+	self.qualityBorderApplied = false
+	if iconBorder then
+		iconBorder:SetAlpha(0)
+		iconBorder:Hide()
+	end
+end
+
 function RLF_RowIconMixin:StyleIcon()
 	local changed = false
 
@@ -117,6 +140,16 @@ function RLF_RowIconMixin:StyleIcon()
 	if self.cachedIconSkin ~= iconSkin then
 		self.cachedIconSkin = iconSkin
 		changed = true
+	end
+
+	-- A change of the border setting on a row that is already showing an icon
+	-- re-runs UpdateIcon, which re-applies (or removes) the border for the
+	-- current item. The first call only records the setting.
+	local showBorder = stylingDb.enableIconQualityBorder ~= false
+	local borderSettingChanged = self.cachedIconQualityBorder ~= nil and self.cachedIconQualityBorder ~= showBorder
+	self.cachedIconQualityBorder = showBorder
+	if borderSettingChanged and self.icon then
+		self:UpdateIcon(self.key, self.icon, self.quality)
 	end
 
 	if changed then
@@ -248,11 +281,14 @@ function RLF_RowIconMixin:UpdateIcon(key, icon, quality)
 		-- Keyed off the crop rather than the skin so a square border is never
 		-- drawn around a still-round icon -- ELLESMERE resolves even when the
 		-- EUI facade never arrives, and SQUARE bails on masked icons.
-		if self.squareCropApplied then
+		local showBorder = stylingDb.enableIconQualityBorder ~= false
+		if self.squareCropApplied and showBorder then
 			self:ApplyQualityBorder()
 		else
 			self:ClearQualityBorder()
 		end
+		-- Last of all, so it wins over every skinner above.
+		self:SetQualityBorderVisible(showBorder)
 	end)
 end
 

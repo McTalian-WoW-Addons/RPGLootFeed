@@ -14,7 +14,7 @@ local MIXIN_FILE = "RPGLootFeed/LootDisplay/LootDisplayFrame/LootDisplayRow/Loot
 --- CleanupLootRoll touch, as busted stubs so tests can assert on them.
 local function newDummyButton()
 	local btn = {}
-	for _, name in ipairs({ "ClearAllPoints", "SetPoint", "Show", "Hide", "SetScript" }) do
+	for _, name in ipairs({ "ClearAllPoints", "SetPoint", "Show", "Hide", "SetScript", "SetFrameLevel" }) do
 		btn[name] = function() end
 		stub(btn, name)
 	end
@@ -40,6 +40,7 @@ describe("RLF_LootRollRowMixin", function()
 		_G.LOOT_HISTORY_WAITING_ON = "Waiting on"
 		_G.LOOT_HISTORY_ALL_PASSED = "All passed"
 		_G.LOOT_ROLLS = "Loot Rolls"
+		_G.YOU = "You"
 
 		-- Additive-only: other spec files in this process share _G.Enum.
 		_G.Enum = _G.Enum or {}
@@ -87,6 +88,14 @@ describe("RLF_LootRollRowMixin", function()
 			row[k] = v
 		end
 		row.frameType = ns.Frames.MAIN
+		-- Real frame-level storage so SetFrameLevel/GetFrameLevel behave like WoW's.
+		row._level = 500
+		row.GetFrameLevel = function(self)
+			return self._level
+		end
+		row.SetFrameLevel = function(self, level)
+			self._level = level
+		end
 
 		-- Cross-mixin methods LootRollRowMixin calls but doesn't own (they
 		-- live on RowTextMixin / RowAnimationMixin) — stub as no-ops so this
@@ -150,6 +159,64 @@ describe("RLF_LootRollRowMixin", function()
 			iconSize = 24,
 			padding = 4,
 		})
+	end)
+
+	describe("roll button frame level (issue #662)", function()
+		local function bootstrapWithButtons()
+			local buttons = {}
+			stub(row, "_CreateRollButton", function()
+				local btn = newDummyButton()
+				buttons[#buttons + 1] = btn
+				return btn
+			end)
+			row:PostBootstrapFromElement({
+				type = ns.FeatureModule.LootRolls,
+				rollID = 555,
+				canNeed = true,
+				canGreed = true,
+				canTransmog = false,
+				rollDuration = 60000,
+			})
+			return buttons
+		end
+
+		it("raises the buttons above the row's own children", function()
+			local buttons = bootstrapWithButtons()
+
+			assert.are.equal(3, #buttons)
+			for _, btn in ipairs(buttons) do
+				assert.stub(btn.SetFrameLevel).was.called_with(match._, 505)
+			end
+		end)
+
+		it("keeps the buttons above the row whenever the row is re-leveled", function()
+			local buttons = bootstrapWithButtons()
+
+			row:SetFrameLevel(480)
+
+			assert.are.equal(480, row:GetFrameLevel())
+			for _, btn in ipairs(buttons) do
+				assert.stub(btn.SetFrameLevel).was.called_with(match._, 485)
+			end
+		end)
+
+		it("does not stack wrappers when the row is bootstrapped again", function()
+			bootstrapWithButtons()
+			local wrapped = row.SetFrameLevel
+			bootstrapWithButtons()
+
+			assert.are.equal(wrapped, row.SetFrameLevel)
+		end)
+
+		it("re-leveling a row with no roll buttons is harmless", function()
+			bootstrapWithButtons()
+			row._rollButtons = nil
+
+			assert.has_no.errors(function()
+				row:SetFrameLevel(300)
+			end)
+			assert.are.equal(300, row:GetFrameLevel())
+		end)
 	end)
 
 	describe("PostBootstrapFromElement", function()
@@ -278,6 +345,638 @@ describe("RLF_LootRollRowMixin", function()
 			row:OnRollCast(_G.PASS, _G.LOOT_ROLL_TYPE_PASS)
 
 			assert.stub(row.ItemCountText.SetText).was.called_with(row.ItemCountText, "|cffb0b0b0Pass|r")
+		end)
+	end)
+
+	describe("with the secondary text line enabled", function()
+		before_each(function()
+			ns.DbAccessor.Styling = function()
+				return { enabledSecondaryRowText = true, textAlignment = 1, rowTextSpacing = 0 }
+			end
+			stub(row.SecondaryText, "SetText")
+			stub(row.SecondaryText, "Show")
+			stub(row.SecondaryText, "Hide")
+			row.SecondaryLineLayout.Show = function() end
+			row.SecondaryLineLayout.Hide = function() end
+			stub(row.SecondaryLineLayout, "Hide")
+			row.LayoutSecondaryLine = function() end
+			row.rollID = 555
+			row._rolled = true
+		end)
+
+		it("puts the leader after the waiting count on the secondary line, not on the primary line", function()
+			row:SetRollResults({
+				currentLeader = { playerName = "Carl", playerClass = "MAGE", roll = 33 },
+				rollInfos = {
+					{ playerName = "Carl", playerClass = "MAGE", state = 4 },
+					{ playerName = "Dee", playerClass = "MAGE", state = 4 },
+				},
+			})
+
+			assert
+				.stub(row.SecondaryText.SetText).was
+				.called_with(row.SecondaryText, "Waiting on 2 player(s) - Carl leads (33)")
+			assert.stub(row.ItemCountText.SetText).was_not.called()
+		end)
+
+		it("shows the winner on the secondary line and resolves the row", function()
+			row:SetRollResults({
+				winner = { playerName = "Bob", playerClass = "WARRIOR", roll = 55, state = 3 },
+				rollInfos = { { playerName = "Bob", playerClass = "WARRIOR", state = 3 } },
+			})
+
+			assert.stub(row.SecondaryText.SetText).was.called_with(row.SecondaryText, "Bob won (Greed, 55)")
+			assert.stub(row.ItemCountText.SetText).was_not.called()
+			assert.is_true(row._resolved)
+		end)
+
+		it("shows 'You won!' on the secondary line", function()
+			row:SetRollResults({
+				winner = { playerClass = "WARRIOR", isSelf = true, roll = 88, state = 0 },
+				rollInfos = { { playerName = "Self", playerClass = "WARRIOR", state = 0 } },
+			})
+
+			assert.stub(row.SecondaryText.SetText).was.called_with(row.SecondaryText, "|cff00ff00You won! (Need, 88)|r")
+		end)
+
+		it("shows 'All passed' on the secondary line", function()
+			row:SetRollResults({
+				rollInfos = { { playerName = "Carl", playerClass = "MAGE", state = 5 } },
+			})
+
+			assert.stub(row.SecondaryText.SetText).was.called_with(row.SecondaryText, "|cffb0b0b0All passed|r")
+			assert.stub(row.ItemCountText.SetText).was_not.called()
+		end)
+
+		it("hides the secondary line when there is nothing to say", function()
+			row._rolled = false
+			row:SetRollResults({
+				rollInfos = { { playerName = "Carl", playerClass = "MAGE", state = 1 } },
+			})
+
+			assert.stub(row.SecondaryLineLayout.Hide).was.called()
+			assert.stub(row.SecondaryText.SetText).was_not.called()
+		end)
+
+		it("shows a won roll from LOOT_ITEM_ROLL_WON on the secondary line", function()
+			row:OnRollWon(2, 55, false)
+
+			assert.stub(row.SecondaryText.SetText).was.called_with(row.SecondaryText, "|cff00ff00Greed Won! (55)|r")
+			assert.stub(row.ItemCountText.SetText).was_not.called()
+		end)
+
+		it("keeps the player's own choice on the primary line", function()
+			row._rollButtons = { newDummyButton() }
+			row:OnRollCast(_G.GREED, _G.LOOT_ROLL_TYPE_GREED)
+			row:SetRollResults({
+				winner = { playerName = "Bob", playerClass = "WARRIOR", roll = 55, state = 3 },
+				rollInfos = { { playerName = "Bob", playerClass = "WARRIOR", state = 3 } },
+			})
+
+			assert.stub(row.ItemCountText.SetText).was.called_with(row.ItemCountText, _G.GREED)
+			assert.stub(row.ItemCountText.SetText).was.called(1)
+		end)
+
+		it("re-renders when the secondary line setting changes between identical results", function()
+			local results = {
+				winner = { playerName = "Bob", playerClass = "WARRIOR", roll = 55, state = 3 },
+				rollInfos = { { playerName = "Bob", playerClass = "WARRIOR", state = 3 } },
+			}
+			row:SetRollResults(results)
+			ns.DbAccessor.Styling = function()
+				return { enabledSecondaryRowText = false, textAlignment = 1, rowTextSpacing = 0 }
+			end
+
+			row:SetRollResults(results)
+
+			assert.stub(row.ItemCountText.SetText).was.called_with(row.ItemCountText, "Bob won (Greed, 55)")
+		end)
+	end)
+
+	describe("Loot Rolls options", function()
+		local function setOptions(opts)
+			ns.db.global.frames[row.frameType].features.lootRolls = opts
+		end
+
+		local function bootstrap()
+			stub(row, "_CreateRollButton", function()
+				return newDummyButton()
+			end)
+			stub(row, "_SetupRollTimerBar")
+			row:PostBootstrapFromElement({
+				type = ns.FeatureModule.LootRolls,
+				rollID = 555,
+				canNeed = true,
+				canGreed = true,
+				canTransmog = false,
+				rollDuration = 60000,
+			})
+		end
+
+		local function winner(isSelf)
+			return {
+				winner = { playerName = "Bob", playerClass = "UNKNOWN", isSelf = isSelf, roll = 55, state = 3 },
+				rollInfos = { { playerName = "Bob", playerClass = "UNKNOWN", state = 3 } },
+			}
+		end
+
+		describe("roll buttons (issue #641)", function()
+			it("defaults to showing the buttons", function()
+				assert.is_true(row:ShowsRollButtons())
+				bootstrap()
+				assert.are.equal(3, #row._rollButtons)
+			end)
+
+			it("creates no buttons when turned off", function()
+				setOptions({ showRollButtons = false })
+				assert.is_false(row:ShowsRollButtons())
+
+				bootstrap()
+
+				assert.stub(row._CreateRollButton).was_not.called()
+				assert.are.equal(0, #row._rollButtons)
+			end)
+
+			it("is still a live roll row, so results and cleanup keep working", function()
+				setOptions({ showRollButtons = false })
+				bootstrap()
+
+				assert.are.equal(555, row.rollID)
+				assert.is_true(row._isLootRollRow)
+				row:SetRollResults(winner(false))
+				assert.is_true(row._resolved)
+			end)
+		end)
+
+		describe("button spacing and padding", function()
+			local function layoutWith(opts)
+				setOptions(opts)
+				local buttons = { newDummyButton(), newDummyButton() }
+				row._rollButtons = buttons
+				row:_LayoutRollButtons()
+				return buttons
+			end
+
+			it("keeps the old 4px gap and 8px padding by default", function()
+				local buttons = layoutWith({ buttonSize = 20 })
+				-- Rightmost button: padding only. Next one: padding plus one button and one gap.
+				assert.stub(buttons[2].SetPoint).was.called_with(match._, "RIGHT", match._, "RIGHT", -8, 0)
+				assert.stub(buttons[1].SetPoint).was.called_with(match._, "RIGHT", match._, "RIGHT", -(20 + 4) - 8, 0)
+			end)
+
+			it("uses the configured gap and padding", function()
+				local buttons = layoutWith({ buttonSize = 20, buttonGap = 10, buttonPadding = 2 })
+				assert.stub(buttons[2].SetPoint).was.called_with(match._, "RIGHT", match._, "RIGHT", -2, 0)
+				assert.stub(buttons[1].SetPoint).was.called_with(match._, "RIGHT", match._, "RIGHT", -(20 + 10) - 2, 0)
+			end)
+		end)
+
+		describe("results text", function()
+			it("hides roll numbers in a win when turned off", function()
+				setOptions({ showRollNumbers = false })
+				row:SetRollResults(winner(false))
+				assert.stub(row.ItemCountText.SetText).was.called_with(row.ItemCountText, "Bob won (Greed)")
+			end)
+
+			it("hides roll numbers in your own win when turned off", function()
+				setOptions({ showRollNumbers = false })
+				row:SetRollResults({
+					winner = { playerClass = "UNKNOWN", isSelf = true, roll = 88, state = 0 },
+					rollInfos = { { playerName = "Self", playerClass = "UNKNOWN", state = 0 } },
+				})
+				assert.stub(row.ItemCountText.SetText).was.called_with(row.ItemCountText, "|cff00ff00You won! (Need)|r")
+			end)
+
+			it("hides the number on the current leader when turned off", function()
+				setOptions({ showRollNumbers = false })
+				row._rolled = true
+				row:SetRollResults({
+					currentLeader = { playerName = "Carl", playerClass = "UNKNOWN", roll = 33 },
+					rollInfos = { { playerName = "Carl", playerClass = "UNKNOWN", state = 4 } },
+				})
+				assert.stub(row.ItemCountText.SetText).was.called_with(row.ItemCountText, "Carl leads")
+			end)
+
+			it("hides the number on LOOT_ITEM_ROLL_WON and on your Need result when turned off", function()
+				setOptions({ showRollNumbers = false })
+				row:OnRollWon(2, 55, false)
+				assert.stub(row.ItemCountText.SetText).was.called_with(row.ItemCountText, "|cff00ff00Greed Won!|r")
+				row._rolled = true
+				row:OnMainSpecNeedRoll(42, true)
+				assert.stub(row.ItemCountText.SetText).was.called_with(row.ItemCountText, "|cff00ff00Need|r")
+			end)
+
+			it("does not show the current leader when turned off", function()
+				setOptions({ showLeader = false })
+				row._rolled = true
+				row:SetRollResults({
+					currentLeader = { playerName = "Carl", playerClass = "UNKNOWN", roll = 33 },
+					rollInfos = { { playerName = "Carl", playerClass = "UNKNOWN", state = 4 } },
+				})
+				assert.stub(row.ItemCountText.SetText).was_not.called()
+			end)
+
+			it("still shows the winner when the leader is turned off", function()
+				setOptions({ showLeader = false })
+				row:SetRollResults(winner(false))
+				assert.stub(row.ItemCountText.SetText).was.called_with(row.ItemCountText, "Bob won (Greed, 55)")
+			end)
+
+			it("leaves names uncolored when class colors are turned off", function()
+				setOptions({ useClassColors = false })
+				ns.WoWAPI.LootRolls.GetClassColor = function()
+					return {
+						WrapTextInColorCode = function(_, text)
+							return "|cffMOCKED" .. text .. "|r"
+						end,
+					}
+				end
+				local results = winner(false)
+				results.winner.playerClass = "WARRIOR"
+				row:SetRollResults(results)
+				assert.stub(row.ItemCountText.SetText).was.called_with(row.ItemCountText, "Bob won (Greed, 55)")
+			end)
+
+			it("uses the configured win color", function()
+				setOptions({ winColor = { 1, 0, 0, 1 } })
+				row:SetRollResults({
+					winner = { playerClass = "UNKNOWN", isSelf = true, roll = 88, state = 0 },
+					rollInfos = { { playerName = "Self", playerClass = "UNKNOWN", state = 0 } },
+				})
+				assert
+					.stub(row.ItemCountText.SetText).was
+					.called_with(row.ItemCountText, "|cffff0000You won! (Need, 88)|r")
+			end)
+
+			it("uses the configured muted color for passes and All passed", function()
+				setOptions({ mutedColor = { 0, 0, 1, 1 } })
+				row:SetRollResults({ rollInfos = { { playerName = "Carl", playerClass = "UNKNOWN", state = 5 } } })
+				assert.stub(row.ItemCountText.SetText).was.called_with(row.ItemCountText, "|cff0000ffAll passed|r")
+				row:OnRollCast(_G.PASS, _G.LOOT_ROLL_TYPE_PASS)
+				assert.stub(row.ItemCountText.SetText).was.called_with(row.ItemCountText, "|cff0000ffPass|r")
+			end)
+
+			it("drops the waiting count from the secondary line when turned off", function()
+				ns.DbAccessor.Styling = function()
+					return { enabledSecondaryRowText = true, textAlignment = 1, rowTextSpacing = 0 }
+				end
+				stub(row.SecondaryText, "SetText")
+				stub(row.SecondaryText, "Show")
+				stub(row.SecondaryText, "Hide")
+				row.SecondaryLineLayout.Show = function() end
+				row.SecondaryLineLayout.Hide = function() end
+				row.LayoutSecondaryLine = function() end
+				setOptions({ showWaitingCount = false })
+				row._rolled = true
+
+				row:SetRollResults({
+					currentLeader = { playerName = "Carl", playerClass = "UNKNOWN", roll = 33 },
+					rollInfos = {
+						{ playerName = "Carl", playerClass = "UNKNOWN", state = 4 },
+						{ playerName = "Dee", playerClass = "UNKNOWN", state = 4 },
+					},
+				})
+
+				assert.stub(row.SecondaryText.SetText).was.called_with(row.SecondaryText, "Carl leads (33)")
+			end)
+		end)
+
+		describe("compact winners (issue #645)", function()
+			local DICE = "|TInterface\\Buttons\\UI-GroupLoot-Dice-Up:14:14|t"
+			local COIN = "|TInterface\\Buttons\\UI-GroupLoot-Coin-Up:14:14|t"
+			local DE = "|TInterface\\Buttons\\UI-GroupLoot-DE-Up:14:14|t"
+			local TMOG = "|A:lootroll-toast-icon-transmog-up:14:14|a"
+
+			local function otherWinner(state, extra)
+				local info = { playerName = "Bob", playerClass = "UNKNOWN", isSelf = false, roll = 55, state = state }
+				for k, v in pairs(extra or {}) do
+					info[k] = v
+				end
+				return { winner = info, rollInfos = { { playerName = "Bob", playerClass = "UNKNOWN", state = state } } }
+			end
+
+			it("is off by default: the long text stays", function()
+				row:SetRollResults(otherWinner(3))
+				assert.stub(row.ItemCountText.SetText).was.called_with(row.ItemCountText, "Bob won (Greed, 55)")
+			end)
+
+			it("shows the name, the roll type icon and the number instead of 'won (Type, N)'", function()
+				setOptions({ compactWinners = true })
+				row:SetRollResults(otherWinner(3))
+				assert.stub(row.ItemCountText.SetText).was.called_with(row.ItemCountText, "Bob " .. COIN .. " 55")
+			end)
+
+			it("picks the icon for each roll type", function()
+				setOptions({ compactWinners = true })
+				local cases = { [0] = DICE, [1] = DICE, [2] = TMOG, [3] = COIN, [6] = DE }
+				for state, icon in pairs(cases) do
+					row.ItemCountText.SetText:clear()
+					row._rollResultsSignature = nil
+					row:SetRollResults(otherWinner(state))
+					assert.stub(row.ItemCountText.SetText).was.called_with(row.ItemCountText, "Bob " .. icon .. " 55")
+				end
+			end)
+
+			it("sizes the icon from the row's font size", function()
+				setOptions({ compactWinners = true })
+				ns.DbAccessor.Styling = function()
+					return { enabledSecondaryRowText = false, fontSize = 16 }
+				end
+				row:SetRollResults(otherWinner(1))
+				assert
+					.stub(row.ItemCountText.SetText).was
+					.called_with(row.ItemCountText, "Bob |TInterface\\Buttons\\UI-GroupLoot-Dice-Up:20:20|t 55")
+			end)
+
+			it("drops the number when roll numbers are off", function()
+				setOptions({ compactWinners = true, showRollNumbers = false })
+				row:SetRollResults(otherWinner(3))
+				assert.stub(row.ItemCountText.SetText).was.called_with(row.ItemCountText, "Bob " .. COIN)
+			end)
+
+			it("shows your own win as You, the icon and the number in the win color", function()
+				setOptions({ compactWinners = true })
+				row:SetRollResults({
+					winner = { playerClass = "UNKNOWN", isSelf = true, roll = 88, state = 0 },
+					rollInfos = { { playerName = "Self", playerClass = "UNKNOWN", state = 0 } },
+				})
+				assert
+					.stub(row.ItemCountText.SetText).was
+					.called_with(row.ItemCountText, "|cff00ff00You " .. DICE .. " 88|r")
+			end)
+
+			it("still class-colors the winner's name", function()
+				setOptions({ compactWinners = true })
+				ns.WoWAPI.LootRolls.GetClassColor = function()
+					return {
+						WrapTextInColorCode = function(_, text)
+							return "|cffMOCKED" .. text .. "|r"
+						end,
+					}
+				end
+				row:SetRollResults(otherWinner(3, { playerClass = "WARRIOR" }))
+				assert
+					.stub(row.ItemCountText.SetText).was
+					.called_with(row.ItemCountText, "|cffMOCKEDBob|r " .. COIN .. " 55")
+			end)
+
+			it("leaves out the icon, and its gap, for a state that has none", function()
+				setOptions({ compactWinners = true })
+				row:SetRollResults(otherWinner(4))
+				assert.stub(row.ItemCountText.SetText).was.called_with(row.ItemCountText, "Bob 55")
+			end)
+
+			it("applies to LOOT_ITEM_ROLL_WON as well", function()
+				setOptions({ compactWinners = true })
+				row:OnRollWon(2, 55, false) -- 2 == Greed
+				assert
+					.stub(row.ItemCountText.SetText).was
+					.called_with(row.ItemCountText, "|cff00ff00You " .. COIN .. " 55|r")
+			end)
+
+			it("keeps the upgraded note on LOOT_ITEM_ROLL_WON", function()
+				setOptions({ compactWinners = true })
+				row:OnRollWon(1, 77, true) -- 1 == Need
+				assert
+					.stub(row.ItemCountText.SetText).was
+					.called_with(row.ItemCountText, "|cff00ff00You " .. DICE .. " 77 (Upgraded!)|r")
+			end)
+		end)
+
+		describe("countdown bar", function()
+			it("is set up by default", function()
+				bootstrap()
+				assert.stub(row._SetupRollTimerBar).was.called(1)
+			end)
+
+			it("is skipped when turned off", function()
+				setOptions({ showTimerBar = false })
+				bootstrap()
+				assert.stub(row._SetupRollTimerBar).was_not.called()
+			end)
+		end)
+
+		describe("roll details tooltip", function()
+			it("hooks the secondary text by default", function()
+				row:_SetupRollTooltip()
+				assert.stub(row.SecondaryText.SetScript).was.called(2)
+			end)
+
+			it("hooks nothing when turned off", function()
+				setOptions({ showRollTooltip = false })
+				row:_SetupRollTooltip()
+				assert.stub(row.SecondaryText.SetScript).was_not.called()
+			end)
+		end)
+	end)
+
+	describe("roll tooltip condensing (issue #646)", function()
+		-- state: 0/1 Need, 2 Transmog, 3 Greed, 4 waiting, 5 Pass, 6 Disenchant
+		local function player(name, state, roll, isSelf)
+			return { playerName = name, playerClass = "UNKNOWN", state = state, roll = roll, isSelf = isSelf }
+		end
+
+		--- Tooltip lines as plain text with the roll icons stripped.
+		local function textLines(dropInfo)
+			local lines = {}
+			row:_BuildRollTooltipLines(dropInfo, lines)
+			local out = {}
+			for _, line in ipairs(lines) do
+				out[#out + 1] = (line[1]:gsub("|T.-|t", ""):gsub("|A.-|a", ""))
+			end
+			return out
+		end
+
+		local function setCondense(value)
+			ns.db.global.frames[row.frameType].features.lootRolls = { condenseRollTooltip = value }
+		end
+
+		-- The raid from the ticket: 5 Need, 1 Greed, 8 Transmog, 6 Pass.
+		local function bigRaid(extra)
+			local rolls = {}
+			for i = 1, 5 do
+				rolls[#rolls + 1] = player("Needy" .. i, 0, 90 - i)
+			end
+			rolls[#rolls + 1] = player("Greedy1", 3, 40)
+			for i = 1, 8 do
+				rolls[#rolls + 1] = player("Tmog" .. i, 2, 30 - i)
+			end
+			for i = 1, 6 do
+				rolls[#rolls + 1] = player("Passer" .. i, 5)
+			end
+			for _, p in ipairs(extra or {}) do
+				rolls[#rolls + 1] = p
+			end
+			return { rollInfos = rolls, winner = { playerName = "Needy1" } }
+		end
+
+		local function contains(lines, text)
+			for _, line in ipairs(lines) do
+				if line:find(text, 1, true) then
+					return true
+				end
+			end
+			return false
+		end
+
+		it("lists every roll when condensing is turned off", function()
+			setCondense(false)
+			local lines = textLines(bigRaid())
+			assert.is_true(contains(lines, "Passer6"))
+			assert.is_true(contains(lines, "Tmog8"))
+			assert.is_true(contains(lines, "Greedy1"))
+			assert.is_true(contains(lines, "Needy5"))
+		end)
+
+		it("is condensed by default, with no setting saved", function()
+			ns.db.global.frames[row.frameType].features.lootRolls = {}
+			local lines = textLines(bigRaid())
+			assert.is_false(contains(lines, "Passer6"))
+			assert.is_true(contains(lines, "Needy5"))
+		end)
+
+		describe("when condensed", function()
+			before_each(function()
+				setCondense(true)
+			end)
+
+			it("lists every Need roll in full", function()
+				local lines = textLines(bigRaid())
+				for i = 1, 5 do
+					assert.is_true(contains(lines, "Needy" .. i), "missing Needy" .. i)
+				end
+			end)
+
+			it("shows only a count for Greed, Transmog and Pass", function()
+				local lines = textLines(bigRaid())
+				assert.is_true(contains(lines, _G.GREED .. " (1)"))
+				assert.is_true(contains(lines, _G.TRANSMOGRIFICATION .. " (8)"))
+				assert.is_true(contains(lines, _G.PASS .. " (6)"))
+				assert.is_false(contains(lines, "Greedy1"))
+				assert.is_false(contains(lines, "Tmog1"))
+				assert.is_false(contains(lines, "Passer1"))
+			end)
+
+			it("keeps the Need header count the size of the whole group", function()
+				local lines = textLines(bigRaid())
+				assert.is_true(contains(lines, _G.NEED .. " (5)"))
+			end)
+
+			it("shows the player's own choice under a lower tier's count", function()
+				local lines = textLines(bigRaid({ player("Me", 3, 12, true) }))
+				assert.is_true(contains(lines, _G.GREED .. " (2)"))
+				assert.is_true(contains(lines, "Me (12) <YOU>"))
+				assert.is_false(contains(lines, "Greedy1"))
+			end)
+
+			it("shows the player's own pass under the Pass count", function()
+				local lines = textLines(bigRaid({ player("Me", 5, nil, true) }))
+				assert.is_true(contains(lines, _G.PASS .. " (7)"))
+				assert.is_true(contains(lines, "Me <YOU>"))
+				assert.is_false(contains(lines, "Passer1"))
+			end)
+
+			it("shows only a count for players still waiting", function()
+				local dropInfo = bigRaid({ player("Slow1", 4), player("Slow2", 4) })
+				local lines = textLines(dropInfo)
+				assert.is_true(contains(lines, (_G.LOOT_HISTORY_WAITING_ON or "Waiting on") .. " (2)"))
+				assert.is_false(contains(lines, "Slow1"))
+			end)
+
+			it("with no Need, holds Greed to a count until the roll resolves", function()
+				local dropInfo = {
+					rollInfos = { player("G1", 3), player("G2", 3), player("Slow", 4) },
+				}
+				local lines = textLines(dropInfo)
+				assert.is_true(contains(lines, _G.GREED .. " (2)"))
+				assert.is_false(contains(lines, "G1"))
+			end)
+
+			it("with no Need, lists the Greed, Transmog and Disenchant tier in full once it resolves", function()
+				local dropInfo = {
+					winner = { playerName = "G1" },
+					rollInfos = {
+						player("G1", 3, 80),
+						player("G2", 3, 70),
+						player("T1", 2, 60),
+						player("D1", 6, 50),
+						player("P1", 5),
+					},
+				}
+				local lines = textLines(dropInfo)
+				for _, name in ipairs({ "G1", "G2", "T1", "D1" }) do
+					assert.is_true(contains(lines, name), "missing " .. name)
+				end
+				assert.is_false(contains(lines, "P1"))
+			end)
+
+			it("also counts as resolved when nobody is waiting any more", function()
+				local dropInfo = {
+					rollInfos = { player("G1", 3, 80), player("G2", 3, 70) },
+				}
+				local lines = textLines(dropInfo)
+				assert.is_true(contains(lines, "G1"))
+				assert.is_true(contains(lines, "G2"))
+			end)
+
+			it("never lists a pass-only roll in full", function()
+				local dropInfo = {
+					rollInfos = { player("P1", 5), player("P2", 5), player("Me", 5, nil, true) },
+				}
+				local lines = textLines(dropInfo)
+				assert.is_true(contains(lines, _G.PASS .. " (3)"))
+				assert.is_false(contains(lines, "P1"))
+				assert.is_true(contains(lines, "Me <YOU>"))
+			end)
+		end)
+	end)
+
+	describe("OnPlayerRolled (roll made outside RLF's buttons, e.g. Blizzard's frame or a gamepad)", function()
+		local btn1, btn2
+
+		before_each(function()
+			btn1, btn2 = newDummyButton(), newDummyButton()
+			row._rollButtons = { btn1, btn2 }
+			row._rolled = false
+		end)
+
+		it("takes the action buttons down and shows the choice, like clicking a button", function()
+			row:OnPlayerRolled(_G.LOOT_ROLL_TYPE_GREED)
+
+			assert.is_true(row._rolled)
+			assert.stub(btn1.Hide).was.called(1)
+			assert.stub(btn2.Hide).was.called(1)
+			assert.stub(row.ItemCountText.SetText).was.called_with(row.ItemCountText, _G.GREED)
+		end)
+
+		it("shows greyed-out Pass text for a pass", function()
+			row:OnPlayerRolled(_G.LOOT_ROLL_TYPE_PASS)
+
+			assert.stub(row.ItemCountText.SetText).was.called_with(row.ItemCountText, "|cffb0b0b0Pass|r")
+		end)
+
+		it("labels a transmog roll", function()
+			row:OnPlayerRolled(4)
+
+			assert.stub(row.ItemCountText.SetText).was.called_with(row.ItemCountText, _G.TRANSMOGRIFICATION)
+		end)
+
+		it("does nothing if the row already knows the player rolled", function()
+			row._rolled = true
+
+			row:OnPlayerRolled(_G.LOOT_ROLL_TYPE_NEED)
+
+			assert.stub(btn1.Hide).was_not.called()
+			assert.stub(row.ItemCountText.SetText).was_not.called()
+		end)
+
+		it("does nothing on a row that has already resolved to results", function()
+			row._resolved = true
+
+			row:OnPlayerRolled(_G.LOOT_ROLL_TYPE_NEED)
+
+			assert.stub(btn1.Hide).was_not.called()
+			assert.is_false(row._rolled)
 		end)
 	end)
 

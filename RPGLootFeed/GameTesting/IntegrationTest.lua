@@ -14,7 +14,15 @@ local runner = G_RLF.GameTestRunner:new("Integration Test", {
 	end,
 	printLine = print,
 	raiseError = error,
+	record = function(result)
+		TestMode:RecordTestResult(result)
+	end,
 })
+
+--- Print a diagnostic line and keep it with the saved results.
+local function note(text)
+	TestMode:LogDiagnostic("Integration Test", text)
+end
 
 local function runExperienceIntegrationTest()
 	local module = G_RLF.RLF:GetModule(G_RLF.FeatureModule.Experience) --[[@as RLF_Experience]]
@@ -23,7 +31,7 @@ local function runExperienceIntegrationTest()
 
 	local payload = module:BuildPayload(1336)
 	if not payload then
-		G_RLF:Print("Experience payload not created, something went wrong")
+		note("Experience payload not created, something went wrong")
 		return accepts
 	end
 	local e = LootElementBase:fromPayload(payload)
@@ -32,7 +40,7 @@ local function runExperienceIntegrationTest()
 
 	local payload2 = module:BuildPayload(1)
 	if not payload2 then
-		G_RLF:Print("Experience update payload not created, something went wrong")
+		note("Experience update payload not created, something went wrong")
 		return accepts
 	end
 	local e2 = LootElementBase:fromPayload(payload2)
@@ -45,7 +53,7 @@ local function runMoneyIntegrationTest()
 	local module = G_RLF.RLF:GetModule(G_RLF.FeatureModule.Money) --[[@as RLF_Money]]
 	local payload = module:BuildPayload(12345)
 	if not payload then
-		G_RLF:Print("Money payload not created, something went wrong")
+		note("Money payload not created, something went wrong")
 		return 0
 	end
 	local e = G_RLF.LootElementBase:fromPayload(payload)
@@ -145,9 +153,9 @@ local function runItemLootIntegrationTest()
 	local rowsShown = 0
 	local payload = module:BuildPayload(info, amountLooted)
 	if not payload then
-		G_RLF:Print("Item not cached or filtered, skipping ItemLoot test")
+		note("Item not cached or filtered, skipping ItemLoot test")
 	elseif info.itemName == nil then
-		G_RLF:Print("Item not cached, skipping ItemLoot test")
+		note("Item not cached, skipping ItemLoot test")
 	else
 		payload.highlight = true
 		local e = LootElementBase:fromPayload(payload)
@@ -164,6 +172,54 @@ local function runItemLootIntegrationTest()
 	return rowsShown
 end
 
+--- Checks the newer Item Loot features against a real item on this client. Fires no
+--- rows, so it does not change the accepted-row count.
+local function runItemFeatureChecks()
+	local module = G_RLF.RLF:GetModule(G_RLF.FeatureModule.ItemLoot) --[[@as RLF_ItemLoot]]
+	local info = TestMode.testItems[2]
+	if not info or info.itemName == nil or not info.itemLink then
+		note("Item not cached, skipping Item Loot feature checks")
+		return
+	end
+
+	-- Bag and bank counts: ask for 5 of an item the player does not hold, so everything
+	-- beyond the bags is "elsewhere" and must show up as a warband or folded bank figure.
+	local text = module:FormatBagBankCounts(info.itemLink, 5)
+	runner:assertEqual(type(text), "string", "BagBank: FormatBagBankCounts returns text")
+	if type(text) == "string" then
+		runner:assertEqual(text:find("Icons/BagCount", 1, true) ~= nil, true, "BagBank: shows the bag icon")
+		if G_RLF.WoWAPI.ItemLoot.HasAtlas("warbands-icon") then
+			runner:assertEqual(text:find("warbands-icon", 1, true) ~= nil, true, "BagBank: shows the warband atlas")
+		else
+			runner:assertEqual(
+				text:find("Icons/BankCount", 1, true) ~= nil,
+				true,
+				"BagBank: folds the warband count into the bank without the atlas"
+			)
+		end
+	end
+
+	-- Quest-starting detection runs against this item's real tooltip.
+	if type(info.IsQuestItem) == "function" then
+		runner:runTestSafely(function()
+			assert(type(info:StartsQuest()) == "boolean", "StartsQuest did not return a boolean")
+			assert(type(info:IsQuestItem()) == "boolean", "IsQuestItem did not return a boolean")
+		end, "QuestStart: ItemInfo:StartsQuest on a real item")
+	end
+
+	-- A highlight color rides the payload onto the element the row reads.
+	local payload = module:BuildPayload(info, 1)
+	if payload then
+		payload.highlightColor = { 0.64, 0.21, 0.93 }
+		local e = G_RLF.LootElementBase:fromPayload(payload)
+		runner:assertEqual(
+			e.highlightColor ~= nil and e.highlightColor[1] == 0.64 and e.highlightColor[3] == 0.93,
+			true,
+			"Highlight: color carried from payload to element"
+		)
+	end
+end
+
 --- Exercises the PartyLoot BuildPayload → fromPayload → Show pipeline directly.
 local function runPartyLootIntegrationTest()
 	local module = G_RLF.RLF:GetModule(G_RLF.FeatureModule.PartyLoot) --[[@as RLF_PartyLoot]]
@@ -172,7 +228,7 @@ local function runPartyLootIntegrationTest()
 	local amountLooted = 1
 	local payload = module:BuildPayload(info, amountLooted, "player")
 	if not payload then
-		G_RLF:Print("PartyLoot payload not created, something went wrong")
+		note("PartyLoot payload not created, something went wrong")
 		return 0
 	end
 	local e = LootElementBase:fromPayload(payload)
@@ -245,6 +301,59 @@ local function runLootRollsIntegrationTest()
 	return 1
 end
 
+--- Resolve the loot roll row the integration test showed, as if the roll had ended with
+--- TestWar winning, instead of waiting out the whole simulated 60 second roll.
+local function resolveLootRollIntegrationRow()
+	local row
+	for _, frame in G_RLF.LootDisplay:GetAllFrames() do
+		row = row or frame:GetRow("it_loot_roll_test")
+	end
+	runner:assertEqual(row ~= nil, true, "LootRolls: the integration roll row is on screen")
+	if not row then
+		return
+	end
+	runner:assertEqual(row._resolved == true, false, "LootRolls: the roll row is still open before it resolves")
+	runner:runTestSafely(function()
+		row:SetRollResults({
+			lootListID = 1,
+			itemHyperlink = "|cff0070dd|Hitem:14344::::::::60:::::|h[Large Brilliant Shard]|h|r",
+			rollInfos = {
+				{
+					playerName = "TestWar",
+					playerClass = "WARRIOR",
+					state = 0,
+					roll = 87,
+					isWinner = true,
+					isSelf = false,
+				},
+				{
+					playerName = "TestMage",
+					playerClass = "MAGE",
+					state = 3,
+					roll = 42,
+					isWinner = false,
+					isSelf = false,
+				},
+				{ playerName = "You", playerClass = "HUNTER", state = 5, roll = nil, isWinner = false, isSelf = true },
+			},
+			currentLeader = { playerName = "TestWar", playerClass = "WARRIOR", roll = 87 },
+			winner = {
+				playerName = "TestWar",
+				playerClass = "WARRIOR",
+				state = 0,
+				roll = 87,
+				isWinner = true,
+				isSelf = false,
+			},
+			allPassed = false,
+			startTime = 0,
+			duration = 60,
+		})
+	end, "LootRolls: SetRollResults with a winner")
+	runner:assertEqual(row._resolved, true, "LootRolls: the roll row resolves when a winner is known")
+	runner:assertEqual(row._isLootRollRow, false, "LootRolls: a resolved row behaves as a normal row")
+end
+
 --- Exercises the Currency BuildPayload → fromPayload → Show pipeline directly.
 local function runCurrencyIntegrationTest()
 	local module = G_RLF.RLF:GetModule(G_RLF.FeatureModule.Currency) --[[@as RLF_Currency]]
@@ -255,7 +364,7 @@ local function runCurrencyIntegrationTest()
 	local accepts = 0
 	local payload = module:BuildPayload(testObj.link, testObj.info, testObj.basicInfo)
 	if not payload then
-		G_RLF:Print("Currency payload not created, something went wrong")
+		note("Currency payload not created, something went wrong")
 		return accepts
 	end
 	local e = LootElementBase:fromPayload(payload)
@@ -263,7 +372,7 @@ local function runCurrencyIntegrationTest()
 	accepts = accepts + 1
 	payload = module:BuildPayload(testObj.link, testObj.info, testObj.basicInfo)
 	if not payload then
-		G_RLF:Print("Currency update payload not created, something went wrong")
+		note("Currency update payload not created, something went wrong")
 		return accepts
 	end
 	e = LootElementBase:fromPayload(payload)
@@ -294,7 +403,7 @@ local function runReputationPayloadIntegrationTest()
 	local accepts = 0
 	local payload = module:BuildPayload(testFactionData)
 	if not payload then
-		G_RLF:Print("Reputation payload not created, something went wrong")
+		note("Reputation payload not created, something went wrong")
 		return accepts
 	end
 	local e = LootElementBase:fromPayload(payload)
@@ -304,7 +413,7 @@ local function runReputationPayloadIntegrationTest()
 	-- Second call with same key should stack/update the existing row
 	local payload2 = module:BuildPayload(testFactionData)
 	if not payload2 then
-		G_RLF:Print("Reputation update payload not created, something went wrong")
+		note("Reputation update payload not created, something went wrong")
 		return accepts
 	end
 	payload2.quantity = payload2.quantity + 1
@@ -392,7 +501,7 @@ local function runTransmogIntegrationTest()
 	local transmogLink = "|cff9d9d9d|Htransmogappearance:285269|h[Test Transmog]|h|r"
 	local payload = module:BuildPayload(transmogLink, nil)
 	if not payload then
-		G_RLF:Print("Transmog payload not created, something went wrong")
+		note("Transmog payload not created, something went wrong")
 		return 0
 	end
 	local e = LootElementBase:fromPayload(payload)
@@ -404,7 +513,7 @@ end
 --- so the skill-delta badge can be verified without actually levelling a profession.
 function TestMode:ProfessionTest()
 	if not self.integrationTestReady then
-		G_RLF:Print("Integration test not ready")
+		note("Integration test not ready")
 		return
 	end
 
@@ -418,11 +527,12 @@ end
 
 function TestMode:IntegrationTest()
 	if not self.integrationTestReady then
-		G_RLF:Print("Integration test not ready")
+		note("Integration test not ready")
 		return
 	end
 
 	runner:reset()
+	TestMode:BeginTestRun("Integration Test")
 	local lootDisplay = G_RLF.LootDisplay
 	local mainFrame = lootDisplay:GetFrame(G_RLF.Frames.MAIN)
 	if not mainFrame then
@@ -450,6 +560,7 @@ function TestMode:IntegrationTest()
 		newRowsExpected = newRowsExpected + runTravelPointsIntegrationTest()
 	end
 	newRowsExpected = newRowsExpected + runItemLootIntegrationTest()
+	runItemFeatureChecks()
 	if GetExpansionLevel() >= G_RLF.Expansion.WOTLK then
 		newRowsExpected = newRowsExpected + runCurrencyIntegrationTest()
 	end
@@ -482,6 +593,9 @@ function TestMode:IntegrationTest()
 			-- ── Phase 3: wait for routing's OnLootReady, then verify all ────────
 			RunNextFrame(function()
 				RunNextFrame(function()
+					if lootRollsModule:IsEnabled() then
+						resolveLootRollIntegrationRow()
+					end
 					verifyRouting()
 					cleanupRouting()
 

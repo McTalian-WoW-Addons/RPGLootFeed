@@ -682,11 +682,13 @@ function LootDisplayFrameMixin:Load(frame)
 	self.vertDir, self.opposite, self.yOffset, self.horizDir = self:getPositioningDetails()
 	local positioningDb = G_RLF.DbAccessor:Positioning(self.frameType)
 	self:UpdateSize()
+	-- Snap the offsets to whole pixels: a frame edge sitting on half a pixel makes the
+	-- 1px row borders round differently from row to row.
 	self:SetPoint(
 		positioningDb.anchorPoint,
 		_G[positioningDb.relativePoint],
-		positioningDb.xOffset,
-		positioningDb.yOffset
+		G_RLF.PerfPixel.PScale(positioningDb.xOffset),
+		G_RLF.PerfPixel.PScale(positioningDb.yOffset)
 	)
 
 	self:SetFrameStrata(positioningDb.frameStrata) -- Set the frame strata here
@@ -781,7 +783,7 @@ end
 
 function LootDisplayFrameMixin:UpdateSize()
 	local sizingDb = G_RLF.DbAccessor:Sizing(self.frameType)
-	self:SetSize(sizingDb.feedWidth, self:getFrameHeight())
+	self:SetSize(G_RLF.PerfPixel.PScale(sizingDb.feedWidth), self:getFrameHeight())
 
 	self:UpdateStyles()
 	self:UpdateScrollWheelTarget()
@@ -1206,7 +1208,7 @@ function LootDisplayFrameMixin:CreateHistoryFrame()
 	for i = 1, sizingDb.maxRows do
 		local row = CreateFrame("Frame", nil, self.historyContent, "LootDisplayRowTemplate")
 		row.frameType = self.frameType
-		row:SetSize(sizingDb.feedWidth, sizingDb.rowHeight)
+		row:SetSize(G_RLF.PerfPixel.PScale(sizingDb.feedWidth), G_RLF.PerfPixel.PScale(sizingDb.rowHeight))
 		row:Init()
 		table.insert(self.historyRows, row)
 	end

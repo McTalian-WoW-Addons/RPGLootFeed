@@ -105,13 +105,54 @@ end
 --- Build the AceConfig options group for Item Loot on the given frame.
 --- Called from the config system by function name.
 ---@param frameId integer
+--- The sections of the Item Loot options that get their own page in the left-hand tree
+--- instead of stacking as inline blocks on one long page.
+local TREE_SECTIONS = {
+	"itemCountText",
+	"itemSecondaryTextOptions",
+	"itemQualityFilter",
+	"itemTypeDurations",
+	"itemHighlights",
+	"itemSounds",
+	"itemStyleOverrides",
+	"itemDenyList",
+}
+
+--- Turn the built Item Loot group into a tree: the enable toggle and the few general
+--- controls stay on the group's own page, and each section in TREE_SECTIONS becomes a
+--- child page. Only the options layout changes; every setting keeps its DB path.
+---@param group table The group built by BuildConfigArgs, with its itemLootOptions wrapper
+---@return table
+local function liftSectionsIntoTree(group)
+	local wrapper = group.args.itemLootOptions
+	group.args.itemLootOptions = nil
+	group.childGroups = "tree"
+
+	local isSection = {}
+	for _, key in ipairs(TREE_SECTIONS) do
+		isSection[key] = true
+	end
+	for key, child in pairs(wrapper.args) do
+		if isSection[key] then
+			child.inline = false
+			-- The wrapper greyed everything out while the feature was off; keep that.
+			child.disabled = child.disabled or wrapper.disabled
+		else
+			-- General controls sit right under the enable toggle (order 1).
+			child.order = 1 + (child.order or 0) / 100
+		end
+		group.args[key] = child
+	end
+	return group
+end
+
 ---@param order number
 ---@return table
 function G_RLF.ItemLoot:BuildConfigArgs(frameId, order)
 	local function fc()
 		return G_RLF.db.global.frames[frameId].features.itemLoot
 	end
-	return {
+	return liftSectionsIntoTree({
 		type = "group",
 		name = G_RLF.L["Item Loot Config"],
 		order = order,
@@ -511,6 +552,24 @@ function G_RLF.ItemLoot:BuildConfigArgs(frameId, order)
 								end,
 								order = 5.1,
 							},
+							combinedPriceIcons = {
+								type = "toggle",
+								name = G_RLF.L["Show Source Icons On Combined Prices"],
+								desc = G_RLF.L["CombinedPriceIconsDesc"],
+								width = "double",
+								disabled = function()
+									local mode = fc().pricesForSellableItems
+									return not fc().enabled
+										or (mode ~= PricesEnum.VendorAH and mode ~= PricesEnum.AHVendor)
+								end,
+								get = function()
+									return fc().combinedPriceIcons
+								end,
+								set = function(_, value)
+									fc().combinedPriceIcons = value
+								end,
+								order = 5.2,
+							},
 						},
 					},
 					itemQualityFilter = {
@@ -520,6 +579,11 @@ function G_RLF.ItemLoot:BuildConfigArgs(frameId, order)
 						inline = true,
 						order = 2,
 						args = {
+							durationDescription = {
+								type = "description",
+								name = G_RLF.L["ItemQualityDurationsDesc"],
+								order = 0.1,
+							},
 							resetAllDurationOverrides = {
 								type = "execute",
 								name = G_RLF.L["Reset All Duration Overrides"],
@@ -813,6 +877,73 @@ function G_RLF.ItemLoot:BuildConfigArgs(frameId, order)
 							},
 						},
 					},
+					itemTypeDurations = {
+						type = "group",
+						name = G_RLF.L["Item Type Durations"],
+						desc = G_RLF.L["ItemTypeDurationsDesc"],
+						inline = true,
+						order = 2.5,
+						args = (function()
+							local args = {
+								description = {
+									type = "description",
+									name = G_RLF.L["ItemTypeDurationsDesc"],
+									order = 0.1,
+								},
+								resetItemTypeDurations = {
+									type = "execute",
+									name = G_RLF.L["Reset Item Type Durations"],
+									func = function()
+										for _, v in pairs(fc().itemTypeSettings) do
+											v.duration = 0
+										end
+									end,
+									order = 0.5,
+									width = "full",
+								},
+							}
+							for i, classID in ipairs(G_RLF.ItemDurationClasses) do
+								-- Looked up each time the options render: the client may not be
+								-- able to name a class yet when the options are first built.
+								local function className()
+									return G_RLF.WoWAPI.ItemLoot.GetItemClassName(classID)
+								end
+								args["class" .. classID] = {
+									type = "range",
+									width = 1.5,
+									name = function()
+										return string.format(
+											G_RLF.L["Duration (seconds)"],
+											className() or tostring(classID)
+										)
+									end,
+									desc = function()
+										return string.format(
+											G_RLF.L["ItemTypeDurationDesc"],
+											className() or tostring(classID)
+										)
+									end,
+									min = 0,
+									max = 30,
+									step = 1,
+									-- A client without this item class has no name for it, and classic
+									-- clients list some old classes as "(OBSOLETE)".
+									hidden = function()
+										local name = className()
+										return name == nil or G_RLF.IsObsoleteItemClassName(name)
+									end,
+									get = function()
+										return fc().itemTypeSettings[classID].duration
+									end,
+									set = function(_, value)
+										fc().itemTypeSettings[classID].duration = value
+									end,
+									order = i,
+								}
+							end
+							return args
+						end)(),
+					},
 					itemHighlights = {
 						type = "group",
 						name = G_RLF.L["Item Highlights"],
@@ -833,6 +964,22 @@ function G_RLF.ItemLoot:BuildConfigArgs(frameId, order)
 								end,
 								order = 1,
 							},
+							highlightMountColor = {
+								type = "color",
+								name = G_RLF.L["Highlight Color"],
+								desc = G_RLF.L["HighlightColorDesc"],
+								width = "half",
+								disabled = function()
+									return not fc().enabled or not fc().itemHighlights.mounts
+								end,
+								get = function()
+									return unpack(fc().itemHighlightColors.mounts)
+								end,
+								set = function(_, r, g, b)
+									fc().itemHighlightColors.mounts = { r, g, b }
+								end,
+								order = 2,
+							},
 							highlightLegendary = {
 								type = "toggle",
 								name = G_RLF.L["Highlight Legendary Items"],
@@ -844,7 +991,23 @@ function G_RLF.ItemLoot:BuildConfigArgs(frameId, order)
 								set = function(_, value)
 									fc().itemHighlights.legendary = value
 								end,
-								order = 2,
+								order = 3,
+							},
+							highlightLegendaryColor = {
+								type = "color",
+								name = G_RLF.L["Highlight Color"],
+								desc = G_RLF.L["HighlightColorDesc"],
+								width = "half",
+								disabled = function()
+									return not fc().enabled or not fc().itemHighlights.legendary
+								end,
+								get = function()
+									return unpack(fc().itemHighlightColors.legendary)
+								end,
+								set = function(_, r, g, b)
+									fc().itemHighlightColors.legendary = { r, g, b }
+								end,
+								order = 4,
 							},
 							highlightBetterThanEquipped = {
 								type = "toggle",
@@ -857,7 +1020,23 @@ function G_RLF.ItemLoot:BuildConfigArgs(frameId, order)
 								set = function(_, value)
 									fc().itemHighlights.betterThanEquipped = value
 								end,
-								order = 3,
+								order = 5,
+							},
+							highlightBetterThanEquippedColor = {
+								type = "color",
+								name = G_RLF.L["Highlight Color"],
+								desc = G_RLF.L["HighlightColorDesc"],
+								width = "half",
+								disabled = function()
+									return not fc().enabled or not fc().itemHighlights.betterThanEquipped
+								end,
+								get = function()
+									return unpack(fc().itemHighlightColors.betterThanEquipped)
+								end,
+								set = function(_, r, g, b)
+									fc().itemHighlightColors.betterThanEquipped = { r, g, b }
+								end,
+								order = 6,
 							},
 							hasTertiaryOrSocket = {
 								type = "toggle",
@@ -870,7 +1049,23 @@ function G_RLF.ItemLoot:BuildConfigArgs(frameId, order)
 								set = function(_, value)
 									fc().itemHighlights.hasTertiaryOrSocket = value
 								end,
-								order = 4,
+								order = 7,
+							},
+							hasTertiaryOrSocketColor = {
+								type = "color",
+								name = G_RLF.L["Highlight Color"],
+								desc = G_RLF.L["HighlightColorDesc"],
+								width = "half",
+								disabled = function()
+									return not fc().enabled or not fc().itemHighlights.hasTertiaryOrSocket
+								end,
+								get = function()
+									return unpack(fc().itemHighlightColors.hasTertiaryOrSocket)
+								end,
+								set = function(_, r, g, b)
+									fc().itemHighlightColors.hasTertiaryOrSocket = { r, g, b }
+								end,
+								order = 8,
 							},
 							highlightQuest = {
 								type = "toggle",
@@ -883,7 +1078,23 @@ function G_RLF.ItemLoot:BuildConfigArgs(frameId, order)
 								set = function(_, value)
 									fc().itemHighlights.quest = value
 								end,
-								order = 5,
+								order = 9,
+							},
+							highlightQuestColor = {
+								type = "color",
+								name = G_RLF.L["Highlight Color"],
+								desc = G_RLF.L["HighlightColorDesc"],
+								width = "half",
+								disabled = function()
+									return not fc().enabled or not fc().itemHighlights.quest
+								end,
+								get = function()
+									return unpack(fc().itemHighlightColors.quest)
+								end,
+								set = function(_, r, g, b)
+									fc().itemHighlightColors.quest = { r, g, b }
+								end,
+								order = 10,
 							},
 							highlightTransmog = {
 								type = "toggle",
@@ -896,7 +1107,23 @@ function G_RLF.ItemLoot:BuildConfigArgs(frameId, order)
 								set = function(_, value)
 									fc().itemHighlights.transmog = value
 								end,
-								order = 6,
+								order = 11,
+							},
+							highlightTransmogColor = {
+								type = "color",
+								name = G_RLF.L["Highlight Color"],
+								desc = G_RLF.L["HighlightColorDesc"],
+								width = "half",
+								disabled = function()
+									return not fc().enabled or not fc().itemHighlights.transmog
+								end,
+								get = function()
+									return unpack(fc().itemHighlightColors.transmog)
+								end,
+								set = function(_, r, g, b)
+									fc().itemHighlightColors.transmog = { r, g, b }
+								end,
+								order = 12,
 							},
 						},
 					},
@@ -1155,7 +1382,7 @@ function G_RLF.ItemLoot:BuildConfigArgs(frameId, order)
 				},
 			},
 		},
-	}
+	})
 end
 
 return {}

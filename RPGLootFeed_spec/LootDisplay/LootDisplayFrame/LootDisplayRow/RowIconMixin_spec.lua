@@ -43,6 +43,42 @@ describe("RLF_RowIconMixin", function()
 			stub(ns.DbAccessor, "Styling").returns(stylingDb)
 		end)
 
+		describe("icon quality border setting", function()
+			before_each(function()
+				row.icon = "Interface/Icons/INV_Misc_QuestionMark"
+				row.key = "TestKey"
+				row.quality = 4
+				row.UpdateIcon = function() end
+				stub(row, "UpdateIcon")
+			end)
+
+			it("only records the setting on the first call", function()
+				RLF_RowIconMixin.StyleIcon(row)
+				assert.stub(row.UpdateIcon).was_not.called()
+			end)
+
+			it("re-runs UpdateIcon for the current item when the setting changes", function()
+				RLF_RowIconMixin.StyleIcon(row)
+				stylingDb.enableIconQualityBorder = false
+				RLF_RowIconMixin.StyleIcon(row)
+				assert.stub(row.UpdateIcon).was.called_with(row, "TestKey", row.icon, 4)
+			end)
+
+			it("does not re-run UpdateIcon when the setting is unchanged", function()
+				RLF_RowIconMixin.StyleIcon(row)
+				RLF_RowIconMixin.StyleIcon(row)
+				assert.stub(row.UpdateIcon).was_not.called()
+			end)
+
+			it("does not re-run UpdateIcon for a row with no icon yet", function()
+				row.icon = nil
+				RLF_RowIconMixin.StyleIcon(row)
+				stylingDb.enableIconQualityBorder = false
+				RLF_RowIconMixin.StyleIcon(row)
+				assert.stub(row.UpdateIcon).was_not.called()
+			end)
+		end)
+
 		it("calls SetSize on first call", function()
 			RLF_RowIconMixin.StyleIcon(row)
 			assert.stub(row.Icon.SetSize).was.called(1)
@@ -328,6 +364,88 @@ describe("RLF_RowIconMixin", function()
 			-- ── Square quality border ──────────────────────────────────────
 			-- Blizzard's IconBorder is the rounded WhiteIconFrame; the squaring
 			-- skins swap it for four 1px edges tinted with the quality color.
+
+			describe("icon quality border setting (issue #414)", function()
+				local function squareEdges()
+					return {
+						row.Icon.SquareBorderTop,
+						row.Icon.SquareBorderRight,
+						row.Icon.SquareBorderBottom,
+						row.Icon.SquareBorderLeft,
+					}
+				end
+
+				before_each(function()
+					row.Icon.IconBorder.IsShown.returns(true)
+					row.Icon.IconBorder.GetVertexColor.returns(0.64, 0.21, 0.93, 1)
+					stub(row.Icon.IconBorder, "SetAlpha")
+				end)
+
+				it("keeps the border by default (setting absent)", function()
+					update()
+					assert.stub(row.Icon.IconBorder.SetAlpha).was.called_with(row.Icon.IconBorder, 1)
+					assert.stub(row.Icon.IconBorder.Hide).was_not.called()
+				end)
+
+				it("hides Blizzard's IconBorder when turned off", function()
+					stylingDb.enableIconQualityBorder = false
+					update()
+					assert.stub(row.Icon.IconBorder.SetAlpha).was.called_with(row.Icon.IconBorder, 0)
+					assert.stub(row.Icon.IconBorder.Hide).was.called()
+				end)
+
+				it("draws no square border either when turned off", function()
+					stylingDb.iconSkin = ns.IconSkin.SQUARE
+					stylingDb.enableIconQualityBorder = false
+					update()
+					for _, edge in ipairs(squareEdges()) do
+						assert.stub(edge.Show).was_not.called()
+					end
+					assert.stub(row.Icon.IconBorder.SetAlpha).was.called_with(row.Icon.IconBorder, 0)
+				end)
+
+				it("hides a square border that was already drawn", function()
+					stylingDb.iconSkin = ns.IconSkin.SQUARE
+					update()
+					for _, edge in ipairs(squareEdges()) do
+						assert.stub(edge.Show).was.called(1)
+					end
+
+					stylingDb.enableIconQualityBorder = false
+					update()
+
+					for _, edge in ipairs(squareEdges()) do
+						assert.stub(edge.Hide).was.called()
+					end
+					assert.is_false(row.qualityBorderApplied)
+				end)
+
+				it("brings the border back when turned on again", function()
+					stylingDb.iconSkin = ns.IconSkin.SQUARE
+					stylingDb.enableIconQualityBorder = false
+					update()
+					for _, edge in ipairs(squareEdges()) do
+						edge.Show:clear()
+					end
+					row.Icon.IconBorder.SetAlpha:clear()
+
+					stylingDb.enableIconQualityBorder = true
+					update()
+
+					assert.stub(row.Icon.IconBorder.SetAlpha).was.called_with(row.Icon.IconBorder, 1)
+					for _, edge in ipairs(squareEdges()) do
+						assert.stub(edge.Show).was.called(1)
+					end
+				end)
+
+				it("also hides a skin addon's border (Masque) when turned off", function()
+					ns.iconGroup = { AddButton = function() end, ReSkin = function() end }
+					stylingDb.iconSkin = ns.IconSkin.MASQUE
+					stylingDb.enableIconQualityBorder = false
+					update()
+					assert.stub(row.Icon.IconBorder.SetAlpha).was.called_with(row.Icon.IconBorder, 0)
+				end)
+			end)
 
 			describe("square quality border", function()
 				local edges

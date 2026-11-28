@@ -240,6 +240,15 @@ function Styling:SetIconSkin(_, value)
 	G_RLF.LootDisplay:UpdateRowStyles(self.frameId)
 end
 
+function Styling:GetEnableIconQualityBorder()
+	return G_RLF.DbAccessor:Styling(self.frameId).enableIconQualityBorder ~= false
+end
+
+function Styling:SetEnableIconQualityBorder(_, value)
+	G_RLF.DbAccessor:Styling(self.frameId).enableIconQualityBorder = value
+	G_RLF.LootDisplay:UpdateRowStyles(self.frameId)
+end
+
 function Styling:GetUseFontObjects()
 	return G_RLF.DbAccessor:Styling(self.frameId).useFontObjects
 end

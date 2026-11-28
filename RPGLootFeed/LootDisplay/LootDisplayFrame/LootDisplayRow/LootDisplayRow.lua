@@ -14,6 +14,7 @@ local G_RLF = ns
 ---@field unit string
 ---@field type string
 ---@field highlight boolean
+---@field highlightColor? number[]
 ---@field isHistoryMode boolean
 ---@field pendingElement table
 ---@field updatePending boolean
@@ -131,6 +132,7 @@ function LootDisplayRowMixin:Reset()
 	self.unit = nil
 	self.type = nil
 	self.highlight = nil
+	self.highlightColor = nil
 	self.isHistoryMode = false
 	self.isSampleRow = false
 	self.hasElementFadeOverride = false
@@ -285,10 +287,9 @@ function LootDisplayRowMixin:SetClickThrough(enabled)
 	self.isClickThrough = enabled
 	self:UpdateMouseState()
 	if enabled then
+		-- Only the link-click area is hidden.  The icon stays visible: UpdateMouseState
+		-- above already took its mouse capture away, so it no longer blocks clicks.
 		self.ClickableButton:Hide()
-		if self.Icon then
-			self.Icon:Hide()
-		end
 		-- Unpin before the hasMouseOver cleanup.  OnLeave will not fire
 		-- when EnableMouse is toggled, so we must unpin explicitly.
 		if self.isPinned then
@@ -403,15 +404,25 @@ function LootDisplayRowMixin:BootstrapFromElement(element)
 	self.amountTextFn = element.amountTextFn
 	local text
 	-- Resolve the effective display duration for this element on this specific frame.
-	-- element.showForSeconds (if set) takes highest priority; otherwise check the
-	-- frame's per-quality duration override for itemLoot rows.
+	-- element.showForSeconds (if set) takes highest priority; then the frame's
+	-- per-item-type override (the more specific, deliberate one); then its
+	-- per-quality override. Both only apply to itemLoot-style rows, and a duration
+	-- of 0 means "no override" and falls through.
 	local effectiveShowForSeconds = element.showForSeconds
-	if not effectiveShowForSeconds and element.filterItemQuality ~= nil then
+	if not effectiveShowForSeconds and (element.filterItemClassId ~= nil or element.filterItemQuality ~= nil) then
 		local frameConfig = G_RLF.db.global.frames[self.frameType]
 		local featureCfg = frameConfig and frameConfig.features and frameConfig.features.itemLoot
-		local qualSettings = featureCfg and (featureCfg.itemQualitySettings or {})[element.filterItemQuality]
-		if qualSettings and qualSettings.duration > 0 then
-			effectiveShowForSeconds = qualSettings.duration
+		if featureCfg and element.filterItemClassId ~= nil then
+			local typeSettings = (featureCfg.itemTypeSettings or {})[element.filterItemClassId]
+			if typeSettings and typeSettings.duration and typeSettings.duration > 0 then
+				effectiveShowForSeconds = typeSettings.duration
+			end
+		end
+		if not effectiveShowForSeconds and element.filterItemQuality ~= nil then
+			local qualSettings = featureCfg and (featureCfg.itemQualitySettings or {})[element.filterItemQuality]
+			if qualSettings and qualSettings.duration > 0 then
+				effectiveShowForSeconds = qualSettings.duration
+			end
 		end
 	end
 	if element.isSampleRow or (effectiveShowForSeconds ~= nil and effectiveShowForSeconds ~= self.showForSeconds) then
@@ -484,6 +495,7 @@ function LootDisplayRowMixin:BootstrapFromElement(element)
 	end
 
 	self.highlight = highlight
+	self.highlightColor = element.highlightColor
 	RunNextFrame(function()
 		self:Enter()
 		self:UpdateItemCount()

@@ -163,6 +163,32 @@ function G_RLF.ItemInfo:IsEligibleEquipment()
 	return true
 end
 
+-- Slots whose type text is never judged by armor class: cloaks, shirts and tabards can be worn by anyone.
+local equipLocNeverJudged = {
+	INVTYPE_CLOAK = true,
+	INVTYPE_BODY = true,
+	INVTYPE_TABARD = true,
+}
+
+--- Is this item a type the character cannot use (the wrong armor class, a weapon or
+--- shield they lack the skill for, another class's relic)? The item's own tooltip is the
+--- authority because it already accounts for every class and flavor rule; only when it
+--- has not loaded does this fall back to the armor class check, which cannot judge
+--- weapons or off-hand items.
+---@return boolean
+function G_RLF.ItemInfo:IsUnusableType()
+	local api = G_RLF.WoWAPI and G_RLF.WoWAPI.ItemLoot
+	if api and api.ItemTypeUnusable then
+		local unusable = api.ItemTypeUnusable(self.itemLink)
+		if unusable ~= nil then
+			return unusable
+		end
+	end
+	return self.classID == Enum.ItemClass.Armor
+		and not equipLocNeverJudged[self.itemEquipLoc]
+		and not self:IsEligibleEquipment()
+end
+
 -- ── Equipment type text ──────────────────────────────────────────────────────
 
 function G_RLF.ItemInfo:GetEquipmentTypeText()
@@ -228,11 +254,7 @@ function G_RLF.ItemInfo:GetEquipmentTypeText()
 		)
 	end
 
-	if
-		not self:IsEligibleEquipment()
-		and self.classID == Enum.ItemClass.Armor
-		and not equipLocNeverShowSubType[self.itemEquipLoc]
-	then
+	if self:IsUnusableType() then
 		equipmentTypeText = string.format("%s%s|r", G_RLF:RGBAToHexFormat(1, 0, 0, 1), equipmentTypeText)
 	else
 		equipmentTypeText = string.format("%s%s|r", G_RLF:RGBAToHexFormat(1, 1, 1, 1), equipmentTypeText)

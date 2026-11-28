@@ -153,6 +153,19 @@ function G_RLF.PartyLoot:BuildConfigArgs(frameId, order)
 						end,
 						order = 4,
 					},
+					alwaysShowCraftingMaterials = {
+						type = "toggle",
+						name = G_RLF.L["Always Show Crafting Materials"],
+						desc = G_RLF.L["AlwaysShowCraftingMaterialsDesc"],
+						width = "double",
+						get = function()
+							return fc().alwaysShowCraftingMaterials
+						end,
+						set = function(_, value)
+							fc().alwaysShowCraftingMaterials = value
+						end,
+						order = 4.5,
+					},
 					ignoreItemIds = {
 						type = "input",
 						name = G_RLF.L["Ignore Item IDs"],

@@ -73,6 +73,7 @@ function G_RLF.LootElementBase:new()
 	-- per-frame quality tiers and deny lists without knowing the source module.
 	element.filterItemId = nil -- Item ID for deny list checks (ItemLoot, PartyLoot)
 	element.filterItemQuality = nil -- Quality tier for quality-filter checks
+	element.filterItemClassId = nil -- Item class for per-item-type display duration overrides
 	element.filterCurrencyId = nil -- Currency ID for deny list checks (Currency)
 
 	-- ── Display timing ─────────────────────────────────────────────────────────
@@ -192,6 +193,7 @@ function G_RLF.LootElementBase:fromPayload(payload)
 
 	-- ── Effects ────────────────────────────────────────────────────────────────
 	element.highlight = payload.highlight or false
+	element.highlightColor = payload.highlightColor
 	element.sound = payload.sound
 
 	-- ── Interaction ────────────────────────────────────────────────────────────
@@ -224,6 +226,7 @@ function G_RLF.LootElementBase:fromPayload(payload)
 	-- ── Per-frame filter metadata ─────────────────────────────────────────────
 	element.filterItemId = payload.filterItemId
 	element.filterItemQuality = payload.filterItemQuality
+	element.filterItemClassId = payload.filterItemClassId
 	element.filterCurrencyId = payload.filterCurrencyId
 
 	-- ── LootRolls-specific fields ──────────────────────────────────────────────
@@ -271,6 +274,7 @@ end
 ---@field a? number Alpha channel (0-1, default 1)
 ---@field colorFn? fun(netQty: number): number, number, number, number Dynamic color recomputer
 ---@field highlight? boolean Border glow / entry animation
+---@field highlightColor? number[] {r, g, b} tint for the icon glow; nil keeps the default glow
 ---@field sound? string Sound file path
 ---@field isCustomLink? boolean Custom tooltip behavior flag
 ---@field sampleTooltipText? string Label shown on row hover in the options preview (sample rows only)
@@ -278,6 +282,7 @@ end
 ---@field unit? string Unit token for portrait display
 ---@field filterItemId? number Item ID for per-frame deny list filtering (ItemLoot, PartyLoot)
 ---@field filterItemQuality? number Item quality for per-frame quality-tier filtering (ItemLoot, PartyLoot)
+---@field filterItemClassId? number Item class ID for per-item-type display duration overrides (ItemLoot, PartyLoot)
 ---@field filterCurrencyId? number Currency ID for per-frame deny list filtering (Currency)
 ---@field showForSeconds? number Override fade timer
 ---@field isSampleRow? boolean Test mode flag, never expires

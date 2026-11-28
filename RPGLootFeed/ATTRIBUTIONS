@@ -1,1 +1,5 @@
 Sounds/Pickup_Gold_04.ogg (originally Pickup_Gold_04.wav) by LittleRobotSoundFactory -- https://freesound.org/s/270410/ -- License: Attribution 4.0
+
+Open Sesame (https://github.com/Gogo1951/Open-Sesame) by Gogo1951 -- License: MIT -- container item data in Features/OpenContainers/OpenContainersData.lua is ported from it
+
+Icons/BagCount.tga and Icons/BankCount.tga are derived from Twemoji (https://github.com/twitter/twemoji) graphics (1f392, 1f3e6) by Twitter, Inc. and other contributors -- License: CC-BY 4.0 (https://creativecommons.org/licenses/by/4.0/) -- resized and converted to TGA

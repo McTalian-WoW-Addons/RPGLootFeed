@@ -8,7 +8,7 @@ local it = busted.it
 local stub = busted.stub
 
 describe("LootRollFrames override", function()
-	local ns, Override, rollFrame, button, rowsByRollID
+	local ns, Override, rollFrame, button, rowsByRollID, openRolls
 
 	--- Mock Blizzard GroupLootFrame with one mouse-enabled child button.
 	local function newMouseFrame(children)
@@ -26,7 +26,7 @@ describe("LootRollFrames override", function()
 			self._alpha = a
 		end
 		function f:IsShown()
-			return true
+			return self._shown ~= false
 		end
 		return f
 	end
@@ -37,12 +37,17 @@ describe("LootRollFrames override", function()
 		ns.db.global.interactions.disableAllInteraction = false
 
 		rowsByRollID = {}
+		-- IsRollOpen: true = open, false = over, nil = unknown (default: unknown)
+		openRolls = {}
 		ns.LootRolls = {
 			IsEnabled = function()
 				return true
 			end,
 			FindRollRows = function(_, rollID)
 				return rowsByRollID[rollID] or {}
+			end,
+			IsRollOpen = function(_, rollID)
+				return openRolls[rollID]
 			end,
 		}
 
@@ -105,6 +110,45 @@ describe("LootRollFrames override", function()
 		assert.is_true(button._mouse)
 	end)
 
+	it("keeps Blizzard's frame for a results-only row with no roll buttons (issue #641)", function()
+		rowsByRollID[7] = {
+			{
+				row = {
+					IsInteractionAllowed = function()
+						return true
+					end,
+					ShowsRollButtons = function()
+						return false
+					end,
+				},
+			},
+		}
+
+		Override:Refresh()
+
+		assert.are.equal(1, rollFrame._alpha)
+		assert.is_true(rollFrame._mouse)
+	end)
+
+	it("still conceals for a row that shows its roll buttons", function()
+		rowsByRollID[7] = {
+			{
+				row = {
+					IsInteractionAllowed = function()
+						return true
+					end,
+					ShowsRollButtons = function()
+						return true
+					end,
+				},
+			},
+		}
+
+		Override:Refresh()
+
+		assert.are.equal(0, rollFrame._alpha)
+	end)
+
 	it("keeps Blizzard's frame while the option is off (default)", function()
 		rowsByRollID[7] = { { row = {
 			IsInteractionAllowed = function()
@@ -144,5 +188,89 @@ describe("LootRollFrames override", function()
 		assert.are.equal(1, rollFrame._alpha)
 		assert.is_true(rollFrame._mouse)
 		assert.is_true(button._mouse)
+	end)
+
+	describe("stale frames (roll already over)", function()
+		local function concealThenDropRow()
+			rowsByRollID[7] = { { row = {
+				IsInteractionAllowed = function()
+					return true
+				end,
+			} } }
+			Override:Refresh()
+			rowsByRollID[7] = nil
+		end
+
+		it("keeps a concealed frame hidden when its roll is over", function()
+			concealThenDropRow()
+			openRolls[7] = false
+
+			Override:Refresh()
+
+			assert.are.equal(0, rollFrame._alpha)
+			assert.is_false(rollFrame._mouse)
+		end)
+
+		it("reveals the frame while its roll is still open", function()
+			concealThenDropRow()
+			openRolls[7] = true
+
+			Override:Refresh()
+
+			assert.are.equal(1, rollFrame._alpha)
+			assert.is_true(rollFrame._mouse)
+		end)
+
+		it("reveals the frame when the client cannot say whether the roll is open", function()
+			concealThenDropRow()
+
+			Override:Refresh()
+
+			assert.are.equal(1, rollFrame._alpha)
+		end)
+
+		it("keeps a frame hidden once the player rolled on it, even if the roll still reads open", function()
+			concealThenDropRow()
+			openRolls[7] = true
+			Override:MarkRolled(7)
+
+			Override:Refresh()
+
+			assert.are.equal(0, rollFrame._alpha)
+		end)
+
+		it("only marks the frames that show that roll", function()
+			Override:MarkRolled(99)
+
+			assert.is_nil(rollFrame._rlfRolledID)
+			Override:MarkRolled(7)
+			assert.are.equal(7, rollFrame._rlfRolledID)
+		end)
+
+		it("reveals a reused frame for a new roll", function()
+			concealThenDropRow()
+			openRolls[7] = false
+			Override:Refresh()
+			assert.are.equal(0, rollFrame._alpha)
+
+			-- Blizzard reuses the same frame object for the next roll.
+			rollFrame.rollID = 8
+			openRolls[8] = true
+			Override:Refresh()
+
+			assert.are.equal(1, rollFrame._alpha)
+			assert.is_true(rollFrame._mouse)
+		end)
+
+		it("restores a frame Blizzard already hid, so it is clean for reuse", function()
+			concealThenDropRow()
+			openRolls[7] = false
+			rollFrame._shown = false
+
+			Override:Refresh()
+
+			assert.are.equal(1, rollFrame._alpha)
+			assert.is_true(rollFrame._mouse)
+		end)
 	end)
 end)

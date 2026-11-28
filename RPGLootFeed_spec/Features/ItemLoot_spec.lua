@@ -34,6 +34,9 @@ describe("ItemLoot Module", function()
 			IsEligibleEquipment = function()
 				return false
 			end,
+			IsUnusableType = function()
+				return false
+			end,
 			IsEquippableItem = function()
 				return false
 			end,
@@ -166,8 +169,13 @@ describe("ItemLoot Module", function()
 							legendary = false,
 							betterThanEquipped = false,
 							quest = false,
-							tertiaryOrSocket = false,
+							hasTertiaryOrSocket = false,
 							transmog = false,
+						},
+						itemHighlightColors = {
+							mounts = { 0.64, 0.21, 0.93 },
+							legendary = { 1, 0.5, 0 },
+							hasTertiaryOrSocket = { 0, 0.8, 1 },
 						},
 						itemCountTextEnabled = false,
 						itemCountTextColor = { 1, 1, 1, 1 },
@@ -251,6 +259,9 @@ describe("ItemLoot Module", function()
 			end,
 			CreateAtlasMarkup = function(icon)
 				return "[" .. icon .. "]"
+			end,
+			HasAtlas = function()
+				return false
 			end,
 			GetAHPrice = function()
 				return nil
@@ -378,6 +389,9 @@ describe("ItemLoot Module", function()
 			end,
 			CreateAtlasMarkup = function(icon)
 				return "[" .. icon .. "]"
+			end,
+			HasAtlas = function()
+				return false
 			end,
 			GetAHPrice = function()
 				return nil
@@ -987,6 +1001,13 @@ describe("ItemLoot Module", function()
 				assert.equals(2, payload.filterItemQuality)
 			end)
 
+			it("includes filterItemClassId in payload for per-item-type duration overrides (issue #415)", function()
+				local info = makeItemInfo({ itemQuality = 2, classID = 4 })
+				local payload = ItemLoot:BuildPayload(info, 1, nil)
+
+				assert.equals(4, payload.filterItemClassId)
+			end)
+
 			it("includes filterItemId in payload", function()
 				local info = makeItemInfo({ itemId = 18803, itemQuality = 2 })
 				local payload = ItemLoot:BuildPayload(info, 1, nil)
@@ -1032,6 +1053,53 @@ describe("ItemLoot Module", function()
 				local payload = ItemLoot:BuildPayload(info, 1, nil)
 
 				assert.is_true(payload.highlight)
+			end)
+
+			it("carries the glow color of the reason that matched", function()
+				ns.db.global.item.itemHighlights.mounts = true
+				ns.db.global.item.itemHighlights.legendary = true
+				local info = makeItemInfo({
+					IsMount = function()
+						return true
+					end,
+					IsLegendary = function()
+						return true
+					end,
+				})
+				local payload = ItemLoot:BuildPayload(info, 1, nil)
+
+				-- mounts come first, so the mount color wins over legendary
+				assert.same({ 0.64, 0.21, 0.93 }, payload.highlightColor)
+			end)
+
+			it("has no glow color when nothing is highlighted", function()
+				local payload = ItemLoot:BuildPayload(makeItemInfo(), 1, nil)
+
+				assert.is_nil(payload.highlightColor)
+			end)
+
+			it("highlight is true for tertiary or socket items when hasTertiaryOrSocket is enabled", function()
+				ns.db.global.item.itemHighlights.hasTertiaryOrSocket = true
+				local info = makeItemInfo({
+					HasItemRollBonus = function()
+						return true
+					end,
+				})
+				local payload = ItemLoot:BuildPayload(info, 1, nil)
+
+				assert.is_true(payload.highlight)
+			end)
+
+			it("highlight is false for tertiary or socket items when hasTertiaryOrSocket is off", function()
+				ns.db.global.item.itemHighlights.hasTertiaryOrSocket = false
+				local info = makeItemInfo({
+					HasItemRollBonus = function()
+						return true
+					end,
+				})
+				local payload = ItemLoot:BuildPayload(info, 1, nil)
+
+				assert.is_false(payload.highlight)
 			end)
 
 			it("highlight is true for legendary items when itemHighlights.legendary is enabled", function()
@@ -1128,6 +1196,101 @@ describe("ItemLoot Module", function()
 				assert.is_nil(result)
 			end)
 
+			describe("bag and bank breakdown (showBagBankCounts)", function()
+				local BAG = "|TInterface/AddOns/RPGLootFeed/Icons/BagCount:14:14|t"
+				local BANK = "|TInterface/AddOns/RPGLootFeed/Icons/BankCount:14:14|t"
+
+				--- GetItemCount(link, includeBank, includeUses, includeReagentBank, includeAccountBank)
+				local function counts(bags, bank, warband)
+					ItemLoot.itemLootApi.GetItemCount = function(
+						_,
+						includeBank,
+						_,
+						includeReagentBank,
+						includeAccountBank
+					)
+						local n = bags
+						if includeBank then
+							n = n + bank
+						end
+						if includeAccountBank then
+							n = n + warband
+						end
+						return n
+					end
+				end
+
+				before_each(function()
+					ns.db.global.item.itemCountTextEnabled = true
+					ns.db.global.misc.showBagBankCounts = true
+					ItemLoot.itemLootApi.GetItemInfo = function()
+						return "Finkle's Lava Dredger"
+					end
+				end)
+
+				local function count()
+					local payload = ItemLoot:BuildPayload(makeItemInfo(), 1, nil)
+					return payload.itemCountFn()
+				end
+
+				it("is off by default: the plain total", function()
+					ns.db.global.misc.showBagBankCounts = false
+					counts(12, 30, 0)
+					assert.equals(42, count())
+				end)
+
+				it("shows bags and bank with icons instead of the total", function()
+					counts(12, 30, 0)
+					assert.equals(BAG .. " 12  " .. BANK .. " 30", count())
+				end)
+
+				it("leaves out the bank when it holds none", function()
+					counts(12, 0, 0)
+					assert.equals(BAG .. " 12", count())
+				end)
+
+				it("still shows the bags when they hold none", function()
+					counts(0, 30, 0)
+					assert.equals(BAG .. " 0  " .. BANK .. " 30", count())
+				end)
+
+				it("adds the warband bank with its atlas icon where the client has it", function()
+					ItemLoot.itemLootApi.HasAtlas = function(atlas)
+						return atlas == "warbands-icon"
+					end
+					counts(12, 30, 5)
+					assert.equals(BAG .. " 12  " .. BANK .. " 30  [warbands-icon] 5", count())
+				end)
+
+				it("folds the warband bank into the bank number when the atlas is missing", function()
+					counts(12, 30, 5)
+					assert.equals(BAG .. " 12  " .. BANK .. " 35", count())
+				end)
+
+				it("keeps the plain rule of showing nothing for a single item", function()
+					counts(1, 0, 0)
+					assert.equals(1, count())
+				end)
+
+				it("sizes the icons from the main frame's font size (font size + 4)", function()
+					ns.DbAccessor.Styling = function()
+						return { fontSize = 16 }
+					end
+					counts(3, 4, 0)
+					assert.equals(
+						"|TInterface/AddOns/RPGLootFeed/Icons/BagCount:20:20|t 3  |TInterface/AddOns/RPGLootFeed/Icons/BankCount:20:20|t 4",
+						count()
+					)
+				end)
+
+				it("keeps the item count color and wrap character", function()
+					counts(12, 30, 0)
+					local _, options = count()
+					assert.is_table(options)
+					assert.is_not_nil(options.color)
+				end)
+			end)
+
 			it("returns nil when GetItemInfo returns nil name", function()
 				ns.db.global.item.itemCountTextEnabled = true
 				ItemLoot.itemLootApi.GetItemInfo = function()
@@ -1147,6 +1310,73 @@ describe("ItemLoot Module", function()
 				-- secondaryText is produced by the ItemLoot context provider, which
 				-- OnEnable registers with the TextTemplateEngine.
 				ItemLoot:OnEnable()
+			end)
+
+			describe("grey equippable items", function()
+				local function greyGear(overrides)
+					local fields = {
+						itemQuality = 0,
+						sellPrice = 10000,
+						itemEquipLoc = "INVTYPE_HEAD",
+						IsEquippableItem = function()
+							return true
+						end,
+						GetEquipmentTypeText = function()
+							return " [Head]"
+						end,
+					}
+					for k, v in pairs(overrides or {}) do
+						fields[k] = v
+					end
+					return makeItemInfo(fields)
+				end
+
+				before_each(function()
+					ns.db.global.item.pricesForSellableItems = "Vendor"
+				end)
+
+				it("shows the equipment type when the player can wear it and the slot is empty", function()
+					local info = greyGear()
+					local payload = ItemLoot:BuildPayload(info, 1, nil)
+
+					assert.equals(" [Head]", payload.secondaryTextFn())
+					assert.is_nil(payload.secondaryCoinDataFn(0))
+				end)
+
+				it("shows the vendor value when something is already equipped in the slot", function()
+					ItemLoot.itemLootApi.GetInventoryItemLink = function()
+						return "|cffffffff|Hitem:1::::::::60:::::|h[Worn Hat]|h|r"
+					end
+					local info = greyGear()
+					local payload = ItemLoot:BuildPayload(info, 1, nil)
+
+					assert.equals(" ", payload.secondaryTextFn())
+					local g = payload.secondaryCoinDataFn(0)
+					assert.equals(1, g)
+				end)
+
+				it("shows the vendor value when the player cannot wear it", function()
+					local info = greyGear({
+						IsUnusableType = function()
+							return true
+						end,
+					})
+					local payload = ItemLoot:BuildPayload(info, 1, nil)
+
+					assert.equals(" ", payload.secondaryTextFn())
+					assert.equals(1, payload.secondaryCoinDataFn(0))
+				end)
+
+				it("keeps the equipment type for better quality gear even when the slot is full", function()
+					ItemLoot.itemLootApi.GetInventoryItemLink = function()
+						return "|cffffffff|Hitem:1::::::::60:::::|h[Worn Hat]|h|r"
+					end
+					local info = greyGear({ itemQuality = 1 })
+					local payload = ItemLoot:BuildPayload(info, 1, nil)
+
+					assert.equals(" [Head]", payload.secondaryTextFn())
+					assert.is_nil(payload.secondaryCoinDataFn(0))
+				end)
 			end)
 
 			describe("plainTextPrices disabled (default)", function()
@@ -1289,6 +1519,61 @@ describe("ItemLoot Module", function()
 					assert.equals(textOff, textOn)
 					assert.is_nil(payloadOff.secondaryCoinDataFn(0))
 					assert.is_nil(payloadOn.secondaryCoinDataFn(0))
+				end)
+			end)
+
+			describe("combinedPriceIcons (issue #615)", function()
+				local info
+
+				before_each(function()
+					info = makeItemInfo({ sellPrice = 10000 })
+					ItemLoot.itemLootApi.GetAHPrice = function()
+						return 20000
+					end
+				end)
+
+				it("is off by default: combined prices carry no icons", function()
+					ns.db.global.item.pricesForSellableItems = "VendorAH"
+					local payload = ItemLoot:BuildPayload(info, 1, nil)
+					assert.equals("1g 0s 0c    2g 0s 0c", payload.secondaryTextFn(1))
+				end)
+
+				it("puts the vendor icon, then the AH icon, in Vendor-then-AH mode", function()
+					ns.db.global.item.pricesForSellableItems = "VendorAH"
+					ns.db.global.item.combinedPriceIcons = true
+					local payload = ItemLoot:BuildPayload(info, 1, nil)
+					assert.equals(
+						"[Interface/Icons/inv_misc_coin_01] 1g 0s 0c    [Interface/Icons/inv_misc_coin_02] 2g 0s 0c",
+						payload.secondaryTextFn(1)
+					)
+				end)
+
+				it("puts the AH icon, then the vendor icon, in AH-then-Vendor mode", function()
+					ns.db.global.item.pricesForSellableItems = "AHVendor"
+					ns.db.global.item.combinedPriceIcons = true
+					local payload = ItemLoot:BuildPayload(info, 1, nil)
+					assert.equals(
+						"[Interface/Icons/inv_misc_coin_02] 2g 0s 0c    [Interface/Icons/inv_misc_coin_01] 1g 0s 0c",
+						payload.secondaryTextFn(1)
+					)
+				end)
+
+				it("only icons the price that exists when one source is missing", function()
+					ns.db.global.item.pricesForSellableItems = "VendorAH"
+					ns.db.global.item.combinedPriceIcons = true
+					ItemLoot.itemLootApi.GetAHPrice = function()
+						return nil
+					end
+					local payload = ItemLoot:BuildPayload(info, 1, nil)
+					assert.equals("[Interface/Icons/inv_misc_coin_01] 1g 0s 0c", payload.secondaryTextFn(1))
+				end)
+
+				it("does not change single-source modes", function()
+					ns.db.global.item.pricesForSellableItems = "Vendor"
+					ns.db.global.item.plainTextPrices = true
+					ns.db.global.item.combinedPriceIcons = true
+					local payload = ItemLoot:BuildPayload(info, 1, nil)
+					assert.equals("[Interface/Icons/inv_misc_coin_01] 1g 0s 0c", payload.secondaryTextFn())
 				end)
 			end)
 

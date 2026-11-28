@@ -4,6 +4,7 @@ local busted = require("busted")
 local describe = busted.describe
 local it = busted.it
 local setup = busted.setup
+local before_each = busted.before_each
 
 -- Feature defaults (ns.defaults.global.frames["**"].features.partyLoot) are
 -- already covered end-to-end by RPGLootFeed_spec/config/ConfigOptions_spec.lua.
@@ -50,5 +51,31 @@ describe("PartyLootConfig module", function()
 		assert.is_nil(group.args.partyLootOptions.args.positioning)
 		assert.is_nil(group.args.partyLootOptions.args.sizing)
 		assert.is_nil(group.args.partyLootOptions.args.styling)
+	end)
+
+	describe("always show crafting materials option (issue #431)", function()
+		local option, partyCfg
+
+		before_each(function()
+			partyCfg = {}
+			for k, v in pairs(ns.defaults.global.frames["**"].features.partyLoot) do
+				partyCfg[k] = v
+			end
+			ns.db = { global = { frames = { [1] = { features = { partyLoot = partyCfg } } } } }
+			option = ns.PartyLoot:BuildConfigArgs(1, 3).args.partyLootOptions.args.alwaysShowCraftingMaterials
+		end)
+
+		it("defaults to off", function()
+			assert.is_false(ns.defaults.global.frames["**"].features.partyLoot.alwaysShowCraftingMaterials)
+		end)
+
+		it("is a toggle that reads and writes the setting", function()
+			assert.is_table(option)
+			assert.equal("toggle", option.type)
+			assert.is_false(option.get())
+			option.set(nil, true)
+			assert.is_true(partyCfg.alwaysShowCraftingMaterials)
+			assert.is_true(option.get())
+		end)
 	end)
 end)

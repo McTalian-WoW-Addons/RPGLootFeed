@@ -333,6 +333,93 @@ describe("ItemInfoEquipment", function()
 		end)
 	end)
 
+	describe("IsUnusableType", function()
+		local function makeItem(classID, subclassID, equipLoc)
+			return assert(
+				ItemInfo:new(
+					10100,
+					"Test Item",
+					"link",
+					2,
+					10,
+					1,
+					"Type",
+					"Sub",
+					1,
+					equipLoc,
+					"tex",
+					0,
+					classID,
+					subclassID,
+					1,
+					1,
+					1,
+					false
+				)
+			)
+		end
+
+		before_each(function()
+			ns.WoWAPI = ns.WoWAPI or {}
+			ns.WoWAPI.ItemLoot = {}
+		end)
+
+		it("uses the tooltip when it has loaded, for a weapon the old check could not judge", function()
+			ns.WoWAPI.ItemLoot.ItemTypeUnusable = function()
+				return true
+			end
+			local mace = makeItem(Enum.ItemClass.Weapon, 4, "INVTYPE_WEAPONMAINHAND")
+			assert.is_true(mace:IsUnusableType())
+
+			ns.WoWAPI.ItemLoot.ItemTypeUnusable = function()
+				return false
+			end
+			assert.is_false(mace:IsUnusableType())
+		end)
+
+		it("trusts the tooltip over the armor class check for a shield", function()
+			ns.armorClassMapping = { WARRIOR = Enum.ItemArmorSubclass.Plate }
+			ns.equipSlotMap = { INVTYPE_SHIELD = 17 }
+			functionMocks.UnitClass.returns("Warrior", "WARRIOR", 1)
+			ns.WoWAPI.ItemLoot.ItemTypeUnusable = function()
+				return false -- a warrior can use a shield
+			end
+			local shield = makeItem(Enum.ItemClass.Armor, Enum.ItemArmorSubclass.Shield, "INVTYPE_SHIELD")
+			assert.is_false(shield:IsUnusableType())
+		end)
+
+		it("falls back to the armor class check while the tooltip has not loaded", function()
+			ns.WoWAPI.ItemLoot.ItemTypeUnusable = function()
+				return nil
+			end
+			functionMocks.UnitClass.returns("Mage", "MAGE", 1)
+			ns.armorClassMapping = { MAGE = Enum.ItemArmorSubclass.Cloth }
+			ns.equipSlotMap = { INVTYPE_CHEST = 5 }
+			local plate = makeItem(Enum.ItemClass.Armor, Enum.ItemArmorSubclass.Plate, "INVTYPE_CHEST")
+			assert.is_true(plate:IsUnusableType())
+		end)
+
+		it("does not judge weapons by armor class in the fallback", function()
+			ns.WoWAPI.ItemLoot.ItemTypeUnusable = function()
+				return nil
+			end
+			local sword = makeItem(Enum.ItemClass.Weapon, 7, "INVTYPE_WEAPON")
+			assert.is_false(sword:IsUnusableType())
+		end)
+
+		it("colors the equipment type text red when the tooltip says the type is unusable", function()
+			_G["INVTYPE_WEAPON"] = "One-Hand"
+			ns.WoWAPI.ItemLoot.ItemTypeUnusable = function()
+				return true
+			end
+			ns.RGBAToHexFormat = function(_, r, g)
+				return r == 1 and g == 0 and "|cFFFF0000" or "|cFFFFFFFF"
+			end
+			local mace = makeItem(Enum.ItemClass.Weapon, 4, "INVTYPE_WEAPON")
+			assert.matches("|cFFFF0000", mace:GetEquipmentTypeText())
+		end)
+	end)
+
 	describe("IsEligibleEquipment (Classic pre-Cata)", function()
 		it("treats 'Plate Mail' skill as Plate proficiency", function()
 			-- Force Classic branch

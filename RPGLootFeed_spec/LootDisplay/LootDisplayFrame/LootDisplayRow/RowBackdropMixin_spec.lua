@@ -175,6 +175,20 @@ describe("RLF_RowBackdropMixin", function()
 				assert.stub(row.SetBackdrop).was.called(1)
 			end)
 
+			it("rebuilds when the pixel size changes, such as after a UI scale change", function()
+				ns.PerfPixel.PScale = function(v)
+					return v
+				end
+				RLF_RowBackdropMixin.StyleRowBackdrop(row)
+				row.SetBackdrop:clear()
+				-- same config, but a physical pixel is now twice as big in UI units
+				ns.PerfPixel.PScale = function(v)
+					return v * 2
+				end
+				RLF_RowBackdropMixin.StyleRowBackdrop(row)
+				assert.stub(row.SetBackdrop).was.called(1)
+			end)
+
 			it("calls SetBackdropBorderColor with flat color when classColors is false", function()
 				RLF_RowBackdropMixin.StyleRowBackdrop(row)
 				assert.stub(row.SetBackdropBorderColor).was.called(1)

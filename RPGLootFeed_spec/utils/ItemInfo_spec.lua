@@ -237,6 +237,79 @@ describe("ItemInfo", function()
 		end)
 	end)
 
+	describe("StartsQuest", function()
+		before_each(function()
+			ns.WoWAPI = ns.WoWAPI or {}
+			ns.WoWAPI.ItemLoot = {}
+		end)
+
+		local function newItem(itemId, classID)
+			return ItemInfo:new(
+				itemId,
+				"Test Item",
+				"itemLink:" .. itemId,
+				1,
+				10,
+				1,
+				"Consumable",
+				"Other",
+				1,
+				"",
+				"texture",
+				100,
+				classID,
+				0,
+				1,
+				1,
+				1,
+				false
+			)
+		end
+
+		it("treats a quest-starting item of another class as a quest item", function()
+			ns.WoWAPI.ItemLoot.ItemStartsQuest = function()
+				return true
+			end
+			local item = assert(newItem(9001, 0))
+			assert.is_true(item:StartsQuest())
+			assert.is_true(item:IsQuestItem())
+		end)
+
+		it("does not treat an ordinary item as a quest item", function()
+			ns.WoWAPI.ItemLoot.ItemStartsQuest = function()
+				return false
+			end
+			local item = assert(newItem(9002, 0))
+			assert.is_false(item:IsQuestItem())
+		end)
+
+		it("does not cache a no, so a tooltip that fills in later is picked up", function()
+			local answer = false
+			ns.WoWAPI.ItemLoot.ItemStartsQuest = function()
+				return answer
+			end
+			local item = assert(newItem(9004, 0))
+			assert.is_false(item:StartsQuest())
+			answer = true
+			assert.is_true(item:StartsQuest())
+		end)
+
+		it("does not cache a result while the tooltip has not loaded", function()
+			local result = nil
+			local calls = 0
+			ns.WoWAPI.ItemLoot.ItemStartsQuest = function()
+				calls = calls + 1
+				return result
+			end
+			local item = assert(newItem(9003, 0))
+			assert.is_false(item:StartsQuest())
+			result = true
+			assert.is_true(item:StartsQuest())
+			assert.is_true(item:StartsQuest())
+			assert.are.equal(2, calls)
+		end)
+	end)
+
 	-- IsAppearanceCollected tests moved to ItemInfoTransmog_spec.lua
 
 	describe("IsLegendary", function()
