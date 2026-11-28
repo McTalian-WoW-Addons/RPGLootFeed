@@ -211,22 +211,64 @@ function TestMode:AuditRowEdges()
 					describeEdge("height", frame:GetHeight(), unitsPerPixel)
 				)
 			) -- nocheck
-			local index = 0
+			-- Number rows by where they sit, starting at the edge the feed grows from, so
+			-- "row 5" means the fifth on screen and not the fifth the code walks.
+			local shown, iteration = {}, 0
 			for row in frame.rows:iterate() do
-				index = index + 1
-				if row:IsShown() then
-					local unitsPerPixel = unitsPerPixelFor(row)
-					emit(
-						string.format(
-							"  row %d: %s %s %s %s",
-							index,
-							describeEdge("L", row:GetLeft(), unitsPerPixel),
-							describeEdge("R", row:GetRight(), unitsPerPixel),
-							describeEdge("T", row:GetTop(), unitsPerPixel),
-							describeEdge("B", row:GetBottom(), unitsPerPixel)
-						)
-					) -- nocheck
+				iteration = iteration + 1
+				if row:IsShown() and row:GetBottom() then
+					table.insert(shown, { row = row, iteration = iteration })
 				end
+			end
+			local growsUp = frame.vertDir == "BOTTOM"
+			table.sort(shown, function(x, y)
+				if growsUp then
+					return x.row:GetBottom() < y.row:GetBottom()
+				end
+				return x.row:GetBottom() > y.row:GetBottom()
+			end)
+			for rank, entry in ipairs(shown) do
+				local row = entry.row
+				local unitsPerRowPixel = unitsPerPixelFor(row)
+				emit(
+					string.format(
+						"  row %d (walk %d): %s %s %s %s",
+						rank,
+						entry.iteration,
+						describeEdge("L", row:GetLeft(), unitsPerRowPixel),
+						describeEdge("R", row:GetRight(), unitsPerRowPixel),
+						describeEdge("T", row:GetTop(), unitsPerRowPixel),
+						describeEdge("B", row:GetBottom(), unitsPerRowPixel)
+					)
+				) -- nocheck
+				-- The border is drawn as four edge pieces. A side goes missing when its piece
+				-- collapses to 0px, is hidden, or sits between pixels.
+				local pieces = {}
+				for _, spec in ipairs({
+					{ "TopEdge", "h", "GetHeight", "GetTop" },
+					{ "BottomEdge", "h", "GetHeight", "GetBottom" },
+					{ "LeftEdge", "w", "GetWidth", "GetLeft" },
+					{ "RightEdge", "w", "GetWidth", "GetRight" },
+				}) do
+					local piece = row[spec[1]]
+					if piece then
+						local size = piece[spec[3]](piece)
+						local at = piece[spec[4]](piece)
+						local perPixel = unitsPerPixelFor(piece)
+						table.insert(
+							pieces,
+							spec[1]:gsub("Edge", "")
+								.. (piece:IsShown() and "" or " HIDDEN")
+								.. " "
+								.. describeEdge(spec[2], size, perPixel)
+								.. " "
+								.. describeEdge("at", at, perPixel)
+						)
+					else
+						table.insert(pieces, spec[1]:gsub("Edge", "") .. " none")
+					end
+				end
+				emit("      border: " .. table.concat(pieces, " | ")) -- nocheck
 			end
 		end
 	end
