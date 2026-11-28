@@ -160,21 +160,27 @@ function TestMode:FireTestRows()
 	fireTestRow(1)
 end
 
---- How far a position is from the nearest physical pixel, as a fraction of a pixel.
-local function pixelFraction(value, unitsPerPixel)
-	local pixels = value / unitsPerPixel
-	return pixels - math.floor(pixels + 0.5)
+--- How many local units one physical pixel is for a region. Coordinates and sizes are in
+--- the region's own scaled units, so the global pixel-to-UI-unit factor has to be divided
+--- by the region's effective scale.
+---@param region table
+---@return number
+local function unitsPerPixelFor(region)
+	return PixelUtil.GetPixelToUIUnitFactor() / region:GetEffectiveScale()
 end
 
+--- Describe one coordinate or size in whole physical pixels, marking it OFF-GRID when it
+--- falls between pixels.
 local function describeEdge(label, value, unitsPerPixel)
 	if value == nil then
 		return label .. "=?"
 	end
-	local off = pixelFraction(value, unitsPerPixel)
-	if math.abs(off) > 0.02 then
-		return string.format("%s=%.2fpx OFF-GRID", label, value / unitsPerPixel)
+	local pixels = value / unitsPerPixel
+	local nearest = math.floor(pixels + 0.5)
+	if math.abs(pixels - nearest) > 0.02 then
+		return string.format("%s=%.2fpx OFF-GRID", label, pixels)
 	end
-	return string.format("%s=%d", label, math.floor(value / unitsPerPixel + 0.5))
+	return string.format("%s=%d", label, nearest)
 end
 
 --- Report where each active row's edges fall in physical pixels. A 1px border side
@@ -182,22 +188,23 @@ end
 --- candidate. Run it while the rows you are looking at are still on screen.
 function TestMode:AuditRowEdges()
 	TestMode:BeginTestRun("Debug Edges")
-	local unitsPerPixel = PixelUtil.GetPixelToUIUnitFactor()
 	emit(
 		string.format(
-			"UIParent scale %.4f, 1 pixel = %.5f UI units, row border size %s",
+			"UIParent scale %.4f, pixel factor %.5f, row border size %s",
 			UIParent:GetEffectiveScale(),
-			unitsPerPixel,
+			PixelUtil.GetPixelToUIUnitFactor(),
 			tostring(G_RLF.DbAccessor:Styling(G_RLF.Frames.MAIN).rowBorderSize)
 		)
 	) -- nocheck
 	for id in pairs(G_RLF.db.global.frames) do
 		local frame = G_RLF.LootDisplay:GetFrame(id)
 		if frame then
+			local unitsPerPixel = unitsPerPixelFor(frame)
 			emit(
 				string.format(
-					"frame %s: %s %s %s %s",
+					"frame %s (1px = %.4f units): %s %s %s %s",
 					tostring(id),
+					unitsPerPixel,
 					describeEdge("left", frame:GetLeft(), unitsPerPixel),
 					describeEdge("bottom", frame:GetBottom(), unitsPerPixel),
 					describeEdge("width", frame:GetWidth(), unitsPerPixel),
@@ -208,6 +215,7 @@ function TestMode:AuditRowEdges()
 			for row in frame.rows:iterate() do
 				index = index + 1
 				if row:IsShown() then
+					local unitsPerPixel = unitsPerPixelFor(row)
 					emit(
 						string.format(
 							"  row %d: %s %s %s %s",
