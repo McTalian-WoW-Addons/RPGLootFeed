@@ -275,7 +275,8 @@ function TestMode:AuditRowEdges()
 	emit("Edge audit done") -- nocheck
 end
 
-local debugButton, rowsButton, edgesButton, reloadButton
+local buttons
+local autoShown = false
 
 local function makeButton(label, anchorTo, onClick)
 	local button = CreateFrame("Button", nil, UIParent, "UIPanelButtonTemplate")
@@ -291,36 +292,103 @@ local function makeButton(label, anchorTo, onClick)
 	if anchorTo then
 		button:SetPoint("TOP", anchorTo, "BOTTOM", 0, -4)
 	else
-		button:SetPoint("CENTER")
+		button:SetPoint("CENTER", UIParent, "CENTER", 0, 80)
 	end
 	button:Hide()
 	return button
 end
 
---- Show or hide four buttons in the middle of the screen so scripts do not have to fit
---- in the chat box: "RLF Debug" runs the item probe, "RLF Rows" fires test rows into
---- the feed, "RLF Edges" reports where the rows' edges fall on the pixel grid and
---- "Reload UI" reloads the interface (saving the results). Right-drag a button to move it.
-function TestMode:ToggleDebugButton()
-	if not debugButton then
-		debugButton = makeButton("RLF Debug", nil, function()
-			TestMode:DebugProbe()
-		end)
-		rowsButton = makeButton("RLF Rows", debugButton, function()
-			TestMode:FireTestRows()
-		end)
-		edgesButton = makeButton("RLF Edges", rowsButton, function()
-			TestMode:AuditRowEdges()
-		end)
-		-- Always the bottom button: add new ones above it and re-anchor it below them.
-		reloadButton = makeButton("Reload UI", edgesButton, function()
-			ReloadUI()
-		end)
+--- Build the stack of buttons once, top to bottom. Add new buttons above "Reload UI",
+--- which stays last.
+local function ensureButtons()
+	if buttons then
+		return
 	end
-	local show = not debugButton:IsShown()
-	debugButton:SetShown(show)
-	rowsButton:SetShown(show)
-	edgesButton:SetShown(show)
-	reloadButton:SetShown(show)
+	local specs = {
+		{
+			"RLF Integration",
+			function()
+				TestMode:IntegrationTest()
+			end,
+		},
+		{
+			"RLF Debug",
+			function()
+				TestMode:DebugProbe()
+			end,
+		},
+		{
+			"RLF Rows",
+			function()
+				TestMode:FireTestRows()
+			end,
+		},
+		{
+			"RLF Edges",
+			function()
+				TestMode:AuditRowEdges()
+			end,
+		},
+		{
+			"Reload UI",
+			function()
+				ReloadUI()
+			end,
+		},
+	}
+	buttons = {}
+	for _, spec in ipairs(specs) do
+		table.insert(buttons, makeButton(spec[1], buttons[#buttons], spec[2]))
+	end
+end
+
+local function setButtonsShown(show)
+	ensureButtons()
+	for _, button in ipairs(buttons) do
+		button:SetShown(show)
+	end
+end
+
+--- Show or hide the debug buttons in the middle of the screen, so scripts do not have to
+--- fit in the chat box: "RLF Integration" runs the integration test, "RLF Debug" the item
+--- probe, "RLF Rows" fires test rows into the feed, "RLF Edges" reports where the rows'
+--- edges fall on the pixel grid and "Reload UI" reloads the interface (saving the
+--- results). Right-drag a button to move it.
+function TestMode:ToggleDebugButton()
+	ensureButtons()
+	autoShown = false
+	setButtonsShown(not buttons[1]:IsShown())
+end
+
+-- After a /reload the buttons come up on their own, so the next test run does not need the
+-- keyboard; moving the character puts them away again. Showing them by hand with
+-- /rlf debug leaves them up until toggled off.
+local function hideAutoShownButtons()
+	if autoShown then
+		autoShown = false
+		setButtonsShown(false)
+	end
+end
+
+local eventFrame = CreateFrame("Frame")
+eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
+-- Clients without the movement event fall back to watching the character's speed.
+local hasMovementEvent = pcall(eventFrame.RegisterEvent, eventFrame, "PLAYER_STARTED_MOVING")
+eventFrame:SetScript("OnEvent", function(_, event, _, isReloadingUi)
+	if event == "PLAYER_ENTERING_WORLD" then
+		if isReloadingUi then
+			setButtonsShown(true)
+			autoShown = true
+		end
+	elseif event == "PLAYER_STARTED_MOVING" then
+		hideAutoShownButtons()
+	end
+end)
+if not hasMovementEvent then
+	eventFrame:SetScript("OnUpdate", function()
+		if autoShown and GetUnitSpeed and GetUnitSpeed("player") > 0 then
+			hideAutoShownButtons()
+		end
+	end)
 end
 --@end-alpha@
