@@ -65,6 +65,63 @@ describe("LootDisplay module", function()
 		assert.is_not_nil(LootDisplayModule)
 	end)
 
+	describe("pixel metrics after the UI scale settles", function()
+		local frame
+
+		before_each(function()
+			frame = makeFrameWithRow()
+			frame.UpdateSize = spy.new(function() end)
+			frame.UpdateRowPositions = spy.new(function() end)
+			_G.CreateFrame = function()
+				return frame
+			end
+			ns.db.global.frames = { [ns.Frames.MAIN] = { features = {} } }
+			LootDisplayModule:InitFrame(ns.Frames.MAIN)
+			LootDisplayModule.UpdatePosition = spy.new(function() end)
+			LootDisplayModule.RefreshSampleRowsIfShown = function() end
+		end)
+
+		it("recomputes the frame size, position and row spacing on a UI scale change", function()
+			LootDisplayModule:OnUIScaleChanged()
+
+			assert.spy(frame.UpdateSize).was.called(1)
+			assert.spy(LootDisplayModule.UpdatePosition).was.called(1)
+			assert.spy(frame.UpdateRowPositions).was.called(1)
+		end)
+
+		it("recomputes them again once the world has loaded", function()
+			LootDisplayModule:OnPlayerEnteringWorld()
+
+			assert.spy(frame.UpdateSize).was.called(1)
+			assert.spy(frame.UpdateRowPositions).was.called(1)
+		end)
+	end)
+
+	it("UpdatePosition snaps the frame offsets to whole pixels", function()
+		local setPoint = spy.new(function() end)
+		local fakeFrame = {
+			ClearAllPoints = function() end,
+			SetPoint = setPoint,
+		}
+		LootDisplayModule.GetFrame = function()
+			return fakeFrame
+		end
+		stub(ns.DbAccessor, "Positioning").returns({
+			anchorPoint = "CENTER",
+			relativePoint = "UIParent",
+			xOffset = 10.3,
+			yOffset = -20.7,
+		})
+		ns.PerfPixel.PScale = function(v)
+			return math.floor(v + 0.5)
+		end
+		_G.UIParent = _G.UIParent or {}
+
+		LootDisplayModule:UpdatePosition(ns.Frames.MAIN)
+
+		assert.spy(setPoint).was.called_with(fakeFrame, "CENTER", _G.UIParent, 10, -21)
+	end)
+
 	it("GetFrame() with no id defaults to MAIN, and explicit id still resolves that frame", function()
 		local frame1 = makeFrameWithRow()
 		local frame2 = makeFrameWithRow()

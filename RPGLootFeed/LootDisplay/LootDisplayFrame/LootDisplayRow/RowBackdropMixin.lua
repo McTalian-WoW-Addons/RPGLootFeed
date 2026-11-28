@@ -158,9 +158,13 @@ function RLF_RowBackdropMixin:StyleRowBackdrop()
 	local bottomInset = stylingDb.backdropInsets.bottom or 0
 	local leftInset = stylingDb.backdropInsets.left or 0
 	local needsUpdate = false
+	-- The snapped sizes depend on the UI scale, which can change after the row was built
+	-- (UI scale setting, window resize), so a different pixel size has to rebuild them.
+	local pixelSize = G_RLF.PerfPixel.PScale(1)
 
 	if
-		self.cachedBorderSize ~= borderSize
+		self.cachedPixelSize ~= pixelSize
+		or self.cachedBorderSize ~= borderSize
 		or self.cacheBorderColor ~= borderColor
 		or self.cacheClassColors ~= classColors
 		or self.cachedBorderTexture ~= borderTexture
@@ -175,6 +179,7 @@ function RLF_RowBackdropMixin:StyleRowBackdrop()
 		or self.cachedBackdropBottomInset ~= bottomInset
 		or self.cachedBackdropLeftInset ~= leftInset
 	then
+		self.cachedPixelSize = pixelSize
 		self.cachedBorderSize = borderSize
 		self.cacheBorderColor = borderColor
 		self.cacheClassColors = classColors
