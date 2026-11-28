@@ -160,7 +160,72 @@ function TestMode:FireTestRows()
 	fireTestRow(1)
 end
 
-local debugButton, rowsButton
+--- How far a position is from the nearest physical pixel, as a fraction of a pixel.
+local function pixelFraction(value, unitsPerPixel)
+	local pixels = value / unitsPerPixel
+	return pixels - math.floor(pixels + 0.5)
+end
+
+local function describeEdge(label, value, unitsPerPixel)
+	if value == nil then
+		return label .. "=?"
+	end
+	local off = pixelFraction(value, unitsPerPixel)
+	if math.abs(off) > 0.02 then
+		return string.format("%s=%.2fpx OFF-GRID", label, value / unitsPerPixel)
+	end
+	return string.format("%s=%d", label, math.floor(value / unitsPerPixel + 0.5))
+end
+
+--- Report where each active row's edges fall in physical pixels. A 1px border side
+--- disappears when its edge sits between two pixels, so anything marked OFF-GRID here is a
+--- candidate. Run it while the rows you are looking at are still on screen.
+function TestMode:AuditRowEdges()
+	TestMode:BeginTestRun("Debug Edges")
+	local unitsPerPixel = PixelUtil.GetPixelToUIUnitFactor()
+	emit(
+		string.format(
+			"UIParent scale %.4f, 1 pixel = %.5f UI units, row border size %s",
+			UIParent:GetEffectiveScale(),
+			unitsPerPixel,
+			tostring(G_RLF.DbAccessor:Styling(G_RLF.Frames.MAIN).rowBorderSize)
+		)
+	) -- nocheck
+	for id in pairs(G_RLF.db.global.frames) do
+		local frame = G_RLF.LootDisplay:GetFrame(id)
+		if frame then
+			emit(
+				string.format(
+					"frame %s: %s %s %s %s",
+					tostring(id),
+					describeEdge("left", frame:GetLeft(), unitsPerPixel),
+					describeEdge("bottom", frame:GetBottom(), unitsPerPixel),
+					describeEdge("width", frame:GetWidth(), unitsPerPixel),
+					describeEdge("height", frame:GetHeight(), unitsPerPixel)
+				)
+			) -- nocheck
+			local index = 0
+			for row in frame.rows:iterate() do
+				index = index + 1
+				if row:IsShown() then
+					emit(
+						string.format(
+							"  row %d: %s %s %s %s",
+							index,
+							describeEdge("L", row:GetLeft(), unitsPerPixel),
+							describeEdge("R", row:GetRight(), unitsPerPixel),
+							describeEdge("T", row:GetTop(), unitsPerPixel),
+							describeEdge("B", row:GetBottom(), unitsPerPixel)
+						)
+					) -- nocheck
+				end
+			end
+		end
+	end
+	emit("Edge audit done") -- nocheck
+end
+
+local debugButton, rowsButton, edgesButton
 
 local function makeButton(label, anchorTo, onClick)
 	local button = CreateFrame("Button", nil, UIParent, "UIPanelButtonTemplate")
@@ -182,9 +247,10 @@ local function makeButton(label, anchorTo, onClick)
 	return button
 end
 
---- Show or hide two buttons in the middle of the screen so scripts do not have to fit
---- in the chat box: "RLF Debug" runs the item probe and "RLF Rows" fires test rows into
---- the feed. Right-drag a button to move it.
+--- Show or hide three buttons in the middle of the screen so scripts do not have to fit
+--- in the chat box: "RLF Debug" runs the item probe, "RLF Rows" fires test rows into
+--- the feed and "RLF Edges" reports where the rows' edges fall on the pixel grid.
+--- Right-drag a button to move it.
 function TestMode:ToggleDebugButton()
 	if not debugButton then
 		debugButton = makeButton("RLF Debug", nil, function()
@@ -193,9 +259,13 @@ function TestMode:ToggleDebugButton()
 		rowsButton = makeButton("RLF Rows", debugButton, function()
 			TestMode:FireTestRows()
 		end)
+		edgesButton = makeButton("RLF Edges", rowsButton, function()
+			TestMode:AuditRowEdges()
+		end)
 	end
 	local show = not debugButton:IsShown()
 	debugButton:SetShown(show)
 	rowsButton:SetShown(show)
+	edgesButton:SetShown(show)
 end
 --@end-alpha@
