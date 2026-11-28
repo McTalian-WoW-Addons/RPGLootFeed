@@ -600,38 +600,6 @@ local function testClientDependentFeatures()
 		"TypeUnusable: returns a boolean, or nil while the item has not loaded"
 	)
 
-	-- Everything the character is wearing is usable by them, so none of it may be flagged
-	-- unusable (a false positive). An item that has not loaded yet answers nil; skip those.
-	local equippedChecked, equippedFlagged, equippedPending = 0, 0, 0
-	for slot = 1, 19 do
-		local equippedLink = itemLootApi.GetInventoryItemLink("player", slot)
-		if equippedLink then
-			local flagged = itemLootApi.ItemTypeUnusable(equippedLink)
-			if flagged == nil then
-				equippedPending = equippedPending + 1
-			else
-				equippedChecked = equippedChecked + 1
-				if flagged then
-					equippedFlagged = equippedFlagged + 1
-				end
-				runner:assertEqual(flagged, false, "TypeUnusable: equipped slot " .. slot .. " is not flagged unusable")
-			end
-		end
-	end
-
-	-- One line to paste when comparing flavors.
-	local _, _, _, interfaceVersion = GetBuildInfo()
-	note(
-		string.format(
-			"TypeUnusable summary: interface %s, %s, equipped %d checked/%d flagged/%d loading",
-			tostring(interfaceVersion),
-			(C_TooltipInfo and C_TooltipInfo.GetHyperlink) and "C_TooltipInfo" or "scan tooltip",
-			equippedChecked,
-			equippedFlagged,
-			equippedPending
-		)
-	)
-
 	-- Bag and bank counts: our icons plus the warband atlas on clients that have it.
 	runner:assertEqual(type(itemLootApi.HasAtlas), "function", "BagBank: adapter ItemLoot.HasAtlas")
 	runner:assertEqual(type(itemLootApi.CreateAtlasMarkup), "function", "BagBank: adapter ItemLoot.CreateAtlasMarkup")
@@ -810,6 +778,40 @@ local function runItemControlChecks(questStartItemId, typeControlIds)
 		string.format("TypeUnusable controls: %d of %d loaded, %d unusable", loaded, #typeControlIds, unusable)
 	)
 
+	-- Everything the character is wearing is usable by them, so none of it may be flagged
+	-- unusable (a false positive).
+	local equippedChecked, equippedFlagged, equippedPending = 0, 0, 0
+	for slot = 1, 19 do
+		local equippedLink = itemLootApi.GetInventoryItemLink("player", slot)
+		if equippedLink then
+			local flagged = itemLootApi.ItemTypeUnusable(equippedLink)
+			if flagged == nil then
+				equippedPending = equippedPending + 1
+			else
+				equippedChecked = equippedChecked + 1
+				if flagged then
+					equippedFlagged = equippedFlagged + 1
+				end
+				itemRunner:assertEqual(
+					flagged,
+					false,
+					"TypeUnusable: equipped slot " .. slot .. " is not flagged unusable"
+				)
+			end
+		end
+	end
+	local _, _, _, interfaceVersion = GetBuildInfo()
+	itemControlNote(
+		string.format(
+			"TypeUnusable summary: interface %s, %s, equipped %d checked/%d flagged/%d loading",
+			tostring(interfaceVersion),
+			(C_TooltipInfo and C_TooltipInfo.GetHyperlink) and "C_TooltipInfo" or "scan tooltip",
+			equippedChecked,
+			equippedFlagged,
+			equippedPending
+		)
+	)
+
 	itemRunner:displayResults()
 end
 
@@ -830,8 +832,17 @@ local function startItemControlChecks()
 		table.insert(ids, id)
 	end
 
+	-- The equipped items are checked too, so wait for those as well.
+	local itemLinks = {}
+	for slot = 1, 19 do
+		local equippedLink = G_RLF.WoWAPI.ItemLoot.GetInventoryItemLink("player", slot)
+		if equippedLink then
+			table.insert(itemLinks, equippedLink)
+		end
+	end
+
 	TestMode:BeginTestRun("Smoke Test: Items")
-	local pending, finished = #ids, false
+	local pending, finished = #ids + #itemLinks, false
 	local function finish()
 		if finished then
 			return
@@ -842,13 +853,17 @@ local function startItemControlChecks()
 			runItemControlChecks(questStartItemId, typeControlIds)
 		end)
 	end
+	local function onLoaded()
+		pending = pending - 1
+		if pending == 0 then
+			finish()
+		end
+	end
 	for _, id in ipairs(ids) do
-		Item:CreateFromItemID(id):ContinueOnItemLoad(function()
-			pending = pending - 1
-			if pending == 0 then
-				finish()
-			end
-		end)
+		Item:CreateFromItemID(id):ContinueOnItemLoad(onLoaded)
+	end
+	for _, link in ipairs(itemLinks) do
+		Item:CreateFromItemLink(link):ContinueOnItemLoad(onLoaded)
 	end
 	-- Items the realm does not have never load; do not wait for them forever.
 	C_Timer.After(10, finish)
