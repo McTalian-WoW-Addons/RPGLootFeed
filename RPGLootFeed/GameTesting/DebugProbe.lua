@@ -275,7 +275,7 @@ function TestMode:AuditRowEdges()
 	emit("Edge audit done") -- nocheck
 end
 
-local debugButton, rowsButton, edgesButton
+local debugButton, rowsButton, edgesButton, reloadButton
 
 local function makeButton(label, anchorTo, onClick)
 	local button = CreateFrame("Button", nil, UIParent, "UIPanelButtonTemplate")
@@ -297,10 +297,10 @@ local function makeButton(label, anchorTo, onClick)
 	return button
 end
 
---- Show or hide three buttons in the middle of the screen so scripts do not have to fit
+--- Show or hide four buttons in the middle of the screen so scripts do not have to fit
 --- in the chat box: "RLF Debug" runs the item probe, "RLF Rows" fires test rows into
---- the feed and "RLF Edges" reports where the rows' edges fall on the pixel grid.
---- Right-drag a button to move it.
+--- the feed, "RLF Edges" reports where the rows' edges fall on the pixel grid and
+--- "Reload UI" reloads the interface (saving the results). Right-drag a button to move it.
 function TestMode:ToggleDebugButton()
 	if not debugButton then
 		debugButton = makeButton("RLF Debug", nil, function()
@@ -312,10 +312,15 @@ function TestMode:ToggleDebugButton()
 		edgesButton = makeButton("RLF Edges", rowsButton, function()
 			TestMode:AuditRowEdges()
 		end)
+		-- Always the bottom button: add new ones above it and re-anchor it below them.
+		reloadButton = makeButton("Reload UI", edgesButton, function()
+			ReloadUI()
+		end)
 	end
 	local show = not debugButton:IsShown()
 	debugButton:SetShown(show)
 	rowsButton:SetShown(show)
 	edgesButton:SetShown(show)
+	reloadButton:SetShown(show)
 end
 --@end-alpha@
