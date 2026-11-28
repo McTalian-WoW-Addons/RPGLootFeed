@@ -520,6 +520,16 @@ G_RLF.WoWAPI.LootHistory = {
 }
 
 G_RLF.WoWAPI.LootRolls = {
+	--- Does this client have the named event? CANCEL_ALL_LOOT_ROLLS and MAIN_SPEC_NEED_ROLL
+	--- exist only on Retail and Forever; registering one the client lacks throws.
+	---@param event string
+	---@return boolean
+	IsValidEvent = function(event)
+		if C_EventUtils and C_EventUtils.IsEventValid then
+			return C_EventUtils.IsEventValid(event) and true or false
+		end
+		return true
+	end,
 	GetLootRollItemInfo = function(rollID)
 		return GetLootRollItemInfo(rollID)
 	end,

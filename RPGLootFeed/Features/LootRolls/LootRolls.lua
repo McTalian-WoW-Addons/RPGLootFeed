@@ -705,13 +705,29 @@ function LootRolls:OnDisable()
 	self:CANCEL_ALL_LOOT_ROLLS()
 end
 
+--- Register an event that only some flavors have. Registering one the client does not
+--- know throws, which would stop OnEnable partway and leave the events after it
+--- unregistered; both checks keep a missing event from doing that.
+---@param event string
+function LootRolls:RegisterOptionalEvent(event)
+	if not self._adapter.IsValidEvent(event) then
+		self:LogDebug("Skipping event this client does not have: " .. event, addonName, self.moduleName)
+		return
+	end
+	local ok, err = pcall(self.RegisterEvent, self, event)
+	if not ok then
+		self:LogWarn("Could not register " .. event .. ": " .. tostring(err), addonName, self.moduleName)
+	end
+end
+
 function LootRolls:OnEnable()
 	self:LogDebug("OnEnable", addonName, self.moduleName)
 
 	self:RegisterEvent("START_LOOT_ROLL")
 	self:RegisterEvent("CANCEL_LOOT_ROLL")
-	self:RegisterEvent("CANCEL_ALL_LOOT_ROLLS")
-	self:RegisterEvent("MAIN_SPEC_NEED_ROLL")
+	-- Retail and Forever only; the classic clients have no equivalent.
+	self:RegisterOptionalEvent("CANCEL_ALL_LOOT_ROLLS")
+	self:RegisterOptionalEvent("MAIN_SPEC_NEED_ROLL")
 	self:RegisterEvent("LOOT_ROLLS_COMPLETE")
 	self:RegisterEvent("LOOT_ITEM_ROLL_WON")
 	self:_HookRollOnLoot()

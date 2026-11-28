@@ -192,11 +192,71 @@ describe("LootRolls Module", function()
 			GetPlayerInfo = function()
 				return nil
 			end,
+			IsValidEvent = function()
+				return true
+			end,
 		}
 	end)
 
 	after_each(function()
 		_G.C_Timer = originalCTimer
+	end)
+
+	describe("event registration on clients with fewer events", function()
+		local registered
+
+		before_each(function()
+			registered = {}
+			LootRolls.RegisterEvent = function(_, event)
+				table.insert(registered, event)
+			end
+			LootRolls._HookRollOnLoot = function() end
+			ns.HasModernLootHistoryAPI = function()
+				return true
+			end
+			_G.C_Timer = { After = function() end }
+		end)
+
+		local function has(event)
+			for _, e in ipairs(registered) do
+				if e == event then
+					return true
+				end
+			end
+			return false
+		end
+
+		it("registers the Retail-only events where the client has them", function()
+			LootRolls:OnEnable()
+			assert.is_true(has("CANCEL_ALL_LOOT_ROLLS"))
+			assert.is_true(has("MAIN_SPEC_NEED_ROLL"))
+		end)
+
+		it("skips the Retail-only events on a client that lacks them, and still registers the rest", function()
+			LootRolls._adapter.IsValidEvent = function(event)
+				return event ~= "CANCEL_ALL_LOOT_ROLLS" and event ~= "MAIN_SPEC_NEED_ROLL"
+			end
+			LootRolls:OnEnable()
+			assert.is_false(has("CANCEL_ALL_LOOT_ROLLS"))
+			assert.is_false(has("MAIN_SPEC_NEED_ROLL"))
+			assert.is_true(has("START_LOOT_ROLL"))
+			assert.is_true(has("LOOT_ROLLS_COMPLETE"))
+			assert.is_true(has("LOOT_ITEM_ROLL_WON"))
+			assert.is_true(has("LOOT_HISTORY_UPDATE_DROP"))
+		end)
+
+		it("does not let a registration that throws stop the events after it", function()
+			LootRolls.RegisterEvent = function(_, event)
+				if event == "CANCEL_ALL_LOOT_ROLLS" then
+					error("Attempt to register unknown event")
+				end
+				table.insert(registered, event)
+			end
+			assert.has_no.errors(function()
+				LootRolls:OnEnable()
+			end)
+			assert.is_true(has("LOOT_ITEM_ROLL_WON"))
+		end)
 	end)
 
 	describe("START_LOOT_ROLL", function()
